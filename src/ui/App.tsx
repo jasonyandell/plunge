@@ -6,10 +6,13 @@
  * All decisions live in the pure store (src/ui/store.ts).
  */
 
-import { useEffect, useReducer } from 'preact/hooks';
+import { useEffect, useReducer, useState } from 'preact/hooks';
 import {
   TRICK_SHOW_MS, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
 } from './store';
+import {
+  BUILD_ID, UPDATE_POLL_MS, fetchRemoteVersion, updateAvailable,
+} from './update';
 import { Home, HowTo, About } from './Home';
 import { Table } from './Table';
 import './app.css';
@@ -37,18 +40,66 @@ export function App() {
     if (typeof localStorage !== 'undefined') saveApp(localStorage, app);
   }, [app.game, app.settings, app.seed, app.aiMoves]);
 
-  switch (app.screen) {
-    case 'home':
-      return <Home app={app} dispatch={dispatch} />;
-    case 'how':
-      return <HowTo dispatch={dispatch} />;
-    case 'about':
-      return <About dispatch={dispatch} />;
-    case 'table':
-      return app.game ? (
-        <Table app={app} dispatch={dispatch} />
-      ) : (
-        <Home app={app} dispatch={dispatch} />
-      );
-  }
+  // Deploy-aware reload (issue #2): poll /version.json, offer a reload when a
+  // fresh deploy lands. The game is already saved, so reloading is safe.
+  const [updateReady, setUpdateReady] = useState(false);
+  const [updateDismissed, setUpdateDismissed] = useState(false);
+  useEffect(() => {
+    if (BUILD_ID === 'dev') return undefined;
+    let live = true;
+    const check = async () => {
+      if (updateAvailable(BUILD_ID, await fetchRemoteVersion()) && live) setUpdateReady(true);
+    };
+    const t = setInterval(check, UPDATE_POLL_MS);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void check();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    void check();
+    return () => {
+      live = false;
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+  const updateBanner = updateReady && !updateDismissed && (
+    <div class="update-banner" role="status">
+      <span>A fresh version's been dealt.</span>
+      <button type="button" class="update-reload" onClick={() => location.reload()}>
+        Reload
+      </button>
+      <button
+        type="button"
+        class="update-dismiss"
+        aria-label="Not now"
+        onClick={() => setUpdateDismissed(true)}
+      >
+        Not now
+      </button>
+    </div>
+  );
+
+  const screen = (() => {
+    switch (app.screen) {
+      case 'home':
+        return <Home app={app} dispatch={dispatch} />;
+      case 'how':
+        return <HowTo dispatch={dispatch} />;
+      case 'about':
+        return <About dispatch={dispatch} />;
+      case 'table':
+        return app.game ? (
+          <Table app={app} dispatch={dispatch} />
+        ) : (
+          <Home app={app} dispatch={dispatch} />
+        );
+    }
+  })();
+
+  return (
+    <>
+      {screen}
+      {updateBanner}
+    </>
+  );
 }

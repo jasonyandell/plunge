@@ -1,5 +1,5 @@
 /* Plunge service worker — cache-first app shell. Bump CACHE to invalidate. */
-const CACHE = 'plunge-v1';
+const CACHE = 'plunge-v2';
 const SHELL = [
   '/',
   '/index.html',
@@ -30,6 +30,8 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;
+  // The deploy beacon must always come from the network (deploy-aware reload).
+  if (url.pathname === '/version.json') return;
 
   // Navigations: network-first, shell fallback (offline play).
   if (req.mode === 'navigate') {

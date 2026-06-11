@@ -65,3 +65,49 @@ button:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------- deploy-aware reload banner ---------- */
+
+.update-banner {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: #46291a;
+  color: var(--cream);
+  font-size: 14px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
+
+.update-banner span {
+  flex: 1;
+}
+
+.update-reload {
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--butterscotch);
+  color: #2b1d12;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.update-dismiss {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid rgba(244, 234, 212, 0.5);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--cream);
+  font-size: 13px;
+  cursor: pointer;
+}

@@ -32,6 +32,7 @@ import {
   toSaved,
   TRICK_SHOW_MS,
 } from '../src/ui/store';
+import { updateAvailable } from '../src/ui/update';
 
 function fakeStorage(): StorageLike & { map: Map<string, string> } {
   const map = new Map<string, string>();
@@ -402,5 +403,22 @@ describe('store: info bar chips', () => {
     );
     expect(trumpChip(fake({ type: 'sevens' }, {}))).toContain('closest to 7');
     expect(trumpChip({ ...base, declaration: null } as GameState)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Deploy-aware reload (issue #2)
+// ---------------------------------------------------------------------------
+
+describe('update detection', () => {
+  it('offers an update only for a real, different build id', () => {
+    expect(updateAvailable('abc', { build: 'def' })).toBe(true);
+    expect(updateAvailable('abc', { build: 'abc' })).toBe(false);
+    expect(updateAvailable('dev', { build: 'def' })).toBe(false); // local dev never nags
+    expect(updateAvailable('abc', { build: '' })).toBe(false);
+    expect(updateAvailable('abc', { build: 42 })).toBe(false);
+    expect(updateAvailable('abc', null)).toBe(false);
+    expect(updateAvailable('abc', undefined)).toBe(false);
+    expect(updateAvailable('abc', 'def')).toBe(false);
   });
 });
