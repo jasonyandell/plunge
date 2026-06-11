@@ -3,7 +3,8 @@
 A free, open source, mobile web **Texas 42** game — you and Gran against Earl and Ruby,
 best of luck to the both of you.
 
-**Play it:** _(deployment URL goes here once live)_
+**Play it: https://plunge.jasonyandell.workers.dev** — works in any phone browser,
+installable as an app, plays offline.
 
 42 is the Official State Domino Game of Texas: a trick-taking game played with a
 double-six set, invented in 1887 in Garner, Texas by William Thomas and Walter Earl as a
