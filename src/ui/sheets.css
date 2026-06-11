@@ -1,0 +1,215 @@
+/* Bottom sheets (bid / declare) and overlay cards (hand-over / game-over).
+   Sheets anchor above the hand (~128px tall) so your dominoes stay visible;
+   max-height keeps them from clipping on short phones (scroll inside). */
+
+.sheet {
+  position: fixed;
+  left: 8px;
+  right: 8px;
+  bottom: calc(136px + env(safe-area-inset-bottom, 0px));
+  max-height: 56vh;
+  overflow-y: auto;
+  background: var(--cream);
+  color: var(--brown-9);
+  border-radius: 16px;
+  padding: 12px 14px calc(12px);
+  box-shadow: 0 8px 28px rgba(10, 5, 2, 0.55);
+  z-index: 20;
+}
+
+.sheet-title {
+  font-family: var(--display, serif);
+  font-size: 18px;
+  margin: 0 0 10px;
+  text-align: center;
+}
+
+.hint {
+  font-size: 12px;
+  color: #6e5638;
+  margin: 4px 0 8px;
+  text-align: center;
+}
+
+/* bid stepper */
+.bid-stepper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.step-btn {
+  min-width: 48px;
+  min-height: 48px;
+  font-size: 24px;
+  border: 1.5px solid var(--butterscotch);
+  border-radius: 12px;
+  background: #fff8ea;
+  color: var(--brown-9);
+  cursor: pointer;
+}
+.step-btn:disabled { opacity: 0.35; }
+
+.bid-go {
+  min-height: 48px;
+  padding: 0 22px;
+  font-size: 18px;
+  font-weight: 700;
+  border: 0;
+  border-radius: 12px;
+  background: var(--teal);
+  color: #fff;
+  cursor: pointer;
+}
+
+.bid-row {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.bid-chip {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1.5px solid var(--butterscotch);
+  border-radius: 12px;
+  background: #fff8ea;
+  font-size: 15px;
+  color: var(--brown-9);
+  cursor: pointer;
+}
+
+.bid-chip.special {
+  background: var(--butterscotch);
+  font-weight: 700;
+  width: 100%;
+}
+
+.bid-special { margin-bottom: 6px; }
+.bid-special .hint { margin-top: 2px; }
+
+.bid-pass {
+  display: block;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 4px;
+  font-size: 18px;
+  font-weight: 700;
+  border: 0;
+  border-radius: 12px;
+  background: var(--brown-9);
+  color: var(--cream);
+  cursor: pointer;
+}
+
+/* declare grid */
+.decl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.decl-btn {
+  min-height: 48px;
+  border: 1.5px solid var(--butterscotch);
+  border-radius: 12px;
+  background: #fff8ea;
+  font-size: 15px;
+  color: var(--brown-9);
+  cursor: pointer;
+}
+
+.decl-btn.special {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
+  font-weight: 700;
+}
+
+/* overlay cards */
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 11, 5, 0.55);
+  padding: 16px;
+  z-index: 30;
+}
+
+.card {
+  width: min(340px, 92vw);
+  background: var(--cream);
+  color: var(--brown-9);
+  border-radius: 18px;
+  padding: 20px 18px;
+  text-align: center;
+  box-shadow: 0 10px 32px rgba(10, 5, 2, 0.6);
+}
+
+.card-title {
+  font-family: var(--display, serif);
+  font-size: 26px;
+  margin: 0 0 8px;
+}
+
+.card-win .card-title { color: #2e6b5e; }
+.card-loss .card-title { color: #8a4a2c; }
+
+.card-detail {
+  font-size: 14px;
+  margin: 0 0 14px;
+}
+
+.card-tallies {
+  display: flex;
+  justify-content: center;
+  gap: 22px;
+  margin-bottom: 16px;
+}
+
+.card-tallies .tally-stroke { stroke: var(--brown-9); }
+.card-tallies .tally-num,
+.card-tallies .tally-label { color: var(--brown-9); }
+
+.big-btn {
+  display: block;
+  width: 100%;
+  min-height: 52px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--teal);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.big-btn.secondary {
+  background: transparent;
+  border: 1.5px solid var(--teal);
+  color: var(--teal-ink, #2e6b62);
+}
+
+.text-btn {
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: var(--teal-ink, #2e6b62);
+  font-size: 15px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sheet { animation: sheet-up 180ms ease-out; }
+  .card { animation: card-in 200ms ease-out; }
+  @keyframes sheet-up { from { translate: 0 24px; opacity: 0; } }
+  @keyframes card-in { from { scale: 0.92; opacity: 0; } }
+}

@@ -1,0 +1,290 @@
+/* Table screen.
+   Vertical budget @360×640: status ~48px, partner row ~84px, hand ~128px,
+   middle band gets the rest (~380px) via flex:1 + min-height:0 (no clipping).
+   @390×844 everything just breathes more. */
+
+.table-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ---------- status strip ---------- */
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  min-height: 48px;
+  background: rgba(26, 15, 7, 0.72);
+  color: var(--cream);
+  border-bottom: 1px solid rgba(233, 192, 122, 0.25);
+}
+
+.menu-btn {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--butterscotch);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.status-mid {
+  flex: 1;
+  min-width: 0;
+}
+
+.status-line {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-sub {
+  font-size: 12px;
+  color: var(--butterscotch);
+}
+
+.status-tallies {
+  display: flex;
+  gap: 10px;
+}
+
+.tally {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.tally-label {
+  font-size: 11px;
+  color: var(--butterscotch);
+}
+
+.tally-svg {
+  width: 42px;
+  height: 20px;
+}
+
+.tally-stroke {
+  stroke: var(--cream);
+  stroke-width: 3;
+  stroke-linecap: round;
+  fill: none;
+}
+
+.tally-num {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cream);
+}
+
+/* ---------- felt / seats ---------- */
+
+.felt {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+}
+
+.seat-name {
+  font-family: var(--display, serif);
+  font-size: 14px;
+  color: var(--cream);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.seat-tag { font-size: 11px; color: var(--butterscotch); }
+
+.seat.active .seat-name { text-shadow: 0 0 8px rgba(233, 192, 122, 0.9); }
+
+.badge {
+  font-size: 10px;
+  color: var(--brown-9);
+  background: var(--butterscotch);
+  border-radius: 6px;
+  padding: 0 4px;
+}
+.badge.shaker { background: transparent; color: var(--butterscotch); font-size: 14px; padding: 0; }
+
+.bubble {
+  font-size: 12px;
+  background: var(--cream);
+  color: var(--brown-9);
+  border-radius: 10px;
+  padding: 1px 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+.bubble.pass { opacity: 0.65; }
+.bubble.thinking { background: rgba(244, 234, 212, 0.4); }
+
+.seat-top {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.mini-row {
+  display: flex;
+  gap: 3px;
+}
+.mini-row .dom { width: 20px; } /* 7×20 + 6×3 = 158px wide */
+
+.middle {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.seat-left,
+.seat-right {
+  width: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.mini-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  justify-content: center;
+  flex: 1;
+  min-height: 0;
+}
+.mini-col .dom { width: 38px; } /* 7×19 + gaps ≈ 151px tall, fits the band */
+
+.sitting { opacity: 0.45; }
+
+.sit-note {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--butterscotch);
+}
+
+/* ---------- trick area ---------- */
+/* @360: trick width = 360 - 2×56 - gaps ≈ 236px. Tiles 64×32 in a 3×3
+   placement grid leave ≥20px margins all around. */
+
+.trick {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  border-radius: 16px;
+  background: radial-gradient(ellipse at 50% 45%, rgba(233, 192, 122, 0.1), rgba(0, 0, 0, 0.18) 75%);
+}
+
+.trick-plays {
+  position: absolute;
+  inset: 0;
+}
+
+.trick-note {
+  position: absolute;
+  inset: auto 8px 8px;
+  text-align: center;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--cream);
+}
+
+.trick-slot {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.trick-slot .dom { width: 64px; }
+
+.slot-bottom { left: 50%; bottom: 12%; transform: translateX(-50%); }
+.slot-top    { left: 50%; top: 12%; transform: translateX(-50%); }
+.slot-left   { left: 6%; top: 50%; transform: translateY(-50%); }
+.slot-right  { right: 6%; top: 50%; transform: translateY(-50%); }
+
+.led-tag {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--teal-bright, #7fc4bb);
+}
+
+.trick-slot.won .dom-svg { filter: drop-shadow(0 0 6px rgba(201, 161, 78, 0.95)); }
+
+/* slide in from the player who tossed it */
+@keyframes from-bottom { from { translate: 0 28px; opacity: 0; } }
+@keyframes from-top    { from { translate: 0 -28px; opacity: 0; } }
+@keyframes from-left   { from { translate: -28px 0; opacity: 0; } }
+@keyframes from-right  { from { translate: 28px 0; opacity: 0; } }
+
+.enter-bottom { animation: from-bottom 200ms ease-out; }
+.enter-top    { animation: from-top 200ms ease-out; }
+.enter-left   { animation: from-left 200ms ease-out; }
+.enter-right  { animation: from-right 200ms ease-out; }
+
+/* completed trick gathers toward the winner, then play resumes */
+@keyframes gather-b { to { transform: translateY(34%) scale(0.55); opacity: 0.15; } }
+@keyframes gather-t { to { transform: translateY(-34%) scale(0.55); opacity: 0.15; } }
+@keyframes gather-l { to { transform: translateX(-30%) scale(0.55); opacity: 0.15; } }
+@keyframes gather-r { to { transform: translateX(30%) scale(0.55); opacity: 0.15; } }
+
+.gather-bottom { animation: gather-b 260ms ease-in 480ms forwards; }
+.gather-top    { animation: gather-t 260ms ease-in 480ms forwards; }
+.gather-left   { animation: gather-l 260ms ease-in 480ms forwards; }
+.gather-right  { animation: gather-r 260ms ease-in 480ms forwards; }
+
+/* ---------- your hand ---------- */
+/* 7 tiles × clamp(42px, (100vw − 36px)/7, 58px): 46px @360, 50px @390. */
+
+.hand-area {
+  padding-top: 10px;
+}
+
+.hand {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 3px;
+  min-height: 118px;
+  flex-wrap: wrap;
+}
+
+.hand > .dom {
+  width: clamp(42px, calc((100vw - 36px) / 7), 58px);
+}
+
+.hand.sit-out { opacity: 0.55; position: relative; }
+.hand.sit-out .sit-note {
+  position: absolute;
+  inset: 40% 0 auto;
+  text-align: center;
+  font-size: 14px;
+  color: var(--cream);
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .enter-bottom, .enter-top, .enter-left, .enter-right,
+  .gather-bottom, .gather-top, .gather-left, .gather-right {
+    animation: none;
+  }
+  .trick { transition: none; }
+}

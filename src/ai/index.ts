@@ -2,13 +2,26 @@
  * AI players. Public contract: `chooseAction` must return a member of
  * `legalActions(state)` for the given seat, deterministically given `rand`.
  *
- * (Stub implementation — random legal action; real easy/medium/hard players
- * replace this.)
+ * - easy:   light common sense, mostly random play.
+ * - medium: heuristic club player (src/ai/medium.ts).
+ * - hard:   medium + Monte Carlo determinization (src/ai/hard.ts).
+ *
+ * Imperfect information is enforced structurally: every policy receives an
+ * `Observation` (src/ai/observation.ts) — own hand + public info only —
+ * never the GameState's hidden hands. Hard samples hidden hands consistent
+ * with the observation; it cannot peek.
  */
 
 import {
-  type Action, type GameState, type Seat, legalActions,
+  type Action,
+  type GameState,
+  type Seat,
+  legalActions,
 } from '../engine';
+import { observe } from './observation';
+import { easyAction } from './easy';
+import { mediumAction } from './medium';
+import { hardAction } from './hard';
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
 
@@ -18,9 +31,20 @@ export function chooseAction(
   difficulty: Difficulty,
   rand: () => number,
 ): Action {
+  if (state.phase === 'hand-over') return { type: 'next-hand' };
   if (state.turn !== seat) throw new Error(`not seat ${seat}'s turn`);
   const actions = legalActions(state);
-  const action = actions[Math.floor(rand() * actions.length)];
-  if (!action) throw new Error('no legal actions');
-  return action;
+  const first = actions[0];
+  if (!first) throw new Error('no legal actions');
+  if (actions.length === 1) return first;
+
+  const obs = observe(state, seat);
+  switch (difficulty) {
+    case 'easy':
+      return easyAction(obs, actions, rand);
+    case 'medium':
+      return mediumAction(obs, actions, rand);
+    case 'hard':
+      return hardAction(obs, actions, rand);
+  }
 }

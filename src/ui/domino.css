@@ -1,0 +1,87 @@
+/* Domino tile. Sized by the wrapper's width + aspect-ratio so the same
+   component scales from 20px opponent minis to 56px hand tiles.
+   Layout math: on a 360px phone the hand row is 7 tiles ×
+   clamp(42px, (100vw - 36px)/7, 58px) ≈ 46px wide ⇒ 7×46 + 6×3px gaps = 340px. */
+
+.dom {
+  display: inline-block;
+  padding: 0;
+  border: 0;
+  background: none;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dom-v { aspect-ratio: 1 / 2; }
+.dom-h { aspect-ratio: 2 / 1; }
+
+.dom-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 2px 3px rgba(20, 10, 4, 0.45));
+}
+
+.dom-face {
+  fill: var(--ivory, #f4ead4);
+  stroke: #b9a173;
+  stroke-width: 2;
+}
+
+.dom-pip { fill: #382616; }
+
+.dom-bar {
+  stroke: #8d7142;
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.dom-bar.gold { stroke: var(--gold, #c9a14e); stroke-width: 6; }
+
+.dom-count-ring {
+  fill: none;
+  stroke: var(--gold, #c9a14e);
+  stroke-width: 3;
+  opacity: 0.85;
+}
+
+/* Face-down back */
+.dom-back {
+  fill: #6d4527;
+  stroke: #503018;
+  stroke-width: 2;
+}
+.dom-back-inner {
+  fill: none;
+  stroke: rgba(233, 192, 122, 0.4);
+  stroke-width: 3;
+}
+.dom-back-dot { fill: rgba(233, 192, 122, 0.45); }
+
+/* Interaction states (hand tiles) */
+button.dom { cursor: pointer; }
+
+.dom-legal {
+  transform: translateY(-8px);
+  transition: transform 140ms ease;
+}
+.dom-legal:active { transform: translateY(-2px); }
+
+.dom-illegal {
+  opacity: 0.45;
+  filter: saturate(0.6);
+  pointer-events: none;
+}
+
+.dom-idle { opacity: 0.92; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dom-legal,
+  .dom-legal:active {
+    transform: none;
+    transition: none;
+    outline: 2px solid var(--teal, #4e8f87);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+}
