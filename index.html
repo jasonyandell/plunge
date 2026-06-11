@@ -9,9 +9,70 @@
     <meta name="theme-color" content="#46291a" />
     <meta name="description" content="Plunge — a free, open source game of Texas 42 dominoes. You and Gran against Earl and Ruby." />
     <title>Plunge — Texas 42</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Plunge" />
   </head>
   <body>
     <div id="app"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Service worker + dismissable install banner (no deps).
+      if ('serviceWorker' in navigator) {
+        addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+      }
+      (() => {
+        const KEY = 'plunge:install-dismissed';
+        const standalone =
+          matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+        if (standalone || localStorage.getItem(KEY)) return;
+
+        const show = (msg, installFn) => {
+          const bar = document.createElement('div');
+          bar.style.cssText =
+            'position:fixed;left:12px;right:12px;bottom:12px;z-index:99;display:flex;gap:10px;' +
+            'align-items:center;padding:12px 14px;border-radius:14px;background:#46291a;' +
+            'color:#f4ead4;font:14px/1.35 Georgia,serif;box-shadow:0 6px 24px rgba(0,0,0,.4);' +
+            'padding-bottom:calc(12px + env(safe-area-inset-bottom))';
+          const text = document.createElement('span');
+          text.textContent = msg;
+          text.style.flex = '1';
+          bar.appendChild(text);
+          if (installFn) {
+            const ok = document.createElement('button');
+            ok.textContent = 'Install';
+            ok.style.cssText =
+              'background:#e0a84f;color:#2b1d12;border:0;border-radius:10px;padding:10px 14px;' +
+              'font:bold 14px Georgia,serif;min-height:44px';
+            ok.onclick = () => { installFn(); bar.remove(); };
+            bar.appendChild(ok);
+          }
+          const no = document.createElement('button');
+          no.textContent = 'Dismiss';
+          no.setAttribute('aria-label', 'Dismiss install banner');
+          no.style.cssText =
+            'background:transparent;color:#f4ead4;border:1px solid #f4ead488;border-radius:10px;' +
+            'padding:10px 14px;font:14px Georgia,serif;min-height:44px';
+          no.onclick = () => { localStorage.setItem(KEY, '1'); bar.remove(); };
+          bar.appendChild(no);
+          document.body.appendChild(bar);
+        };
+
+        let deferred = null;
+        addEventListener('beforeinstallprompt', (e) => {
+          e.preventDefault();
+          deferred = e;
+          show('Keep Plunge on your home screen?', () => deferred.prompt());
+        });
+        if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
+          addEventListener('load', () =>
+            show('To keep Plunge handy: tap Share, then "Add to Home Screen".', null),
+          );
+        }
+      })();
+    </script>
   </body>
 </html>

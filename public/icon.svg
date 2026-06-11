@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Plunge: a domino reading 4 over 2 — forty-two. -->
+  <rect width="512" height="512" rx="96" fill="#2b1d12"/>
+  <rect x="146" y="56" width="220" height="400" rx="36" fill="#f4ead4" stroke="#c9a14e" stroke-width="8"/>
+  <line x1="166" y1="256" x2="346" y2="256" stroke="#2b1d12" stroke-width="8" stroke-linecap="round"/>
+  <!-- top half: 4 pips -->
+  <circle cx="206" cy="116" r="22" fill="#2b1d12"/>
+  <circle cx="306" cy="116" r="22" fill="#2b1d12"/>
+  <circle cx="206" cy="196" r="22" fill="#2b1d12"/>
+  <circle cx="306" cy="196" r="22" fill="#2b1d12"/>
+  <!-- bottom half: 2 pips -->
+  <circle cx="206" cy="316" r="22" fill="#2b1d12"/>
+  <circle cx="306" cy="396" r="22" fill="#2b1d12"/>
+</svg>
