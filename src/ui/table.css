@@ -56,6 +56,148 @@
   gap: 10px;
 }
 
+/* ---------- info bar: trump chip, led chip, trick history ---------- */
+
+.info-wrap {
+  position: relative;
+  z-index: 25;
+}
+
+.info-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(26, 15, 7, 0.55);
+  border-bottom: 1px solid rgba(233, 192, 122, 0.18);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.chip {
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--cream);
+  border: 1px solid rgba(233, 192, 122, 0.4);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+
+.chip-trump {
+  background: rgba(233, 192, 122, 0.14);
+  color: var(--butterscotch);
+  font-weight: 700;
+}
+
+.chip-led {
+  color: var(--teal-bright);
+  border-color: rgba(127, 196, 187, 0.45);
+}
+
+.info-spacer {
+  flex: 1;
+}
+
+/* Slim bar, full 44px hit target via negative margins. */
+.hist-toggle {
+  min-height: 44px;
+  margin: -7px 0;
+  padding: 3px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--cream);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: underline dotted rgba(233, 192, 122, 0.6);
+  text-underline-offset: 3px;
+}
+
+.hist-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 8px;
+  right: 8px;
+  z-index: 30;
+  max-height: min(46vh, 340px);
+  overflow-y: auto;
+  background: rgba(26, 15, 7, 0.96);
+  border: 1px solid rgba(233, 192, 122, 0.3);
+  border-radius: 12px;
+  padding: 6px 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.hist-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(233, 192, 122, 0.12);
+}
+
+.hist-row:last-child {
+  border-bottom: 0;
+}
+
+.hist-num {
+  width: 14px;
+  font-size: 11px;
+  color: var(--butterscotch);
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.hist-plays {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+}
+
+.hist-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 2px 3px;
+  border-radius: 8px;
+}
+
+.hist-won {
+  background: rgba(233, 192, 122, 0.18);
+  box-shadow: inset 0 0 0 1px var(--gold);
+}
+
+.hist-who {
+  font-size: 10px;
+  line-height: 1.1;
+  color: var(--cream);
+}
+
+.hist-led-dot {
+  color: var(--teal-bright);
+  margin-left: 2px;
+}
+
+/* 4 cells × ~50px + number + points ≈ 290px — fits 360px wide. */
+.hist-dom {
+  width: 42px;
+}
+
+.hist-pts {
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.hist-pts.us {
+  color: var(--teal-bright);
+}
+
+.hist-pts.them {
+  color: var(--butterscotch);
+}
+
 .tally {
   display: flex;
   align-items: center;

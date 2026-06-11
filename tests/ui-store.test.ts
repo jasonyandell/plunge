@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import type { Action, GameState, Seat } from '../src/engine';
-import { legalActions } from '../src/engine';
+import { CASUAL_CONFIG, applyAction, legalActions, newGame } from '../src/engine';
 import type { Difficulty } from '../src/ai';
 import { chooseAction } from '../src/ai';
 import {
@@ -22,8 +22,11 @@ import {
   configFor,
   handOverCopy,
   initialApp,
+  ledChip,
   loadApp,
   pendingAiSeat,
+  PIP_SUIT_NAMES,
+  trumpChip,
   reducer,
   saveApp,
   toSaved,
@@ -331,5 +334,73 @@ describe('store: copy', () => {
       expect(c.title.length).toBeGreaterThan(0);
       expect(c.detail).toMatch(/mark/);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Info bar chips (trump / led suit)
+// ---------------------------------------------------------------------------
+
+describe('store: info bar chips', () => {
+  // Drive a real game to the playing phase so chips come from genuine state.
+  const playingState = (seed: string): GameState => {
+    let g = newGame(CASUAL_CONFIG, seed);
+    let guard = 0;
+    while (g.phase !== 'playing') {
+      if (g.phase === 'hand-over') {
+        g = applyAction(g, { type: 'next-hand' });
+        continue;
+      }
+      const acts = legalActions(g);
+      // bid 1 mark when possible so declaring happens; otherwise first action
+      const act =
+        acts.find(
+          (a) => a.type === 'bid' && a.bid.kind === 'marks' && a.bid.value === 1 && !a.bid.special,
+        ) ?? acts[0]!;
+      g = applyAction(g, act);
+      if (++guard > 100) throw new Error('never reached playing');
+    }
+    return g;
+  };
+
+  it('trumpChip names a pip trump and ledChip follows the lead', () => {
+    let g = playingState('chips-1');
+    // force a known declaration by rebuilding the declare step is overkill;
+    // instead assert consistency with whatever was declared.
+    const chip = trumpChip(g);
+    expect(chip).toBeTruthy();
+    if (g.declaration?.type === 'pip') {
+      expect(chip).toBe(`trump: ${PIP_SUIT_NAMES[g.declaration.pip]}`);
+    }
+    expect(ledChip(g, g.currentTrick)).toBeNull(); // nothing led yet
+    const lead = legalActions(g)[0]!;
+    g = applyAction(g, lead);
+    const led = ledChip(g, g.currentTrick);
+    expect(led).toBeTruthy();
+    if (g.declaration?.type === 'pip') {
+      const d = g.currentTrick[0]!.domino;
+      const pip = g.declaration.pip;
+      const isTrump = d[0] === String(pip) || d[1] === String(pip);
+      if (isTrump) expect(led).toBe('trumps');
+      else expect(led).toBe(PIP_SUIT_NAMES[Number(d[0])]);
+    }
+  });
+
+  it('spells out doubles treatment for no-trump and Nel-O', () => {
+    const base = playingState('chips-2');
+    const fake = (decl: GameState['declaration'], cfg: Partial<GameState['config']>): GameState =>
+      ({ ...base, declaration: decl, config: { ...base.config, ...cfg } }) as GameState;
+    expect(trumpChip(fake({ type: 'doubles' }, {}))).toBe('trump: doubles');
+    expect(trumpChip(fake({ type: 'no-trump' }, { noTrumpDoubles: 'high' }))).toBe(
+      'no trump — doubles high',
+    );
+    expect(trumpChip(fake({ type: 'no-trump' }, { noTrumpDoubles: 'low' }))).toBe(
+      'no trump — doubles low',
+    );
+    expect(trumpChip(fake({ type: 'nello' }, { nelloDoubles: 'own-suit' }))).toBe(
+      'Nel-O — doubles own suit',
+    );
+    expect(trumpChip(fake({ type: 'sevens' }, {}))).toContain('closest to 7');
+    expect(trumpChip({ ...base, declaration: null } as GameState)).toBeNull();
   });
 });

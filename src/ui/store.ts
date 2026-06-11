@@ -17,10 +17,14 @@ import {
   type Declaration,
   type GameConfig,
   type GameState,
+  type PlayRecord,
   type Seat,
+  CALLED_SUIT,
   CASUAL_CONFIG,
   TOURNAMENT_CONFIG,
   applyAction,
+  fromId,
+  ledSuitOf,
   mulberry32,
   newGame,
   teamOf,
@@ -270,6 +274,52 @@ export function declLabel(d: Declaration): string {
     case 'nello': return 'Nel-O';
     case 'sevens': return 'sevens';
   }
+}
+
+/**
+ * Trump chip for the in-play info bar — what was called, kept short.
+ * Spells out the doubles treatment for no-trump and Nel-O, where it matters.
+ */
+export function trumpChip(g: GameState): string | null {
+  const d = g.declaration;
+  if (!d) return null;
+  switch (d.type) {
+    case 'pip':
+      return `trump: ${PIP_SUIT_NAMES[d.pip]}`;
+    case 'doubles':
+      return 'trump: doubles';
+    case 'no-trump':
+      switch (g.config.noTrumpDoubles) {
+        case 'high': return 'no trump — doubles high';
+        case 'low': return 'no trump — doubles low';
+        case 'own-suit': return 'no trump — doubles own suit';
+      }
+      break;
+    case 'nello':
+      switch (g.config.nelloDoubles) {
+        case 'own-suit': return 'Nel-O — doubles own suit';
+        case 'high': return 'Nel-O — doubles high';
+        case 'low': return 'Nel-O — doubles low';
+        case 'own-suit-inverted': return 'Nel-O — doubles own suit, 0-0 high';
+      }
+      break;
+    case 'sevens':
+      return 'Sevens — closest to 7 wins';
+  }
+}
+
+/**
+ * The suit the displayed trick's lead calls for ("sixes", "trumps",
+ * "doubles"), or null when nothing is on the table.
+ */
+export function ledChip(g: GameState, plays: readonly PlayRecord[]): string | null {
+  const lead = plays[0];
+  if (!lead || !g.rules) return null;
+  const led = ledSuitOf(fromId(lead.domino), g.rules);
+  if (led === CALLED_SUIT) {
+    return g.rules.called.kind === 'doubles' ? 'doubles' : 'trumps';
+  }
+  return PIP_SUIT_NAMES[led] ?? null;
 }
 
 export interface HandOverCopy {

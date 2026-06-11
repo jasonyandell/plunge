@@ -9,13 +9,14 @@
  *   390×844 — same bands, middle grows; hand tiles cap at 58px wide.
  */
 
+import { useState } from 'preact/hooks';
 import type { CompletedTrick, GameState, PlayRecord, Seat } from '../engine';
-import { legalDominoes } from '../engine';
+import { legalDominoes, teamOf } from '../engine';
 import { Domino } from './Domino';
 import { Tally } from './Tally';
 import type { AppEvent, AppState } from './store';
 import {
-  HUMAN_SEAT, SEAT_NAMES, bidLabel, contractLabel, declLabel,
+  HUMAN_SEAT, SEAT_NAMES, bidLabel, contractLabel, ledChip, trumpChip,
 } from './store';
 import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet } from './sheets';
 import './table.css';
@@ -28,6 +29,7 @@ interface TableProps {
 }
 
 export function Table({ app, dispatch }: TableProps) {
+  const [histOpen, setHistOpen] = useState(false);
   const g = app.game;
   if (!g) return null;
 
@@ -45,6 +47,14 @@ export function Table({ app, dispatch }: TableProps) {
   return (
     <div class="table-screen">
       <StatusStrip g={g} dispatch={dispatch} />
+      {g.phase === 'playing' && (
+        <InfoBar
+          g={g}
+          plays={trickPlays}
+          open={histOpen}
+          onToggle={() => setHistOpen((o) => !o)}
+        />
+      )}
       <div class="felt">
         <OpponentTop g={g} />
         <div class="middle">
@@ -125,15 +135,91 @@ function statusLine(g: GameState): string {
       return `Hand ${g.handNumber} — ${name(g.shaker)} shook. Bidding…`;
     case 'declaring':
       return `${name(g.declarer)} won it at ${g.contract ? contractLabel(g.contract) : ''} — naming trump…`;
-    case 'playing': {
-      const trump = g.declaration ? declLabel(g.declaration) : '';
-      return `${name(g.declarer)} bid ${g.contract ? contractLabel(g.contract) : ''} · trump: ${trump}`;
-    }
+    case 'playing':
+      // Trump itself lives in the info bar chip, where it can't truncate.
+      return `${name(g.declarer)} bid ${g.contract ? contractLabel(g.contract) : ''}`;
     case 'hand-over':
       return 'Hand over';
     case 'game-over':
       return 'Game over';
   }
+}
+
+// ---------------------------------------------------------------------------
+
+/** Slim bar under the status strip: trump + led-suit chips, trick history. */
+function InfoBar({
+  g,
+  plays,
+  open,
+  onToggle,
+}: {
+  g: GameState;
+  plays: readonly PlayRecord[];
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const trump = trumpChip(g);
+  const led = ledChip(g, plays);
+  const n = g.tricks.length;
+  return (
+    <div class="info-wrap">
+      <div class="info-bar">
+        {trump && <span class="chip chip-trump">{trump}</span>}
+        {led && <span class="chip chip-led">led: {led}</span>}
+        <span class="info-spacer" />
+        {n > 0 && (
+          <button
+            type="button"
+            class="hist-toggle"
+            aria-expanded={open}
+            aria-label={`Trick history, ${n} ${n === 1 ? 'trick' : 'tricks'} so far`}
+            onClick={onToggle}
+          >
+            Tricks ({n}) {open ? '▴' : '▾'}
+          </button>
+        )}
+      </div>
+      {open && n > 0 && <TrickHistory g={g} />}
+    </div>
+  );
+}
+
+function TrickHistory({ g }: { g: GameState }) {
+  return (
+    <div class="hist-panel" role="region" aria-label="Trick history">
+      {g.tricks.map((t, i) => {
+        const ledSeat = t.plays[0]?.seat;
+        return (
+          <div class="hist-row" key={i}>
+            <span class="hist-num">{i + 1}</span>
+            <div class="hist-plays">
+              {t.plays.map((p) => (
+                <div
+                  key={p.seat}
+                  class={`hist-cell${p.seat === t.winner ? ' hist-won' : ''}`}
+                  title={`${SEAT_NAMES[p.seat]}${p.seat === ledSeat ? ' led' : ''}${
+                    p.seat === t.winner ? ' — won the trick' : ''
+                  }`}
+                >
+                  <span class="hist-who">
+                    {SEAT_NAMES[p.seat]?.[0]}
+                    {p.seat === ledSeat && (
+                      <span class="hist-led-dot" aria-hidden="true">
+                        &bull;
+                      </span>
+                    )}
+                  </span>
+                  <Domino id={p.domino} orientation="h" className="hist-dom" />
+                </div>
+              ))}
+            </div>
+            <span class={`hist-pts ${teamOf(t.winner) === 0 ? 'us' : 'them'}`}>+{t.points}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -211,6 +297,7 @@ function TrickArea({
   gathering: boolean;
 }) {
   const leader = plays[0]?.seat ?? null;
+  const ledWords = ledChip(g, plays);
   const partnerCallsTrump =
     g.phase === 'declaring' &&
     g.contract !== null &&
@@ -239,7 +326,9 @@ function TrickArea({
             .join(' ')}
         >
           <Domino id={p.domino} orientation="h" className="trick-dom" />
-          {p.seat === leader && <span class="led-tag">led</span>}
+          {p.seat === leader && (
+            <span class="led-tag">{ledWords ? `led ${ledWords}` : 'led'}</span>
+          )}
         </div>
       ))}
       </div>
