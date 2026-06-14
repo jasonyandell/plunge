@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useReducer, useState } from 'preact/hooks';
+import { preloadOnyx, prewarmOnyx } from '../ai';
 import {
   TRICK_SHOW_MS, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
 } from './store';
@@ -22,11 +23,34 @@ export function App() {
     initialApp(typeof localStorage !== 'undefined' ? loadApp(localStorage) : null),
   );
 
-  // Drive AI turns and the trick pause. Timers only — logic is in the store.
+  // Warm the onyx model once if it's the selected difficulty (idempotent;
+  // a load failure leaves onyx degrading to hard, so this never blocks play).
   useEffect(() => {
-    if (pendingAiSeat(app) !== null) {
-      const t = setTimeout(() => dispatch({ type: 'ai' }), aiDelayMs(app));
-      return () => clearTimeout(t);
+    if (app.settings.difficulty === 'onyx') void preloadOnyx();
+  }, [app.settings.difficulty]);
+
+  // Drive AI turns and the trick pause. Timers only — logic is in the store.
+  // For onyx, pre-warm the prediction cache for the pending seat during the
+  // think delay, so the synchronous 'ai' step hits the cache (cache miss is a
+  // safe hard fallback). Other difficulties are fully synchronous as before.
+  useEffect(() => {
+    const seat = pendingAiSeat(app);
+    if (seat !== null) {
+      const onyx = app.settings.difficulty === 'onyx';
+      let alive = true;
+      const t = setTimeout(() => {
+        if (!onyx || !app.game) {
+          dispatch({ type: 'ai' });
+          return;
+        }
+        void prewarmOnyx(app.game, seat).finally(() => {
+          if (alive) dispatch({ type: 'ai' });
+        });
+      }, aiDelayMs(app));
+      return () => {
+        alive = false;
+        clearTimeout(t);
+      };
     }
     if (app.showTrick) {
       const t = setTimeout(() => dispatch({ type: 'trick-shown' }), TRICK_SHOW_MS);
