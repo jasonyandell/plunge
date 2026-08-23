@@ -19,6 +19,11 @@ interface SheetProps {
   dispatch: (e: AppEvent) => void;
 }
 
+interface EndSheetProps extends SheetProps {
+  /** Swap to the hand-review card (trick-by-trick history). */
+  onReview?: (() => void) | undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Bidding
 // ---------------------------------------------------------------------------
@@ -177,7 +182,7 @@ function declTitle(d: Declaration): string {
 // Hand over / game over
 // ---------------------------------------------------------------------------
 
-export function HandOverSheet({ g, dispatch }: SheetProps) {
+export function HandOverSheet({ g, dispatch, onReview }: EndSheetProps) {
   const copy = handOverCopy(g);
   return (
     <div class="overlay">
@@ -195,12 +200,17 @@ export function HandOverSheet({ g, dispatch }: SheetProps) {
         >
           Shake the next hand
         </button>
+        {onReview && (
+          <button type="button" class="text-btn" onClick={onReview}>
+            See how it went
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-export function GameOverSheet({ g, dispatch }: SheetProps) {
+export function GameOverSheet({ g, dispatch, onReview }: EndSheetProps) {
   const copy = gameOverCopy(g);
   const won = g.winner === 0;
   return (
@@ -219,6 +229,11 @@ export function GameOverSheet({ g, dispatch }: SheetProps) {
         >
           Play again
         </button>
+        {onReview && (
+          <button type="button" class="text-btn" onClick={onReview}>
+            See how it went
+          </button>
+        )}
         <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'home' })}>
           Back home
         </button>

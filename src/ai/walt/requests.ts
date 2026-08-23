@@ -37,10 +37,12 @@ export const WALT_N = 40;
 /** Modeled level-0 mind sample size. */
 export const WALT_N0 = 8;
 /**
- * Bid while P(make) >= 11/16 — the first zero-overbid rung of walt's 200-hand
- * bidcurve calibration (theta 1/2 overbid 37/200 hands at n=40; 11/16: 0).
+ * Bid while P(make) >= 19/20 — deliberately blunt and conservative. The
+ * calibrated zero-overbid rung was 11/16, but at the table that still bid
+ * too eagerly for the house's taste (2026-08-23), so walt only speaks up
+ * when it's near-certain.
  */
-export const WALT_THETA: readonly [number, number] = [11, 16];
+export const WALT_THETA: readonly [number, number] = [19, 20];
 
 export interface WaltTuning {
   readonly n: number;

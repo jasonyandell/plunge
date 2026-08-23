@@ -9,14 +9,14 @@
  *   390×844 — same bands, middle grows; hand tiles cap at 58px wide.
  */
 
-import { useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import type { CompletedTrick, GameState, PlayRecord, Seat } from '../engine';
 import { legalDominoes, teamOf } from '../engine';
 import { Domino } from './Domino';
 import { Tally } from './Tally';
 import type { AppEvent, AppState } from './store';
 import {
-  HUMAN_SEAT, SEAT_NAMES, bidLabel, contractLabel, ledChip, thinkingCopy, trumpChip,
+  HUMAN_SEAT, SEAT_NAMES, bidLabel, contractLabel, declLabel, ledChip, thinkingCopy, trumpChip,
 } from './store';
 import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet } from './sheets';
 import './table.css';
@@ -32,6 +32,13 @@ interface TableProps {
 
 export function Table({ app, dispatch, thinking = null }: TableProps) {
   const [histOpen, setHistOpen] = useState(false);
+  // Reviewing the finished hand: hides the end-of-hand card in favor of the
+  // trick-by-trick history until the player comes back to the result.
+  const [review, setReview] = useState(false);
+  const phase = app.game?.phase;
+  useEffect(() => {
+    if (phase !== 'hand-over' && phase !== 'game-over') setReview(false);
+  }, [phase]);
   const g = app.game;
   if (!g) return null;
 
@@ -96,8 +103,52 @@ export function Table({ app, dispatch, thinking = null }: TableProps) {
 
       {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet g={g} dispatch={dispatch} />}
       {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet g={g} dispatch={dispatch} />}
-      {g.phase === 'hand-over' && <HandOverSheet g={g} dispatch={dispatch} />}
-      {g.phase === 'game-over' && <GameOverSheet g={g} dispatch={dispatch} />}
+      {g.phase === 'hand-over' && !review && (
+        <HandOverSheet
+          g={g}
+          dispatch={dispatch}
+          onReview={g.tricks.length > 0 ? () => setReview(true) : undefined}
+        />
+      )}
+      {g.phase === 'game-over' && !review && (
+        <GameOverSheet
+          g={g}
+          dispatch={dispatch}
+          onReview={g.tricks.length > 0 ? () => setReview(true) : undefined}
+        />
+      )}
+      {(g.phase === 'hand-over' || g.phase === 'game-over') && review && (
+        <ReviewSheet g={g} onBack={() => setReview(false)} />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+/** The finished hand, trick by trick — reachable from the end-of-hand card. */
+function ReviewSheet({ g, onBack }: { g: GameState; onBack: () => void }) {
+  const who = g.declarer === null ? '' : g.declarer === HUMAN_SEAT ? 'You' : SEAT_NAMES[g.declarer];
+  return (
+    <div class="overlay">
+      <div class="card review-card" role="dialog" aria-label="Hand review">
+        <h2 class="card-title">How it went</h2>
+        <p class="card-detail">
+          {g.contract !== null && who !== '' && (
+            <>
+              {who} bid {contractLabel(g.contract)}
+              {g.declaration ? `, ${declLabel(g.declaration)}` : ''}.{' '}
+            </>
+          )}
+          Us {g.points[0] ?? 0} &middot; Them {g.points[1] ?? 0}.
+        </p>
+        <div class="review-scroll">
+          <TrickHistory g={g} />
+        </div>
+        <button type="button" class="big-btn" onClick={onBack}>
+          Back to the result
+        </button>
+      </div>
     </div>
   );
 }

@@ -213,3 +213,21 @@
   @keyframes sheet-up { from { translate: 0 24px; opacity: 0; } }
   @keyframes card-in { from { scale: 0.92; opacity: 0; } }
 }
+
+/* Hand review: the end-of-hand card swapped for the trick-by-trick history. */
+.review-card {
+  width: min(380px, 94vw);
+}
+
+.review-scroll {
+  margin: 10px 0 14px;
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+}
+
+/* .hist-panel is a drop-down inside the info bar; inline it in the card. */
+.review-scroll .hist-panel {
+  position: static;
+  max-height: none;
+  overflow-y: visible;
+}
