@@ -11,7 +11,7 @@ interface HomeProps {
   dispatch: (e: AppEvent) => void;
 }
 
-const DIFFS: readonly Difficulty[] = ['easy', 'medium', 'hard'];
+const DIFFS: readonly Difficulty[] = ['easy', 'medium', 'hard', 'onyx', 'walt'];
 
 export function Home({ app, dispatch }: HomeProps) {
   const resumable = app.game !== null && app.game.phase !== 'game-over';

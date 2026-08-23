@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useReducer, useState } from 'preact/hooks';
+import { preloadOnyx, preloadWalt, prewarmOnyx, prewarmWalt } from '../ai';
 import {
   TRICK_SHOW_MS, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
 } from './store';
@@ -22,11 +23,41 @@ export function App() {
     initialApp(typeof localStorage !== 'undefined' ? loadApp(localStorage) : null),
   );
 
-  // Drive AI turns and the trick pause. Timers only — logic is in the store.
+  // Warm the selected model once (idempotent; a load failure leaves the
+  // difficulty degrading to hard, so this never blocks play).
   useEffect(() => {
-    if (pendingAiSeat(app) !== null) {
-      const t = setTimeout(() => dispatch({ type: 'ai' }), aiDelayMs(app));
-      return () => clearTimeout(t);
+    if (app.settings.difficulty === 'onyx') void preloadOnyx();
+    if (app.settings.difficulty === 'walt') void preloadWalt();
+  }, [app.settings.difficulty]);
+
+  // Drive AI turns and the trick pause. Timers only — logic is in the store.
+  // For onyx/walt, pre-warm the response cache for the pending seat during
+  // the think delay, so the synchronous 'ai' step hits the cache (cache miss
+  // is a safe hard fallback). walt can genuinely think for seconds at an
+  // opening lead — the dispatch simply waits for the pre-warm to settle.
+  useEffect(() => {
+    const seat = pendingAiSeat(app);
+    if (seat !== null) {
+      const prewarm =
+        app.settings.difficulty === 'onyx'
+          ? prewarmOnyx
+          : app.settings.difficulty === 'walt'
+            ? prewarmWalt
+            : null;
+      let alive = true;
+      const t = setTimeout(() => {
+        if (!prewarm || !app.game) {
+          dispatch({ type: 'ai' });
+          return;
+        }
+        void prewarm(app.game, seat).finally(() => {
+          if (alive) dispatch({ type: 'ai' });
+        });
+      }, aiDelayMs(app));
+      return () => {
+        alive = false;
+        clearTimeout(t);
+      };
     }
     if (app.showTrick) {
       const t = setTimeout(() => dispatch({ type: 'trick-shown' }), TRICK_SHOW_MS);
