@@ -101,14 +101,17 @@ function workerBackend(): Backend {
 
 async function directBackend(bytes: Uint8Array): Promise<Backend> {
   const walt = await Walt.load(bytes);
-  return (kind, req) =>
-    Promise.resolve().then(() =>
-      kind === 'play'
-        ? walt.play(req as PlayRequest)
-        : kind === 'bid'
-          ? walt.bid(req as BidRequest)
-          : walt.declare(req as DeclareRequest),
-    );
+  return async (kind, req) => {
+    // Yield a macrotask before each solve: the call is long and synchronous,
+    // and a microtask-only await chain would starve timers and IPC (e.g. the
+    // test runner's RPC) for the whole run.
+    await new Promise((r) => setTimeout(r, 0));
+    return kind === 'play'
+      ? walt.play(req as PlayRequest)
+      : kind === 'bid'
+        ? walt.bid(req as BidRequest)
+        : walt.declare(req as DeclareRequest);
+  };
 }
 
 /**
