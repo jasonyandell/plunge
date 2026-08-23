@@ -37,10 +37,11 @@ export const WALT_N = 40;
 /** Modeled level-0 mind sample size. */
 export const WALT_N0 = 8;
 /**
- * Bid while P(make) >= 19/20 — deliberately blunt and conservative. The
- * calibrated zero-overbid rung was 11/16, but at the table that still bid
- * too eagerly for the house's taste (2026-08-23), so walt only speaks up
- * when it's near-certain.
+ * Bid while P(make) >= theta. NOTE: plunge currently does not use walt's
+ * bidder at all (see src/ai/walt/index.ts header — the price curve
+ * saturates against walt's level-0 field model, so even theta = 1 overbids
+ * at the table). The builders below are kept, tested, and ready for a
+ * walt-side re-pricing against a stronger field.
  */
 export const WALT_THETA: readonly [number, number] = [19, 20];
 

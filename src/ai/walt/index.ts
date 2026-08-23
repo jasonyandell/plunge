@@ -1,8 +1,20 @@
 /**
- * walt — the level-1 seat: bid, declare, and play for straight
- * points-and-marks 42, decided by the exact sampling-stack solver compiled to
- * wasm (walt.wasm, ~300 KB, zero imports). Unlike onyx (a play-only policy),
- * walt covers the whole hand: auction, declaration, and every play.
+ * walt — the level-1 seat: declare and play for straight points-and-marks
+ * 42, decided by the exact sampling-stack solver compiled to wasm
+ * (walt.wasm, ~300 KB, zero imports).
+ *
+ * BIDDING IS DELEGATED TO `hard` — deliberately. walt's bid handler prices
+ * P(make) against its level-0 field model: defenders who each sample 8
+ * worlds and best-respond to uniform-random play (SCENARIO-PLAYER.md §3.2,
+ * §3.5). Against that defense most dealt hands "make" high bids, so the
+ * price curve saturates at 100% and no theta can repair it — walt's own
+ * 200-hand bidcurve corpus bids 124/200 hands even at theta = 1 (mean final
+ * bid ~34). At the table that read as three seats bidding 40, 41, 42. The
+ * model is exactly what §7.2 says it is — model-relative, not
+ * game-theoretic — and its bidding baseline is documented as not yet built,
+ * so the auction uses hard's club-player bidder until walt can price
+ * against a stronger field. Declaring stays with walt: picking the best
+ * trump for a hand at a fixed bid is pricing it is good at.
  *
  * SYNC/ASYNC — the onyx pattern, one level up. `chooseAction` is synchronous;
  * walt's solver is slow (opening leads ≈ seconds) and lives in a Web Worker.
@@ -31,7 +43,6 @@ import { hardAction } from '../hard';
 import {
   Walt,
   type BidRequest,
-  type BidResponse,
   type DeclareRequest,
   type DeclareResponse,
   type PlayRequest,
@@ -41,8 +52,6 @@ import {
   WALT_N,
   WALT_N0,
   type WaltTuning,
-  bidActionOf,
-  bidRequestOf,
   conformanceFailure,
   declareActionOf,
   declareRequestOf,
@@ -67,7 +76,6 @@ export function configureWalt(t: Partial<WaltTuning>): void {
 /** Observability for tests: how often the real solver decided vs fell back. */
 export const waltCounters = {
   netPlays: 0,
-  netBids: 0,
   netDeclares: 0,
   conformanceFailures: 0,
 };
@@ -151,10 +159,10 @@ function keyOf(kind: WaltKind, req: WaltRequest): string {
 /** The walt request for this observation, or null when out of scope. */
 function requestFor(obs: Observation): { kind: WaltKind; req: WaltRequest } | null {
   switch (obs.phase) {
-    case 'bidding': {
-      const req = bidRequestOf(obs, tuning);
-      return req && { kind: 'bid', req };
-    }
+    case 'bidding':
+      // Deliberately out of scope → hard's bidder (see the header: walt's
+      // bid pricing saturates against its level-0 field model).
+      return null;
     case 'declaring': {
       const req = declareRequestOf(obs, tuning);
       return req && { kind: 'declare', req };
@@ -221,11 +229,10 @@ export function waltAction(
       if (a) waltCounters.netPlays++;
       return a ?? hardAction(obs, acts, rand);
     }
-    case 'bid': {
-      const a = bidActionOf(resp as BidResponse, acts);
-      if (a) waltCounters.netBids++;
-      return a ?? hardAction(obs, acts, rand);
-    }
+    case 'bid':
+      // Unreachable — requestFor never yields a bid request (delegated to
+      // hard) — but the worker protocol still knows the kind.
+      return hardAction(obs, acts, rand);
     case 'declare': {
       const a = declareActionOf(resp as DeclareResponse, acts);
       if (a) waltCounters.netDeclares++;

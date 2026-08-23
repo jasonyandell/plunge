@@ -73,7 +73,7 @@ describe('walt plays legal, complete games (warmed solver path)', () => {
     expect(waltReady()).toBe(true);
   }, 60_000);
 
-  it('bids, declares, and plays legally across full games; conformance holds', async () => {
+  it('declares and plays legally across full games; conformance holds', async () => {
     let checked = 0;
     for (let g = 0; g < 2; g++) {
       // walt on team 0 (seats 0,2), hard on team 1 (seats 1,3).
@@ -87,9 +87,9 @@ describe('walt plays legal, complete games (warmed solver path)', () => {
       expect(final.winner).not.toBeNull();
     }
     expect(checked).toBeGreaterThan(60);
-    // The solver actually decided — this was not the hard fallback all along.
+    // The solver actually decided plays — not the hard fallback all along.
+    // (Bidding is delegated to hard by design; see src/ai/walt/index.ts.)
     expect(waltCounters.netPlays).toBeGreaterThan(15);
-    expect(waltCounters.netBids).toBeGreaterThan(3);
     // Two independent rules engines agreed on every replay.
     expect(waltCounters.conformanceFailures).toBe(0);
   }, 240_000);

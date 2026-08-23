@@ -10,7 +10,9 @@
  *           Needs an async pre-warm (preloadOnyx + prewarmOnyx) to hit the cache;
  *           a cold cache or missing session degrades cleanly to hard.
  * - walt:   the level-1 exact sampling-stack solver in wasm (src/ai/walt) —
- *           bids, declares, AND plays straight 42, in a Web Worker. Same
+ *           declares and plays straight 42, in a Web Worker; bidding uses
+ *           hard's club-player bidder (walt's bid pricing saturates against
+ *           its level-0 field model — see src/ai/walt/index.ts). Same
  *           pre-warm bridge (preloadWalt + prewarmWalt); anything out of
  *           scope or uncached degrades cleanly to hard.
  *
