@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useReducer, useState } from 'preact/hooks';
-import { preloadOnyx, prewarmOnyx } from '../ai';
+import { preloadOnyx, preloadWalt, prewarmOnyx, prewarmWalt } from '../ai';
 import {
   TRICK_SHOW_MS, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
 } from './store';
@@ -23,27 +23,34 @@ export function App() {
     initialApp(typeof localStorage !== 'undefined' ? loadApp(localStorage) : null),
   );
 
-  // Warm the onyx model once if it's the selected difficulty (idempotent;
-  // a load failure leaves onyx degrading to hard, so this never blocks play).
+  // Warm the selected model once (idempotent; a load failure leaves the
+  // difficulty degrading to hard, so this never blocks play).
   useEffect(() => {
     if (app.settings.difficulty === 'onyx') void preloadOnyx();
+    if (app.settings.difficulty === 'walt') void preloadWalt();
   }, [app.settings.difficulty]);
 
   // Drive AI turns and the trick pause. Timers only — logic is in the store.
-  // For onyx, pre-warm the prediction cache for the pending seat during the
-  // think delay, so the synchronous 'ai' step hits the cache (cache miss is a
-  // safe hard fallback). Other difficulties are fully synchronous as before.
+  // For onyx/walt, pre-warm the response cache for the pending seat during
+  // the think delay, so the synchronous 'ai' step hits the cache (cache miss
+  // is a safe hard fallback). walt can genuinely think for seconds at an
+  // opening lead — the dispatch simply waits for the pre-warm to settle.
   useEffect(() => {
     const seat = pendingAiSeat(app);
     if (seat !== null) {
-      const onyx = app.settings.difficulty === 'onyx';
+      const prewarm =
+        app.settings.difficulty === 'onyx'
+          ? prewarmOnyx
+          : app.settings.difficulty === 'walt'
+            ? prewarmWalt
+            : null;
       let alive = true;
       const t = setTimeout(() => {
-        if (!onyx || !app.game) {
+        if (!prewarm || !app.game) {
           dispatch({ type: 'ai' });
           return;
         }
-        void prewarmOnyx(app.game, seat).finally(() => {
+        void prewarm(app.game, seat).finally(() => {
           if (alive) dispatch({ type: 'ai' });
         });
       }, aiDelayMs(app));

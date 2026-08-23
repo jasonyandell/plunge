@@ -9,6 +9,10 @@
  *           falls back to hard for bidding/declaring and out-of-scope contracts.
  *           Needs an async pre-warm (preloadOnyx + prewarmOnyx) to hit the cache;
  *           a cold cache or missing session degrades cleanly to hard.
+ * - walt:   the level-1 exact sampling-stack solver in wasm (src/ai/walt) —
+ *           bids, declares, AND plays straight 42, in a Web Worker. Same
+ *           pre-warm bridge (preloadWalt + prewarmWalt); anything out of
+ *           scope or uncached degrades cleanly to hard.
  *
  * Imperfect information is enforced structurally: every policy receives an
  * `Observation` (src/ai/observation.ts) — own hand + public info only —
@@ -27,8 +31,9 @@ import { easyAction } from './easy';
 import { mediumAction } from './medium';
 import { hardAction } from './hard';
 import { onyxAction } from './onyx';
+import { waltAction } from './walt';
 
-export type Difficulty = 'easy' | 'medium' | 'hard' | 'onyx';
+export type Difficulty = 'easy' | 'medium' | 'hard' | 'onyx' | 'walt';
 
 export function chooseAction(
   state: GameState,
@@ -53,7 +58,10 @@ export function chooseAction(
       return hardAction(obs, actions, rand);
     case 'onyx':
       return onyxAction(obs, actions, rand);
+    case 'walt':
+      return waltAction(obs, actions, rand);
   }
 }
 
 export { preloadOnyx, prewarmOnyx, onyxReady } from './onyx';
+export { preloadWalt, prewarmWalt, waltReady } from './walt';

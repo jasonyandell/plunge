@@ -205,7 +205,7 @@ export function saveApp(storage: StorageLike, s: AppState): void {
   }
 }
 
-const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard', 'onyx'];
+const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard', 'onyx', 'walt'];
 const PRESETS: readonly Preset[] = ['casual', 'tournament'];
 
 export function loadApp(storage: StorageLike): SavedState | null {
