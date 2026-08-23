@@ -148,6 +148,18 @@ export function waltReady(): boolean {
   return backend !== null;
 }
 
+/**
+ * Low-level: run one request through the loaded backend. Used by the
+ * post-hand analysis tooling (src/ai/walt/explain.ts); game-time decisions
+ * go through prewarmWalt/waltAction instead. Null when the backend never
+ * loaded; rejects on a solver error.
+ */
+export async function runWalt(kind: WaltKind, req: WaltRequest): Promise<unknown | null> {
+  const be = await preloadWalt();
+  if (!be) return null;
+  return be(kind, req);
+}
+
 // ---- response cache -------------------------------------------------------
 
 const cache = new Map<string, unknown>();

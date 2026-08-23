@@ -231,3 +231,90 @@
   max-height: none;
   overflow-y: visible;
 }
+
+/* walt-as-coach in the review card. */
+.review-hint {
+  margin: 6px 0 2px;
+  font-size: 12px;
+  font-style: italic;
+  opacity: 0.75;
+}
+
+.hist-tap {
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.hist-sel {
+  background: rgba(90, 170, 160, 0.25);
+  box-shadow: inset 0 0 0 1px var(--teal-bright, #5ac8bc);
+}
+
+.grade-list {
+  margin: 8px 0 2px;
+  text-align: left;
+  font-size: 13px;
+}
+
+.grade-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 2px;
+  border-bottom: 1px solid rgba(61, 39, 22, 0.12);
+}
+
+.grade-play { font-weight: 600; white-space: nowrap; }
+.grade-ok { color: #2e6b5e; }
+.grade-diff { color: #8a4a2c; }
+.grade-wait { opacity: 0.6; font-style: italic; }
+
+.exp-panel {
+  margin: 10px 0 12px;
+  padding: 10px 10px 6px;
+  text-align: left;
+  background: rgba(61, 39, 22, 0.07);
+  border-radius: 12px;
+}
+
+.exp-title { font-weight: 600; font-size: 14px; }
+
+.exp-note {
+  margin: 4px 0 6px;
+  font-size: 12px;
+  font-style: italic;
+  opacity: 0.8;
+}
+
+.exp-rows { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+
+.exp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 4px;
+  border-radius: 8px;
+}
+
+.exp-played { background: rgba(90, 170, 160, 0.18); }
+
+.exp-dom { width: 46px; }
+
+.exp-pct { font-weight: 600; min-width: 44px; }
+
+.exp-tags { display: flex; gap: 6px; }
+
+.exp-tag {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(61, 39, 22, 0.14);
+}
+
+.exp-tag.best {
+  background: #2e6b5e;
+  color: var(--cream);
+}

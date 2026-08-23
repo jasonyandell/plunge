@@ -11,14 +11,15 @@
 
 import { useEffect, useState } from 'preact/hooks';
 import type { CompletedTrick, GameState, PlayRecord, Seat } from '../engine';
-import { legalDominoes, teamOf } from '../engine';
+import { legalDominoes } from '../engine';
 import { Domino } from './Domino';
 import { Tally } from './Tally';
 import type { AppEvent, AppState } from './store';
 import {
-  HUMAN_SEAT, SEAT_NAMES, bidLabel, contractLabel, declLabel, ledChip, thinkingCopy, trumpChip,
+  HUMAN_SEAT, SEAT_NAMES, bidLabel, contractLabel, ledChip, thinkingCopy, trumpChip,
 } from './store';
 import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet } from './sheets';
+import { ReviewSheet, TrickHistory } from './Review';
 import './table.css';
 
 const POS: readonly string[] = ['bottom', 'left', 'top', 'right'];
@@ -126,33 +127,6 @@ export function Table({ app, dispatch, thinking = null }: TableProps) {
 
 // ---------------------------------------------------------------------------
 
-/** The finished hand, trick by trick — reachable from the end-of-hand card. */
-function ReviewSheet({ g, onBack }: { g: GameState; onBack: () => void }) {
-  const who = g.declarer === null ? '' : g.declarer === HUMAN_SEAT ? 'You' : SEAT_NAMES[g.declarer];
-  return (
-    <div class="overlay">
-      <div class="card review-card" role="dialog" aria-label="Hand review">
-        <h2 class="card-title">How it went</h2>
-        <p class="card-detail">
-          {g.contract !== null && who !== '' && (
-            <>
-              {who} bid {contractLabel(g.contract)}
-              {g.declaration ? `, ${declLabel(g.declaration)}` : ''}.{' '}
-            </>
-          )}
-          Us {g.points[0] ?? 0} &middot; Them {g.points[1] ?? 0}.
-        </p>
-        <div class="review-scroll">
-          <TrickHistory g={g} />
-        </div>
-        <button type="button" class="big-btn" onClick={onBack}>
-          Back to the result
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 
 function StatusStrip({ g, dispatch }: { g: GameState; dispatch: (e: AppEvent) => void }) {
@@ -235,43 +209,6 @@ function InfoBar({
         )}
       </div>
       {open && n > 0 && <TrickHistory g={g} />}
-    </div>
-  );
-}
-
-function TrickHistory({ g }: { g: GameState }) {
-  return (
-    <div class="hist-panel" role="region" aria-label="Trick history">
-      {g.tricks.map((t, i) => {
-        const ledSeat = t.plays[0]?.seat;
-        return (
-          <div class="hist-row" key={i}>
-            <span class="hist-num">{i + 1}</span>
-            <div class="hist-plays">
-              {t.plays.map((p) => (
-                <div
-                  key={p.seat}
-                  class={`hist-cell${p.seat === t.winner ? ' hist-won' : ''}`}
-                  title={`${SEAT_NAMES[p.seat]}${p.seat === ledSeat ? ' led' : ''}${
-                    p.seat === t.winner ? ' — won the trick' : ''
-                  }`}
-                >
-                  <span class="hist-who">
-                    {SEAT_NAMES[p.seat]?.[0]}
-                    {p.seat === ledSeat && (
-                      <span class="hist-led-dot" aria-hidden="true">
-                        &bull;
-                      </span>
-                    )}
-                  </span>
-                  <Domino id={p.domino} orientation="h" className="hist-dom" />
-                </div>
-              ))}
-            </div>
-            <span class={`hist-pts ${teamOf(t.winner) === 0 ? 'us' : 'them'}`}>+{t.points}</span>
-          </div>
-        );
-      })}
     </div>
   );
 }
