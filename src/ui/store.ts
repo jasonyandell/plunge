@@ -322,6 +322,15 @@ export function ledChip(g: GameState, plays: readonly PlayRecord[]): string | nu
   return PIP_SUIT_NAMES[led] ?? null;
 }
 
+/**
+ * Shown (with animated dots) while a slow AI — walt at an opening lead, or
+ * pricing an auction — is genuinely computing, so a long pause reads as
+ * thought, not a hang.
+ */
+export function thinkingCopy(seat: Seat): string {
+  return `${SEAT_NAMES[seat] ?? 'Somebody'}'s thinking it over`;
+}
+
 export interface HandOverCopy {
   readonly title: string;
   readonly detail: string;

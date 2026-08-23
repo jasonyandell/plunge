@@ -347,6 +347,25 @@
   color: var(--cream);
 }
 
+/* Slow-AI think indicator: name + pulsing dots so a long pause reads as
+   thought, not a hang. */
+.thinking-note {
+  font-size: 13px;
+}
+
+.think-dots span {
+  animation: think-blink 1.4s ease-in-out infinite;
+}
+
+.think-dots span:nth-child(2) { animation-delay: 0.2s; }
+.think-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes think-blink {
+  0%, 20% { opacity: 0.2; }
+  50% { opacity: 1; }
+  80%, 100% { opacity: 0.2; }
+}
+
 .trick-slot {
   position: absolute;
   display: flex;

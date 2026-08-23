@@ -16,7 +16,7 @@ import { Domino } from './Domino';
 import { Tally } from './Tally';
 import type { AppEvent, AppState } from './store';
 import {
-  HUMAN_SEAT, SEAT_NAMES, bidLabel, contractLabel, ledChip, trumpChip,
+  HUMAN_SEAT, SEAT_NAMES, bidLabel, contractLabel, ledChip, thinkingCopy, trumpChip,
 } from './store';
 import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet } from './sheets';
 import './table.css';
@@ -26,9 +26,11 @@ const POS: readonly string[] = ['bottom', 'left', 'top', 'right'];
 interface TableProps {
   app: AppState;
   dispatch: (e: AppEvent) => void;
+  /** Seat whose slow AI think is in flight (walt solving) — shows a note. */
+  thinking?: Seat | null;
 }
 
-export function Table({ app, dispatch }: TableProps) {
+export function Table({ app, dispatch, thinking = null }: TableProps) {
   const [histOpen, setHistOpen] = useState(false);
   const g = app.game;
   if (!g) return null;
@@ -64,6 +66,7 @@ export function Table({ app, dispatch }: TableProps) {
             plays={trickPlays}
             winner={trickWinner}
             gathering={showingLast}
+            thinking={thinking}
           />
           <OpponentSide g={g} seat={3} />
         </div>
@@ -290,11 +293,13 @@ function TrickArea({
   plays,
   winner,
   gathering,
+  thinking,
 }: {
   g: GameState;
   plays: readonly PlayRecord[];
   winner: Seat | null;
   gathering: boolean;
+  thinking: Seat | null;
 }) {
   const leader = plays[0]?.seat ?? null;
   const ledWords = ledChip(g, plays);
@@ -309,6 +314,16 @@ function TrickArea({
       {partnerCallsTrump && g.turn !== null && g.declarer !== null && (
         <div class="trick-note">
           {SEAT_NAMES[g.turn]} is calling trump for {g.declarer === HUMAN_SEAT ? 'you' : SEAT_NAMES[g.declarer]}&hellip;
+        </div>
+      )}
+      {!partnerCallsTrump && !gathering && thinking !== null && thinking !== HUMAN_SEAT && (
+        <div class="trick-note thinking-note" role="status">
+          {thinkingCopy(thinking)}
+          <span class="think-dots" aria-hidden="true">
+            <span>.</span>
+            <span>.</span>
+            <span>.</span>
+          </span>
         </div>
       )}
       <div class={`trick-plays${gathering && winner !== null ? ` gather-${POS[winner]}` : ''}`}>

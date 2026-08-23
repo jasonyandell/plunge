@@ -26,6 +26,7 @@ import {
   loadApp,
   pendingAiSeat,
   PIP_SUIT_NAMES,
+  thinkingCopy,
   trumpChip,
   reducer,
   saveApp,
@@ -312,6 +313,12 @@ describe('store: copy', () => {
     expect(bidLabel({ kind: 'marks', value: 1 })).toBe('1 mark (42)'.replace(' (42)', '')); // "1 mark"
     expect(bidLabel({ kind: 'marks', value: 2 })).toBe('2 marks');
     expect(bidLabel({ kind: 'marks', value: 4, special: 'plunge' })).toContain('Plunge');
+  });
+
+  it('thinking copy names the seat', () => {
+    expect(thinkingCopy(1 as Seat)).toBe("Earl's thinking it over");
+    expect(thinkingCopy(2 as Seat)).toBe("Gran's thinking it over");
+    expect(thinkingCopy(3 as Seat)).toBe("Ruby's thinking it over");
   });
 
   it('hand-over copy: thrown-in hand', () => {

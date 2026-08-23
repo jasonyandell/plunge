@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useReducer, useState } from 'preact/hooks';
+import type { Seat } from '../engine';
 import { preloadOnyx, preloadWalt, prewarmOnyx, prewarmWalt } from '../ai';
 import {
   TRICK_SHOW_MS, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
@@ -34,7 +35,10 @@ export function App() {
   // For onyx/walt, pre-warm the response cache for the pending seat during
   // the think delay, so the synchronous 'ai' step hits the cache (cache miss
   // is a safe hard fallback). walt can genuinely think for seconds at an
-  // opening lead — the dispatch simply waits for the pre-warm to settle.
+  // opening lead — the dispatch simply waits for the pre-warm to settle, and
+  // once a think runs long (>350ms) the table shows who's thinking so the
+  // pause never reads as a hang.
+  const [thinking, setThinking] = useState<Seat | null>(null);
   useEffect(() => {
     const seat = pendingAiSeat(app);
     if (seat !== null) {
@@ -45,18 +49,28 @@ export function App() {
             ? prewarmWalt
             : null;
       let alive = true;
+      let slow: ReturnType<typeof setTimeout> | undefined;
       const t = setTimeout(() => {
         if (!prewarm || !app.game) {
           dispatch({ type: 'ai' });
           return;
         }
+        slow = setTimeout(() => {
+          if (alive) setThinking(seat);
+        }, 350);
         void prewarm(app.game, seat).finally(() => {
-          if (alive) dispatch({ type: 'ai' });
+          clearTimeout(slow);
+          if (alive) {
+            setThinking(null);
+            dispatch({ type: 'ai' });
+          }
         });
       }, aiDelayMs(app));
       return () => {
         alive = false;
         clearTimeout(t);
+        clearTimeout(slow);
+        setThinking(null);
       };
     }
     if (app.showTrick) {
@@ -120,7 +134,7 @@ export function App() {
         return <About dispatch={dispatch} />;
       case 'table':
         return app.game ? (
-          <Table app={app} dispatch={dispatch} />
+          <Table app={app} dispatch={dispatch} thinking={thinking} />
         ) : (
           <Home app={app} dispatch={dispatch} />
         );
