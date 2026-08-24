@@ -23,6 +23,7 @@ import {
 } from '../ai/walt/explain';
 import { Domino } from './Domino';
 import { HUMAN_SEAT, SEAT_NAMES, contractLabel, declLabel } from './store';
+import { shareUrl } from './share';
 
 const pips = (id: string): string => `${id[0]}-${id[1]}`;
 
@@ -102,6 +103,7 @@ export function ReviewSheet({ g, onBack }: { g: GameState; onBack: () => void })
   const [sel, setSel] = useState<{ trick: number; play: number } | null>(null);
   const [exps, setExps] = useState<Record<string, ExpState>>({});
   const [grading, setGrading] = useState(false);
+  const [copied, setCopied] = useState(false);
   const alive = useRef(true);
   const started = useRef(new Set<string>());
   useEffect(
@@ -154,6 +156,19 @@ export function ReviewSheet({ g, onBack }: { g: GameState; onBack: () => void })
     }
   };
 
+  const share = (): void => {
+    const url = shareUrl(g);
+    if (!url) return;
+    if (navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(url).then(
+        () => setCopied(true),
+        () => window.prompt('Copy this link', url),
+      );
+    } else {
+      window.prompt('Copy this link', url);
+    }
+  };
+
   const who = g.declarer === null ? '' : g.declarer === HUMAN_SEAT ? 'You' : SEAT_NAMES[g.declarer];
   return (
     <div class="overlay">
@@ -180,13 +195,18 @@ export function ReviewSheet({ g, onBack }: { g: GameState; onBack: () => void })
         {!inScope && (
           <p class="review-hint">walt only studies straight-42 hands — no analysis for this one.</p>
         )}
+        {sel !== null && <ExplainPanel g={g} sel={sel} exps={exps} onCloser={fetchExp} />}
         <div class="review-scroll">
           <TrickHistory g={g} onTapPlay={tap} selected={sel} />
         </div>
-        {sel !== null && <ExplainPanel g={g} sel={sel} exps={exps} onCloser={fetchExp} />}
-        <button type="button" class="big-btn" onClick={onBack}>
-          Back to the result
-        </button>
+        <div class="review-footer">
+          <button type="button" class="text-btn" onClick={share}>
+            {copied ? 'Link copied!' : 'Share this hand'}
+          </button>
+          <button type="button" class="big-btn" onClick={onBack}>
+            Back to the result
+          </button>
+        </div>
       </div>
     </div>
   );

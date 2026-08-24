@@ -22,6 +22,8 @@ interface SheetProps {
 interface EndSheetProps extends SheetProps {
   /** Swap to the hand-review card (trick-by-trick history). */
   onReview?: (() => void) | undefined;
+  /** Viewing a shared hand (view-only) — no next hand to shake. */
+  scenario?: boolean | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -182,7 +184,7 @@ function declTitle(d: Declaration): string {
 // Hand over / game over
 // ---------------------------------------------------------------------------
 
-export function HandOverSheet({ g, dispatch, onReview }: EndSheetProps) {
+export function HandOverSheet({ g, dispatch, onReview, scenario }: EndSheetProps) {
   const copy = handOverCopy(g);
   return (
     <div class="overlay">
@@ -193,13 +195,19 @@ export function HandOverSheet({ g, dispatch, onReview }: EndSheetProps) {
           <Tally marks={g.marks[0] ?? 0} label="Us" />
           <Tally marks={g.marks[1] ?? 0} label="Them" />
         </div>
-        <button
-          type="button"
-          class="big-btn"
-          onClick={() => dispatch({ type: 'human', action: { type: 'next-hand' } })}
-        >
-          Shake the next hand
-        </button>
+        {scenario ? (
+          <button type="button" class="big-btn" onClick={() => dispatch({ type: 'go', screen: 'home' })}>
+            Back home
+          </button>
+        ) : (
+          <button
+            type="button"
+            class="big-btn"
+            onClick={() => dispatch({ type: 'human', action: { type: 'next-hand' } })}
+          >
+            Shake the next hand
+          </button>
+        )}
         {onReview && (
           <button type="button" class="text-btn" onClick={onReview}>
             See how it went

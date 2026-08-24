@@ -33,14 +33,20 @@ interface TableProps {
 
 export function Table({ app, dispatch, thinking = null }: TableProps) {
   const [histOpen, setHistOpen] = useState(false);
+  // A shared hand from a link is shown instead of the player's own game,
+  // view-only, and opens straight into review.
+  const scenario = app.scenarioGame !== null;
   // Reviewing the finished hand: hides the end-of-hand card in favor of the
   // trick-by-trick history until the player comes back to the result.
-  const [review, setReview] = useState(false);
-  const phase = app.game?.phase;
+  const [review, setReview] = useState(scenario);
+  const phase = (app.scenarioGame ?? app.game)?.phase;
   useEffect(() => {
     if (phase !== 'hand-over' && phase !== 'game-over') setReview(false);
   }, [phase]);
-  const g = app.game;
+  useEffect(() => {
+    if (scenario) setReview(true);
+  }, [scenario]);
+  const g = app.scenarioGame ?? app.game;
   if (!g) return null;
 
   const lastTrick: CompletedTrick | null =
@@ -109,6 +115,7 @@ export function Table({ app, dispatch, thinking = null }: TableProps) {
           g={g}
           dispatch={dispatch}
           onReview={g.tricks.length > 0 ? () => setReview(true) : undefined}
+          scenario={scenario}
         />
       )}
       {g.phase === 'game-over' && !review && (

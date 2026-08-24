@@ -64,6 +64,12 @@ export interface AppState {
   readonly aiMoves: number;
   /** True while the just-completed trick is being shown before play resumes. */
   readonly showTrick: boolean;
+  /**
+   * A shared hand opened from a link — view-only review. Displayed instead
+   * of `game` on the table, never persisted, never steps the AI, and the
+   * player's own in-progress game stays untouched underneath.
+   */
+  readonly scenarioGame: GameState | null;
 }
 
 export type ChooseFn = typeof chooseAction;
@@ -77,7 +83,9 @@ export type AppEvent =
   | { readonly type: 'human'; readonly action: Action }
   /** Step exactly one AI action (if one is pending). `choose` is injectable for tests. */
   | { readonly type: 'ai'; readonly choose?: ChooseFn | undefined }
-  | { readonly type: 'trick-shown' };
+  | { readonly type: 'trick-shown' }
+  /** Open a shared hand (from a share link) in view-only review. */
+  | { readonly type: 'view-scenario'; readonly game: GameState };
 
 export function initialApp(saved?: SavedState | null): AppState {
   return {
@@ -87,6 +95,7 @@ export function initialApp(saved?: SavedState | null): AppState {
     game: saved?.game ?? null,
     aiMoves: saved?.aiMoves ?? 0,
     showTrick: false,
+    scenarioGame: null,
   };
 }
 
@@ -102,7 +111,7 @@ export function trickJustCompleted(prev: GameState, next: GameState): boolean {
  */
 export function pendingAiSeat(s: AppState): Seat | null {
   const g = s.game;
-  if (!g || s.screen !== 'table' || s.showTrick) return null;
+  if (!g || s.screen !== 'table' || s.showTrick || s.scenarioGame) return null;
   if (g.phase !== 'bidding' && g.phase !== 'declaring' && g.phase !== 'playing') return null;
   if (g.turn === null || g.turn === HUMAN_SEAT) return null;
   return g.turn;
@@ -116,7 +125,8 @@ export function aiRand(game: GameState, aiMoves: number): () => number {
 export function reducer(s: AppState, e: AppEvent): AppState {
   switch (e.type) {
     case 'go':
-      return { ...s, screen: e.screen };
+      // Leaving for home closes any shared-hand review.
+      return { ...s, screen: e.screen, scenarioGame: e.screen === 'home' ? null : s.scenarioGame };
     case 'set-difficulty':
       return { ...s, settings: { ...s.settings, difficulty: e.difficulty } };
     case 'set-preset':
@@ -128,14 +138,17 @@ export function reducer(s: AppState, e: AppEvent): AppState {
         seed: e.seed,
         aiMoves: 0,
         showTrick: false,
+        scenarioGame: null,
         game: newGame(configFor(s.settings.preset), e.seed),
       };
     case 'resume':
-      return s.game ? { ...s, screen: 'table' } : s;
+      return s.game ? { ...s, screen: 'table', scenarioGame: null } : s;
+    case 'view-scenario':
+      return { ...s, screen: 'table', showTrick: false, scenarioGame: e.game };
     case 'trick-shown':
       return { ...s, showTrick: false };
     case 'human': {
-      if (!s.game) return s;
+      if (!s.game || s.scenarioGame) return s; // shared hands are view-only
       let game: GameState;
       try {
         game = applyAction(s.game, e.action);

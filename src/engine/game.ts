@@ -97,6 +97,55 @@ export function newGame(
   return freshHand(base, firstShaker, 1);
 }
 
+/**
+ * A standalone game holding exactly one specified deal — the substrate for
+ * portable hand replays (share links). Marks start at 0 and rngState is a
+ * fixed constant, so the replayed hand is fully determined by its actions.
+ */
+export function newDealtGame(
+  config: GameConfig,
+  dealtHands: readonly (readonly DominoId[])[],
+  shaker: Seat,
+): GameState {
+  if (dealtHands.length !== 4 || dealtHands.some((h) => h.length !== 7)) {
+    throw new Error('dealt must be 4 hands of 7 dominoes');
+  }
+  const seen = new Set<DominoId>();
+  for (const h of dealtHands) {
+    for (const id of h) {
+      fromId(id); // validates the id
+      seen.add(id);
+    }
+  }
+  if (seen.size !== 28) throw new Error('dealt must cover all 28 dominoes');
+  const hands = dealtHands.map((h) => [...h]);
+  return {
+    config,
+    rngState: 1,
+    marks: [0, 0],
+    handNumber: 1,
+    shaker,
+    phase: 'bidding',
+    hands,
+    dealt: hands.map((h) => [...h]),
+    bids: [],
+    turn: nextSeat(shaker),
+    declarer: null,
+    contract: null,
+    declaration: null,
+    rules: null,
+    sittingOut: null,
+    forcedBid: false,
+    leader: null,
+    currentTrick: [],
+    tricks: [],
+    points: [0, 0],
+    thrownIn: false,
+    handResult: null,
+    winner: null,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Declarations
 // ---------------------------------------------------------------------------

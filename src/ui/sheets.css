@@ -214,15 +214,29 @@
   @keyframes card-in { from { scale: 0.92; opacity: 0; } }
 }
 
-/* Hand review: the end-of-hand card swapped for the trick-by-trick history. */
+/* Hand review: the end-of-hand card swapped for the trick-by-trick history.
+   The card is a capped flex column — the history scrolls in the middle and
+   the footer (share + back) always stays reachable, however much analysis
+   piles up above it. */
 .review-card {
   width: min(380px, 94vw);
+  max-height: 92vh;
+  max-height: 92dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .review-scroll {
-  margin: 10px 0 14px;
-  max-height: min(52vh, 420px);
+  margin: 10px 0 6px;
+  flex: 1 1 auto;
+  min-height: 72px;
   overflow-y: auto;
+}
+
+.review-footer {
+  flex: 0 0 auto;
+  padding-top: 6px;
 }
 
 /* .hist-panel is a drop-down inside the info bar; inline it in the card. */
@@ -289,7 +303,21 @@
   opacity: 0.8;
 }
 
-.exp-rows { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.exp-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.grade-list {
+  max-height: 26vh;
+  overflow-y: auto;
+}
+
+.exp-panel { flex: 0 0 auto; }
 
 .exp-row {
   display: flex;

@@ -17,6 +17,7 @@ import {
 } from './update';
 import { Home, HowTo, About } from './Home';
 import { Table } from './Table';
+import { codeFromHash, decodeHand } from './share';
 import './app.css';
 
 export function App() {
@@ -80,10 +81,21 @@ export function App() {
     return undefined;
   }, [app]);
 
-  // Persist settings + in-progress game.
+  // Persist settings + in-progress game. (A shared hand opened from a link
+  // is never part of the save — the player's own game stays underneath.)
   useEffect(() => {
     if (typeof localStorage !== 'undefined') saveApp(localStorage, app);
   }, [app.game, app.settings, app.seed, app.aiMoves]);
+
+  // A share link (#r=...) opens that hand in view-only review. The hash is
+  // consumed on load so reloads and future navigation stay clean.
+  useEffect(() => {
+    const code = codeFromHash(location.hash);
+    if (!code) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    const game = decodeHand(code);
+    if (game) dispatch({ type: 'view-scenario', game });
+  }, []);
 
   // Deploy-aware reload (issue #2): poll /version.json, offer a reload when a
   // fresh deploy lands. The game is already saved, so reloading is safe.
@@ -133,7 +145,7 @@ export function App() {
       case 'about':
         return <About dispatch={dispatch} />;
       case 'table':
-        return app.game ? (
+        return app.game || app.scenarioGame ? (
           <Table app={app} dispatch={dispatch} thinking={thinking} />
         ) : (
           <Home app={app} dispatch={dispatch} />
