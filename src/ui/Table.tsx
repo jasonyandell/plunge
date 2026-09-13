@@ -20,6 +20,8 @@ import {
 } from './store';
 import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet } from './sheets';
 import { ReviewSheet, TrickHistory } from './Review';
+import { NativeReview } from './NativeReview';
+import { isNative, nativeLabel } from '../ai/native';
 import './table.css';
 
 const POS: readonly string[] = ['bottom', 'left', 'top', 'right'];
@@ -63,6 +65,9 @@ export function Table({ app, dispatch, thinking = null }: TableProps) {
   return (
     <div class="table-screen">
       <StatusStrip g={g} dispatch={dispatch} />
+      {isNative(app.settings.difficulty) && <div class="native-strip">
+        Practice 30 · {nativeLabel(app.settings.difficulty)}
+      </div>}
       {g.phase === 'playing' && (
         <InfoBar
           g={g}
@@ -126,7 +131,11 @@ export function Table({ app, dispatch, thinking = null }: TableProps) {
         />
       )}
       {(g.phase === 'hand-over' || g.phase === 'game-over') && review && (
-        <ReviewSheet g={g} onBack={() => setReview(false)} />
+        isNative(app.settings.difficulty) || app.scenarioFlag ? (
+          <NativeReview key={scenario ? (app.scenarioFlag?.id ?? g.dealt.flat().join('')) : `${app.sessionId}:${g.handNumber}`}
+            g={g} onBack={() => setReview(false)} sessionId={app.sessionId}
+            receipts={scenario ? {} : app.nativeReceipts} initialFlag={app.scenarioFlag} />
+        ) : <ReviewSheet g={g} onBack={() => setReview(false)} />
       )}
     </div>
   );

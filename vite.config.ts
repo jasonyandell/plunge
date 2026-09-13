@@ -4,6 +4,9 @@ import preact from '@preact/preset-vite';
 
 export default defineConfig({
   plugins: [preact()],
+  server: {
+    proxy: { '/api': { target: `http://127.0.0.1:${process.env.PLUNGE_BRIDGE_PORT ?? '4245'}` } },
+  },
   build: { target: 'es2022' },
   test: {
     // Several test files hold a core in long synchronous solver loops (hard's

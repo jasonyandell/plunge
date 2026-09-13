@@ -10,6 +10,7 @@
  */
 
 import { chooseAction, type Difficulty } from '../ai';
+import { NATIVE_TABLE, isNative, requestOf, requestKey, checkedAction, type NativeReceipt, type FlagRecord } from '../ai/native';
 import {
   type Action,
   type Bid,
@@ -47,7 +48,17 @@ export interface Settings {
   readonly preset: Preset;
 }
 
-export const DEFAULT_SETTINGS: Settings = { difficulty: 'medium', preset: 'casual' };
+export const DEFAULT_SETTINGS: Settings = NATIVE_TABLE
+  ? { difficulty: 'native-partner', preset: 'tournament' }
+  : { difficulty: 'medium', preset: 'casual' };
+
+/** Rotate the bidder with the shaker; use real engine auction transitions. */
+export function practice30(game: GameState): GameState {
+  if (game.phase !== 'bidding' || game.bids.length) return game;
+  game = applyAction(game, { type: 'bid', bid: { kind: 'points', value: 30 } });
+  for (let i = 0; i < 3; i++) game = applyAction(game, { type: 'bid', bid: { kind: 'pass' } });
+  return game;
+}
 
 export function configFor(preset: Preset): GameConfig {
   return preset === 'tournament' ? TOURNAMENT_CONFIG : CASUAL_CONFIG;
@@ -70,6 +81,9 @@ export interface AppState {
    * player's own in-progress game stays untouched underneath.
    */
   readonly scenarioGame: GameState | null;
+  readonly sessionId: string;
+  readonly nativeReceipts: Record<string, string>;
+  readonly scenarioFlag: FlagRecord | null;
 }
 
 export type ChooseFn = typeof chooseAction;
@@ -78,14 +92,15 @@ export type AppEvent =
   | { readonly type: 'go'; readonly screen: Screen }
   | { readonly type: 'set-difficulty'; readonly difficulty: Difficulty }
   | { readonly type: 'set-preset'; readonly preset: Preset }
-  | { readonly type: 'new-game'; readonly seed: string }
+  | { readonly type: 'new-game'; readonly seed: string; readonly sessionId?: string }
   | { readonly type: 'resume' }
   | { readonly type: 'human'; readonly action: Action }
   /** Step exactly one AI action (if one is pending). `choose` is injectable for tests. */
   | { readonly type: 'ai'; readonly choose?: ChooseFn | undefined }
   | { readonly type: 'trick-shown' }
   /** Open a shared hand (from a share link) in view-only review. */
-  | { readonly type: 'view-scenario'; readonly game: GameState };
+  | { readonly type: 'view-scenario'; readonly game: GameState; readonly flag?: FlagRecord }
+  | { readonly type: 'native-ai'; readonly receipt: NativeReceipt };
 
 export function initialApp(saved?: SavedState | null): AppState {
   return {
@@ -96,6 +111,9 @@ export function initialApp(saved?: SavedState | null): AppState {
     aiMoves: saved?.aiMoves ?? 0,
     showTrick: false,
     scenarioGame: null,
+    scenarioFlag: null,
+    sessionId: saved?.sessionId ?? 'legacy',
+    nativeReceipts: saved?.nativeReceipts ?? {},
   };
 }
 
@@ -126,9 +144,11 @@ export function reducer(s: AppState, e: AppEvent): AppState {
   switch (e.type) {
     case 'go':
       // Leaving for home closes any shared-hand review.
-      return { ...s, screen: e.screen, scenarioGame: e.screen === 'home' ? null : s.scenarioGame };
+      return { ...s, screen: e.screen, scenarioGame: e.screen === 'home' ? null : s.scenarioGame,
+        scenarioFlag: e.screen === 'home' ? null : s.scenarioFlag };
     case 'set-difficulty':
-      return { ...s, settings: { ...s.settings, difficulty: e.difficulty } };
+      return { ...s, settings: { ...s.settings, difficulty: e.difficulty,
+        preset: isNative(e.difficulty) ? 'tournament' : s.settings.preset } };
     case 'set-preset':
       return { ...s, settings: { ...s.settings, preset: e.preset } };
     case 'new-game':
@@ -139,12 +159,15 @@ export function reducer(s: AppState, e: AppEvent): AppState {
         aiMoves: 0,
         showTrick: false,
         scenarioGame: null,
-        game: newGame(configFor(s.settings.preset), e.seed),
+        scenarioFlag: null,
+        sessionId: e.sessionId ?? `seed-${e.seed.replace(/[^a-zA-Z0-9_-]/g, '').slice(0,60) || 'game'}`,
+        nativeReceipts: {},
+        game: isNative(s.settings.difficulty) ? practice30(newGame(TOURNAMENT_CONFIG, e.seed)) : newGame(configFor(s.settings.preset), e.seed),
       };
     case 'resume':
-      return s.game ? { ...s, screen: 'table', scenarioGame: null } : s;
+      return s.game ? { ...s, screen: 'table', scenarioGame: null, scenarioFlag: null } : s;
     case 'view-scenario':
-      return { ...s, screen: 'table', showTrick: false, scenarioGame: e.game };
+      return { ...s, screen: 'table', showTrick: false, scenarioGame: e.game, scenarioFlag: e.flag ?? null };
     case 'trick-shown':
       return { ...s, showTrick: false };
     case 'human': {
@@ -152,10 +175,23 @@ export function reducer(s: AppState, e: AppEvent): AppState {
       let game: GameState;
       try {
         game = applyAction(s.game, e.action);
+        if (isNative(s.settings.difficulty) && e.action.type === 'next-hand') game = practice30(game);
       } catch {
         return s; // defensive: stale tap / double tap — ignore
       }
       return { ...s, game, showTrick: trickJustCompleted(s.game, game) };
+    }
+    case 'native-ai': {
+      const seat = pendingAiSeat(s);
+      if (seat === null || !s.game || s.game.phase !== 'playing' || !isNative(s.settings.difficulty)) return s;
+      const req = requestOf(s.game, seat, s.sessionId);
+      const wanted = s.settings.difficulty === 'native-l1' ? 'l1-default' : 'l1-partner-rollout';
+      if (requestKey(req) !== requestKey(e.receipt.identity.request) || e.receipt.identity.game_id !== s.sessionId
+        || e.receipt.identity.hand_number !== s.game.handNumber || e.receipt.identity.player.name !== wanted) return s;
+      const game = applyAction(s.game, checkedAction(s.game, req, e.receipt));
+      const key = `${s.game.handNumber}:${req.plays.length / 2}`;
+      return { ...s, game, aiMoves: s.aiMoves + 1, showTrick: trickJustCompleted(s.game, game),
+        nativeReceipts: { ...s.nativeReceipts, [key]: e.receipt.id } };
     }
     case 'ai': {
       const seat = pendingAiSeat(s);
@@ -196,6 +232,8 @@ export interface SavedState {
   readonly seed: string;
   readonly game: GameState | null;
   readonly aiMoves: number;
+  readonly sessionId?: string;
+  readonly nativeReceipts?: Record<string, string>;
 }
 
 export interface StorageLike {
@@ -207,7 +245,8 @@ export interface StorageLike {
 export const STORAGE_KEY = 'plunge:save:v1';
 
 export function toSaved(s: AppState): SavedState {
-  return { v: 1, settings: s.settings, seed: s.seed, game: s.game, aiMoves: s.aiMoves };
+  return { v: 1, settings: s.settings, seed: s.seed, game: s.game, aiMoves: s.aiMoves,
+    sessionId: s.sessionId, nativeReceipts: s.nativeReceipts };
 }
 
 export function saveApp(storage: StorageLike, s: AppState): void {
@@ -218,7 +257,7 @@ export function saveApp(storage: StorageLike, s: AppState): void {
   }
 }
 
-const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard', 'onyx', 'walt'];
+const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard', 'onyx', 'walt', 'native-l1', 'native-partner'];
 const PRESETS: readonly Preset[] = ['casual', 'tournament'];
 
 export function loadApp(storage: StorageLike): SavedState | null {
@@ -230,6 +269,9 @@ export function loadApp(storage: StorageLike): SavedState | null {
     if (!DIFFICULTIES.includes(p.settings?.difficulty)) return null;
     if (!PRESETS.includes(p.settings?.preset)) return null;
     if (typeof p.seed !== 'string' || typeof p.aiMoves !== 'number') return null;
+    if (p.sessionId !== undefined && (typeof p.sessionId !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(p.sessionId))) return null;
+    if (p.nativeReceipts !== undefined && (typeof p.nativeReceipts !== 'object' || p.nativeReceipts === null
+      || Object.entries(p.nativeReceipts).some(([k,v]) => !/^\d+:\d+$/.test(k) || typeof v !== 'string' || !/^[a-f0-9]{64}$/.test(v)))) return null;
     if (p.game !== null) {
       const g = p.game;
       if (typeof g !== 'object' || typeof g.phase !== 'string') return null;

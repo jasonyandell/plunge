@@ -54,6 +54,27 @@ body {
 
 button { font-family: inherit; }
 
+.native-strip { text-align: center; font-size: 12px; color: var(--teal-bright); padding: 3px 10px; }
+.native-intro { line-height: 1.55; }
+.native-error { position: fixed; bottom: 12px; left: 12px; right: 12px; z-index: 110;
+  display: flex; gap: 12px; align-items: center; padding: 14px; border-radius: 12px;
+  background: #702d21; color: white; box-shadow: 0 4px 20px #0008; }
+.native-error span { flex: 1; }
+.native-error button { padding: 8px; }
+.native-question { border-top: 1px solid #8c6d3b55; padding: 14px 4px; }
+.native-question h3 { font-size: 17px; }
+.native-question p { line-height: 1.45; }
+.native-label { display: flex; flex-direction: column; gap: 7px; font-size: 14px; margin: 16px 0; }
+.native-label textarea, .native-label select { font: inherit; color: #302316; background: #fffaf0;
+  border: 1px solid #a88f69; border-radius: 8px; padding: 10px; width: 100%; }
+.native-label textarea { min-height: 80px; resize: vertical; }
+.native-receipt { padding: 4px 12px; background: #4e8f8715; border-left: 3px solid var(--teal); }
+.native-receipt p { margin: 8px 0; font-size: 14px; }
+.native-warning { color: #942c21; }
+.native-analysis { margin-top: 16px; }
+.native-review .exp-row { grid-template-columns: 64px 1fr 1fr; font-size: 13px; }
+.native-review button:disabled { opacity: .6; cursor: default; }
+
 button:focus-visible {
   outline: 3px solid var(--teal-bright);
   outline-offset: 2px;

@@ -30,6 +30,8 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;
+  // Local research code and live experiment status always come from the server.
+  if (['localhost', '127.0.0.1'].includes(url.hostname) || url.pathname.startsWith('/api/')) return;
   // The deploy beacon must always come from the network (deploy-aware reload).
   if (url.pathname === '/version.json') return;
 

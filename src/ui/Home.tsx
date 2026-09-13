@@ -3,6 +3,7 @@
  */
 
 import type { Difficulty } from '../ai';
+import { NATIVE_TABLE, isNative, nativeLabel } from '../ai/native';
 import type { AppEvent, AppState, Preset } from './store';
 import './home.css';
 
@@ -11,7 +12,7 @@ interface HomeProps {
   dispatch: (e: AppEvent) => void;
 }
 
-const DIFFS: readonly Difficulty[] = ['easy', 'medium', 'hard', 'onyx', 'walt'];
+const DIFFS: readonly Difficulty[] = NATIVE_TABLE ? ['native-partner', 'native-l1'] : ['easy', 'medium', 'hard', 'onyx', 'walt'];
 
 export function Home({ app, dispatch }: HomeProps) {
   const resumable = app.game !== null && app.game.phase !== 'game-over';
@@ -19,7 +20,7 @@ export function Home({ app, dispatch }: HomeProps) {
     <div class="home">
       <div class="home-card">
         <h1 class="title">Plunge</h1>
-        <p class="tagline">Texas 42, the way Gran taught it</p>
+        <p class="tagline">{NATIVE_TABLE ? 'The sunshine table · on your Mac' : 'Texas 42, the way Gran taught it'}</p>
 
         {resumable && (
           <button type="button" class="big-btn" onClick={() => dispatch({ type: 'resume' })}>
@@ -29,13 +30,13 @@ export function Home({ app, dispatch }: HomeProps) {
         <button
           type="button"
           class={resumable ? 'big-btn secondary' : 'big-btn'}
-          onClick={() => dispatch({ type: 'new-game', seed: Date.now().toString(36) })}
+          onClick={() => dispatch({ type: 'new-game', seed: Date.now().toString(36), sessionId: crypto.randomUUID() })}
         >
           Deal me in
         </button>
 
         <div class="setting">
-          <span class="setting-label">Opponents</span>
+          <span class="setting-label">{NATIVE_TABLE ? 'Your partner and opponents' : 'Opponents'}</span>
           <div class="seg" role="radiogroup" aria-label="Difficulty">
             {DIFFS.map((d) => (
               <button
@@ -46,13 +47,16 @@ export function Home({ app, dispatch }: HomeProps) {
                 class={`seg-btn${app.settings.difficulty === d ? ' on' : ''}`}
                 onClick={() => dispatch({ type: 'set-difficulty', difficulty: d })}
               >
-                {d}
+                {isNative(d) ? nativeLabel(d) : d}
               </button>
             ))}
           </div>
         </div>
 
-        <div class="setting">
+        {NATIVE_TABLE ? <p class="setting-hint native-intro">
+          Straight 42, a 30 bid every hand. The bidder rotates and chooses trump.
+          After a hand, tap a move to save it for the gym—with a note or another play to try.
+        </p> : <div class="setting">
           <span class="setting-label">House rules</span>
           <div class="seg" role="radiogroup" aria-label="Rules preset">
             {(['casual', 'tournament'] as const).map((p: Preset) => (
@@ -73,7 +77,7 @@ export function Home({ app, dispatch }: HomeProps) {
               ? 'Nel-O, Plunge and Splash allowed — like home.'
               : 'Straight 42 — no special contracts.'}
           </p>
-        </div>
+        </div>}
 
         <div class="link-row">
           <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'how' })}>

@@ -22,7 +22,17 @@
     <script>
       // Service worker + dismissable install banner (no deps).
       if ('serviceWorker' in navigator) {
-        addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+        addEventListener('load', async () => {
+          if (['localhost', '127.0.0.1'].includes(location.hostname)) {
+            // A development table must not replay cached source or API status.
+            // Retire an earlier local install once; game saves stay untouched.
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map((r) => r.unregister()));
+            if (navigator.serviceWorker.controller) location.reload();
+          } else {
+            await navigator.serviceWorker.register('/sw.js');
+          }
+        });
       }
       (() => {
         const KEY = 'plunge:install-dismissed';

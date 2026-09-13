@@ -18,6 +18,7 @@ import {
 import { Home, HowTo, About } from './Home';
 import { Table } from './Table';
 import { codeFromHash, decodeHand } from './share';
+import { api, isNative, nativeMove, type FlagRecord } from '../ai/native';
 import './app.css';
 
 export function App() {
@@ -40,7 +41,10 @@ export function App() {
   // once a think runs long (>350ms) the table shows who's thinking so the
   // pause never reads as a hang.
   const [thinking, setThinking] = useState<Seat | null>(null);
+  const [nativeError, setNativeError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
+    setNativeError(null);
     const seat = pendingAiSeat(app);
     if (seat !== null) {
       const prewarm =
@@ -52,6 +56,14 @@ export function App() {
       let alive = true;
       let slow: ReturnType<typeof setTimeout> | undefined;
       const t = setTimeout(() => {
+        if (isNative(app.settings.difficulty) && app.game?.phase === 'playing') {
+          setThinking(seat);
+          void nativeMove(app.game, seat, app.settings.difficulty, app.sessionId).then(
+            (receipt) => { if (alive) dispatch({ type: 'native-ai', receipt }); },
+            (error: unknown) => { if (alive) setNativeError(String(error)); },
+          ).finally(() => { if (alive) setThinking(null); });
+          return;
+        }
         if (!prewarm || !app.game) {
           dispatch({ type: 'ai' });
           return;
@@ -79,23 +91,41 @@ export function App() {
       return () => clearTimeout(t);
     }
     return undefined;
-  }, [app]);
+  }, [app, retry]);
 
   // Persist settings + in-progress game. (A shared hand opened from a link
   // is never part of the save — the player's own game stays underneath.)
   useEffect(() => {
     if (typeof localStorage !== 'undefined') saveApp(localStorage, app);
-  }, [app.game, app.settings, app.seed, app.aiMoves]);
+  }, [app.game, app.settings, app.seed, app.aiMoves, app.nativeReceipts, app.sessionId]);
 
   // A share link (#r=...) opens that hand in view-only review. The hash is
   // consumed on load so reloads and future navigation stay clean.
   useEffect(() => {
-    const code = codeFromHash(location.hash);
-    if (!code) return;
-    history.replaceState(null, '', location.pathname + location.search);
-    const game = decodeHand(code);
-    if (game) dispatch({ type: 'view-scenario', game });
-  }, []);
+    let generation = 0;
+    const open = (): void => {
+      const request = ++generation;
+      const flagId = /(?:^#|&)flag=([a-f0-9]{32})/.exec(location.hash)?.[1];
+      if (flagId) {
+        void api<FlagRecord>(`flags/${flagId}`).then((flag) => {
+          const game = decodeHand(flag.share_code);
+          if (!game) throw new Error('The saved hand could not be replayed.');
+          if (request === generation) {
+            history.replaceState(null, '', location.pathname + location.search);
+            dispatch({ type: 'view-scenario', game, flag });
+          }
+        }).catch((error: unknown) => { if (request === generation) setNativeError(String(error)); });
+        return;
+      }
+      const code = codeFromHash(location.hash);
+      if (!code) return;
+      history.replaceState(null, '', location.pathname + location.search);
+      const game = decodeHand(code);
+      if (game) dispatch({ type: 'view-scenario', game });
+    };
+    open(); window.addEventListener('hashchange', open);
+    return () => { generation++; window.removeEventListener('hashchange', open); };
+  }, [retry]);
 
   // Deploy-aware reload (issue #2): poll /version.json, offer a reload when a
   // fresh deploy lands. The game is already saved, so reloading is safe.
@@ -156,6 +186,12 @@ export function App() {
   return (
     <>
       {screen}
+      {nativeError && (
+        <div class="native-error" role="alert">
+          <span>{nativeError}</span>
+          <button type="button" onClick={() => setRetry((n) => n + 1)}>Retry</button>
+        </div>
+      )}
       {updateBanner}
     </>
   );
