@@ -13,14 +13,25 @@ export const nativeLabel = (d: NativeDifficulty): string => d === 'native-l1' ? 
 export interface NativeRequest {
   decl: number; bid: number; bidder: number; seat: number; hand: number[]; plays: number[]; seed: number;
 }
+export interface NativeEvaluation {
+  options: [number, string, string][]; outer_worlds: number;
+}
+export interface NativeDecision {
+  choice: number; legal: number[]; route: string; leader: number; points: number[]; elapsed_us: number;
+  mode?: string; phases?: { name: string; status: string }[];
+  evaluation?: NativeEvaluation | null; fallback_evaluation?: NativeEvaluation | null;
+  review_result?: { status: string; baseline: number; choice: number; samples?: number; support?: number;
+    coverage?: string; values?: [number, number][]; paired?: number[][] } | null;
+}
 export interface NativeReceipt {
   schema: 'plunge-decision-v1'; id: string; created: string;
   identity: { request: NativeRequest; player: { name: string }; implementation: unknown; game_id: string; hand_number: number };
-  response: {
-    choice: number; legal: number[]; route: string; leader: number; points: number[]; elapsed_us: number;
-    review_result?: { status: string; baseline: number; choice: number; samples?: number; support?: number;
-      coverage?: string; values?: [number, number][]; paired?: number[][] } | null;
-  };
+  response: NativeDecision;
+}
+export interface NativeEstimate {
+  schema: 'plunge-estimate-v1'; id: string; created: string;
+  identity: { request: NativeRequest; player: { n: number } };
+  response: NativeDecision;
 }
 export interface FlagRecord {
   id: string; ply: number; share_code: string; played: number; alternative: number | null; note: string;

@@ -15,6 +15,22 @@ This is a Mac practice mode; ordinary `npm run dev` retains Plunge's original
 player menu. The launcher enables practice with `VITE_NATIVE_TABLE=1`.
 
 After a hand: **See how it went → tap a play → Save this move for the gym**.
+History and move stats sit side by side on the Mac. Each selected play shows
+the actor's remaining hand, legal moves, trump and led suit, and make/set
+perspective. Computer plays show the original saved option scores; forced
+moves explain that there was only one legal choice. L1 scores remain labeled
+as preceding the partner check when that check changed the move.
+
+**Look closer · 160 worlds** adds a separate native L1 recheck underneath the
+original scores. Human moves and old shared hands offer **Ask Walt · 40 worlds**.
+These requests use only the actor's own original hand and the public prefix.
+Completed primary estimates are cached separately from playing receipts;
+inspection never changes the played move. A 14-second deadline bounds each
+inspection, and a fallback displays its actual smaller sample size. A timeout
+can be retried. Inspection uses a separate worker, so it doesn't queue behind
+live play. The current recheck uses the current L1 default, even when an old
+receipt was made by a different implementation.
+
 You can attach a note and an alternative legal move, copy a local replay link,
 and compare every legal choice under named continuation players. The original
 native response stays attached to the move. Full comparisons have an explicit
@@ -29,8 +45,8 @@ not replayed from an old cache. Reload after restarting with changed source.
 The full operating and evidence guide is
 `/Users/jason/code/texas-42-partnership-launch/experiments/partnership/PLUNGE.md`.
 Records live at `/Users/jason/data/texas-42/plunge-sunshine/` by default.
-`src/ai/native.ts` owns the strict transport; `NativeReview.tsx` owns finished-hand
-inspection. Live requests expose only the actor's own original hand and public
+`src/ai/native.ts` owns the strict transport; `NativeReview.tsx` and
+`NativeStats.tsx` own finished-hand inspection. Live requests expose only the actor's own original hand and public
 history. Finished-hand examiner data uses a separate endpoint.
 
 Validation: native transport and reducer tests, independent Python agreement

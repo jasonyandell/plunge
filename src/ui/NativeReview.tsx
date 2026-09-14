@@ -1,31 +1,25 @@
 /** Finished-hand examiner UI. No data from this view enters a live chooser. */
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { legalPlays, type GameState } from '../engine';
-import { api, nativeSeed, requestTile, type NativeReceipt, type FlagRecord, type Comparison } from '../ai/native';
-import { explainRequestOf } from '../ai/walt/explain';
-import { tileOfId } from '../ai/walt/requests';
+import { type GameState } from '../engine';
+import { api, nativeSeed, requestKey, requestTile, type NativeReceipt, type FlagRecord, type Comparison } from '../ai/native';
+import { reviewPosition } from '../ai/native-analysis';
 import { encodeHand, shareUrl } from './share';
 import { TrickHistory } from './Review';
 import { Domino } from './Domino';
-import { SEAT_NAMES } from './store';
+import { NativeStats } from './NativeStats';
+import { contractLabel, declLabel, SEAT_NAMES } from './store';
+
+export { reviewLegal } from '../ai/native-analysis';
 
 type Selection = { trick: number; play: number };
 const pips = (tile: number): string => requestTile(tile).split('').join('–');
-
-export function reviewLegal(g: GameState, sel: Selection): number[] {
-  const built = explainRequestOf(g, sel.trick, sel.play);
-  if (!built || !g.rules) return [];
-  const remaining = new Set(built.req.hand);
-  for (let i = 1; i < built.req.plays.length; i += 2) remaining.delete(built.req.plays[i]!);
-  const lead = sel.play === 0 ? null : g.tricks[sel.trick]!.plays[0]!.domino;
-  return legalPlays([...remaining].map(requestTile), lead, g.rules).map(tileOfId);
-}
 
 export function NativeReview({ g, onBack, sessionId, receipts, initialFlag }: {
   g: GameState; onBack: () => void; sessionId: string; receipts: Record<string,string>; initialFlag: FlagRecord | null;
 }) {
   const [sel, setSel] = useState<Selection | null>(initialFlag ? { trick: Math.floor(initialFlag.ply / 4), play: initialFlag.ply % 4 } : null);
   const [receipt, setReceipt] = useState<NativeReceipt | null>(initialFlag?.original_receipt ?? null);
+  const [receiptLoading, setReceiptLoading] = useState(false);
   const [flag, setFlag] = useState<FlagRecord | null>(initialFlag);
   const [note, setNote] = useState(initialFlag?.note ?? '');
   const [alternative, setAlternative] = useState(initialFlag?.alternative?.toString() ?? '');
@@ -35,14 +29,20 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag }: {
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [copied, setCopied] = useState(false);
   const generation = useRef(0);
+  const question = useRef<HTMLElement>(null);
   useEffect(() => () => { generation.current++; }, []);
   const ply = sel === null ? null : sel.trick * 4 + sel.play;
   const rid = ply === null ? undefined : (initialFlag?.ply === ply ? initialFlag.receipt_id : receipts[`${g.handNumber}:${ply}`]);
 
   useEffect(() => {
-    let live = true; setReceipt(null); setError('');
+    if (sel && window.matchMedia('(max-width: 759px)').matches) question.current?.scrollIntoView({ block: 'start' });
+  }, [ply]);
+
+  useEffect(() => {
+    let live = true; setReceipt(null); setError(''); setReceiptLoading(Boolean(rid));
     if (rid) void api<NativeReceipt>(`receipts/${rid}`).then((r) => { if (live) setReceipt(r); })
-      .catch((e: unknown) => { if (live) setError(String(e)); });
+      .catch((e: unknown) => { if (live) setError(String(e)); })
+      .finally(() => { if (live) setReceiptLoading(false); });
     return () => { live = false; };
   }, [rid]);
 
@@ -98,27 +98,35 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag }: {
     try { await navigator.clipboard.writeText(url); setCopied(true); }
     catch { window.prompt('Copy this link', url); }
   };
-  const legal = sel ? reviewLegal(g, sel) : [];
+  const loadedReceipt = receipt?.id === rid ? receipt : null;
+  const position = sel ? reviewPosition(g, sel, loadedReceipt?.identity.request.seed ?? initialFlag?.request.seed ?? nativeSeed(sessionId, g.handNumber)) : null;
+  const matchedReceipt = loadedReceipt && position && requestKey(loadedReceipt.identity.request) === requestKey(position.request) ? loadedReceipt : null;
+  const legal = position?.legal ?? [];
   const locked = busy || comparison?.status === 'running';
   const current = sel && g.tricks[sel.trick]?.plays[sel.play];
-  const review = receipt?.response.review_result;
+  const review = matchedReceipt?.response.review_result;
 
   return <div class="overlay"><div class="card review-card native-review" role="dialog" aria-label="Research hand review">
     <h2 class="card-title">How it went</h2>
-    <p class="card-detail">Us {g.points[0]} · Them {g.points[1]}. Tap a play to bring it into the gym.</p>
+    <p class="card-detail">{g.declarer !== null && `${SEAT_NAMES[g.declarer]} bid `}{g.contract && contractLabel(g.contract)}
+      {g.declaration && ` in ${declLabel(g.declaration)}`} · Us {g.points[0]} · Them {g.points[1]}.</p>
+    <p class="card-detail">Tap any play for Walt’s stats, a closer look, or the gym.</p>
     <div class="review-scroll">
-      <TrickHistory g={g} onTapPlay={select} selected={sel} />
-      {sel && current && <section class="native-question">
+      <div class="native-history"><TrickHistory g={g} onTapPlay={select} selected={sel} /></div>
+      {sel && current && <section class="native-question" ref={question}>
         <h3>{SEAT_NAMES[current.seat]} played {current.domino.split('').join('–')} · play {ply! + 1}</h3>
-        {receipt ? <div class="native-receipt">
-          <p>Original decision: {receipt.identity.player.name === 'l1-default' ? 'L1' : 'L1 + partner check'} · {(receipt.response.elapsed_us / 1e6).toFixed(2)} s</p>
+        {matchedReceipt ? <div class="native-receipt">
+          <p>Original decision: {matchedReceipt.identity.player.name === 'l1-default' ? 'L1' : 'L1 + partner check'} · {(matchedReceipt.response.elapsed_us / 1e6).toFixed(2)} s</p>
           <p>{review?.status === 'changed' ? `The check changed ${pips(review.baseline)} to ${pips(review.choice)}.`
             : review?.status === 'retained' ? 'The check kept L1’s move.'
             : review?.status === 'inactive' ? 'The partnership check did not trigger.'
-            : review ? 'The check was unresolved; L1’s move was kept.' : `Decision route: ${receipt.response.route}.`}</p>
+            : review ? 'The check was unresolved; L1’s move was kept.' : matchedReceipt.response.route === 'forced' ? 'Only one legal move.' : 'The baseline player chose this move.'}</p>
           {review?.samples !== undefined && <p>{review.samples} of {review.support} compatible hands compared
             {review.coverage === 'census' ? ' · full census' : ' · sampled guess'}.</p>}
-        </div> : <p class="setting-hint">{rid ? 'Loading the original decision…' : 'No native decision receipt for this play. The hand and your observation can still be saved.'}</p>}
+        </div> : null}
+        {position && <NativeStats key={`${ply}:${requestKey(position.request)}`} g={g} sel={sel} position={position}
+          receipt={matchedReceipt} loading={receiptLoading} />}
+        <h4>Save an observation</h4>
         <label class="native-label">What caught your eye?
           <textarea disabled={locked} value={note} maxLength={4000} placeholder="I thought Gran could have given me the five…"
             onInput={(e) => { setNote(e.currentTarget.value); setFlag(null); }} />
@@ -129,7 +137,7 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag }: {
             {legal.map((tile) => <option value={tile} key={tile}>{pips(tile)}</option>)}
           </select>
         </label>
-        <button type="button" class="big-btn" disabled={locked || Boolean(flag) || (Boolean(rid) && receipt === null)} onClick={() => void save()}>
+        <button type="button" class="big-btn" disabled={locked || Boolean(flag) || (Boolean(rid) && matchedReceipt === null)} onClick={() => void save()}>
           {busy ? 'Saving…' : flag ? 'Saved for the gym' : 'Save this move for the gym'}
         </button>
         {flag && <div class="native-analysis">

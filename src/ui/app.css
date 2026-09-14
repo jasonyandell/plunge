@@ -72,8 +72,29 @@ button { font-family: inherit; }
 .native-receipt p { margin: 8px 0; font-size: 14px; }
 .native-warning { color: #942c21; }
 .native-analysis { margin-top: 16px; }
-.native-review .exp-row { grid-template-columns: 64px 1fr 1fr; font-size: 13px; }
+.native-review .exp-row { display: grid; grid-template-columns: 46px 64px 1fr; font-size: 13px; text-align: left; }
+.native-review .exp-rows { max-height: none; overflow: visible; }
+.native-review .setting-hint { color: #725a40; }
 .native-review button:disabled { opacity: .6; cursor: default; }
+.review-card.native-review { width: min(620px, 94vw); }
+.native-stats h4 { margin: 18px 0 6px; font-size: 16px; }
+.native-position { font-weight: 600; font-size: 14px; }
+.native-held { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 14px; }
+.native-held > span { display: inline-flex; padding: 4px; border: 2px solid transparent; border-radius: 7px; opacity: .55; }
+.native-held > .native-legal { border-color: var(--teal-ink); opacity: 1; }
+.native-score { display: flex; flex-direction: column; gap: 2px; }
+.native-score small { color: #725a40; }
+.native-inspect-controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+.native-inspect-controls .big-btn { flex: 1; font-size: 14px; padding: 10px; }
+.native-fresh { border-left: 3px solid var(--teal); padding: 0 12px 8px; }
+.native-forced { padding: 12px; background: #4e8f8715; border-radius: 8px; }
+@media (min-width: 760px) {
+  .review-card.native-review { width: min(1000px, 94vw); }
+  .native-review .review-scroll { display: grid; grid-template-columns: minmax(240px, .8fr) minmax(310px, 1.2fr); gap: 20px; align-items: start; }
+  .native-history { position: sticky; top: 0; }
+  .native-question { border-top: 0; padding-top: 0; }
+  .native-question h3 { margin-top: 0; }
+}
 
 button:focus-visible {
   outline: 3px solid var(--teal-bright);
