@@ -1,10 +1,11 @@
 /** Finished-hand examiner UI. No data from this view enters a live chooser. */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { type GameState } from '../engine';
-import { api, nativeSeed, requestKey, requestTile, type NativeReceipt, type FlagRecord, type Comparison } from '../ai/native';
+import { NATIVE_TABLE, api, nativeSeed, requestKey, requestTile, type NativeReceipt, type FlagRecord, type Comparison } from '../ai/native';
 import { reviewPosition } from '../ai/native-analysis';
 import { encodeHand, shareUrl } from './share';
-import { TrickHistory } from './Review';
+import { observationUrl } from './observation-link';
+import { TrickHistory } from './TrickHistory';
 import { Domino } from './Domino';
 import { NativeStats } from './NativeStats';
 import { contractLabel, declLabel, SEAT_NAMES } from './store';
@@ -40,6 +41,10 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag }: {
 
   useEffect(() => {
     let live = true; setReceipt(null); setError(''); setReceiptLoading(Boolean(rid));
+    if (rid && initialFlag?.original_receipt?.id === rid) {
+      setReceipt(initialFlag.original_receipt); setReceiptLoading(false);
+      return () => { live = false; };
+    }
     if (rid) void api<NativeReceipt>(`receipts/${rid}`).then((r) => { if (live) setReceipt(r); })
       .catch((e: unknown) => { if (live) setError(String(e)); })
       .finally(() => { if (live) setReceiptLoading(false); });
@@ -47,7 +52,7 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag }: {
   }, [rid]);
 
   useEffect(() => {
-    if (!flag || comparison?.status !== 'running') return;
+    if (!NATIVE_TABLE || flag?.portable || !flag || comparison?.status !== 'running') return;
     let live = true;
     const timer = setTimeout(() => {
       void api<Comparison>(`flags/${flag.id}/compare/${future}`).then((value) => { if (live) setComparison(value); })
@@ -69,7 +74,7 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag }: {
     try {
       const value = await api<FlagRecord>('flags', { share_code: code, ply,
         seed: initialFlag?.request.seed ?? nativeSeed(sessionId, g.handNumber), note,
-        alternative: alternative === '' ? null : Number(alternative), receipt_id: rid ?? null });
+        alternative: alternative === '' ? null : Number(alternative), receipt_id: initialFlag?.portable ? null : rid ?? null });
       if (started === generation.current) { setFlag(value); setComparison(null); }
     } catch (e) { if (started === generation.current) setError(String(e)); }
     finally { if (started === generation.current) setBusy(false); }
@@ -103,6 +108,7 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag }: {
   const matchedReceipt = loadedReceipt && position && requestKey(loadedReceipt.identity.request) === requestKey(position.request) ? loadedReceipt : null;
   const legal = position?.legal ?? [];
   const locked = busy || comparison?.status === 'running';
+  const portableLink = (): string | null => position && ply !== null ? observationUrl(g, ply, position.request.seed, note, alternative === '' ? null : Number(alternative), matchedReceipt) : null;
   const current = sel && g.tricks[sel.trick]?.plays[sel.play];
   const review = matchedReceipt?.response.review_result;
 
@@ -116,12 +122,13 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag }: {
       {sel && current && <section class="native-question" ref={question}>
         <h3>{SEAT_NAMES[current.seat]} played {current.domino.split('').join('–')} · play {ply! + 1}</h3>
         {matchedReceipt ? <div class="native-receipt">
+          {matchedReceipt.storage === 'session' && <p>Device storage is unavailable. These scores last for this session; copy a link to keep them.</p>}
           <p>Original decision: {matchedReceipt.identity.player.name === 'l1-default' ? 'L1' : 'L1 + partner check'} · {(matchedReceipt.response.elapsed_us / 1e6).toFixed(2)} s</p>
           <p>{review?.status === 'changed' ? `The check changed ${pips(review.baseline)} to ${pips(review.choice)}.`
             : review?.status === 'retained' ? 'The check kept L1’s move.'
             : review?.status === 'inactive' ? 'The partnership check did not trigger.'
             : review ? 'The check was unresolved; L1’s move was kept.' : matchedReceipt.response.route === 'forced' ? 'Only one legal move.' : 'The baseline player chose this move.'}</p>
-          {review?.samples !== undefined && <p>{review.samples} of {review.support} compatible hands compared
+          {review && (review.samples ?? 0) > 0 && <p>{review.samples} of {review.support} compatible hands compared
             {review.coverage === 'census' ? ' · full census' : ' · sampled guess'}.</p>}
         </div> : null}
         {position && <NativeStats key={`${ply}:${requestKey(position.request)}`} g={g} sel={sel} position={position}
@@ -137,10 +144,14 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag }: {
             {legal.map((tile) => <option value={tile} key={tile}>{pips(tile)}</option>)}
           </select>
         </label>
-        <button type="button" class="big-btn" disabled={locked || Boolean(flag) || (Boolean(rid) && matchedReceipt === null)} onClick={() => void save()}>
-          {busy ? 'Saving…' : flag ? 'Saved for the gym' : 'Save this move for the gym'}
+        {NATIVE_TABLE && <button type="button" class="big-btn" disabled={locked || Boolean(flag && !flag.portable) || (Boolean(rid) && matchedReceipt === null)} onClick={() => void save()}>
+          {busy ? 'Saving…' : flag && !flag.portable ? 'Saved for the gym' : 'Save this move for the gym'}
+        </button>}
+        <button type="button" class="big-btn secondary" disabled={receiptLoading} onClick={() => void copy(portableLink())}>
+          {copied ? 'Link copied!' : 'Copy observation link'}
         </button>
-        {flag && <div class="native-analysis">
+        {!NATIVE_TABLE && <p class="setting-hint">This link includes the hand, selected move, note and original scores when available. Bring it back to the Mac gym.</p>}
+        {NATIVE_TABLE && flag && !flag.portable && <div class="native-analysis">
           <p>Saved on your Mac. <button class="text-btn" onClick={() => void copy(`${location.origin}${location.pathname}#flag=${flag.id}`)}>Copy flagged-move link</button></p>
           <label class="native-label">Players used for the continuation
             <select disabled={locked} value={future} onChange={(e) => { generation.current++; setFuture(e.currentTarget.value); setComparison(null); }}>

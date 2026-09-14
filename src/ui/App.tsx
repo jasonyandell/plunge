@@ -8,7 +8,6 @@
 
 import { useEffect, useReducer, useState } from 'preact/hooks';
 import type { Seat } from '../engine';
-import { preloadOnyx, preloadWalt, prewarmOnyx, prewarmWalt } from '../ai';
 import {
   TRICK_SHOW_MS, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
 } from './store';
@@ -18,6 +17,7 @@ import {
 import { Home, HowTo, About } from './Home';
 import { Table } from './Table';
 import { codeFromHash, decodeHand } from './share';
+import { decodeObservation } from './observation-link';
 import { api, isNative, nativeMove, type FlagRecord } from '../ai/native';
 import './app.css';
 
@@ -26,20 +26,7 @@ export function App() {
     initialApp(typeof localStorage !== 'undefined' ? loadApp(localStorage) : null),
   );
 
-  // Warm the selected model once (idempotent; a load failure leaves the
-  // difficulty degrading to hard, so this never blocks play).
-  useEffect(() => {
-    if (app.settings.difficulty === 'onyx') void preloadOnyx();
-    if (app.settings.difficulty === 'walt') void preloadWalt();
-  }, [app.settings.difficulty]);
-
-  // Drive AI turns and the trick pause. Timers only — logic is in the store.
-  // For onyx/walt, pre-warm the response cache for the pending seat during
-  // the think delay, so the synchronous 'ai' step hits the cache (cache miss
-  // is a safe hard fallback). walt can genuinely think for seconds at an
-  // opening lead — the dispatch simply waits for the pre-warm to settle, and
-  // once a think runs long (>350ms) the table shows who's thinking so the
-  // pause never reads as a hang.
+  // The same shared player runs through a native transport or a browser worker.
   const [thinking, setThinking] = useState<Seat | null>(null);
   const [nativeError, setNativeError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
@@ -47,42 +34,23 @@ export function App() {
     setNativeError(null);
     const seat = pendingAiSeat(app);
     if (seat !== null) {
-      const prewarm =
-        app.settings.difficulty === 'onyx'
-          ? prewarmOnyx
-          : app.settings.difficulty === 'walt'
-            ? prewarmWalt
-            : null;
       let alive = true;
-      let slow: ReturnType<typeof setTimeout> | undefined;
+      const controller = new AbortController();
       const t = setTimeout(() => {
         if (isNative(app.settings.difficulty) && app.game?.phase === 'playing') {
           setThinking(seat);
-          void nativeMove(app.game, seat, app.settings.difficulty, app.sessionId).then(
+          void nativeMove(app.game, seat, app.settings.difficulty, app.sessionId, controller.signal).then(
             (receipt) => { if (alive) dispatch({ type: 'native-ai', receipt }); },
             (error: unknown) => { if (alive) setNativeError(String(error)); },
           ).finally(() => { if (alive) setThinking(null); });
           return;
         }
-        if (!prewarm || !app.game) {
-          dispatch({ type: 'ai' });
-          return;
-        }
-        slow = setTimeout(() => {
-          if (alive) setThinking(seat);
-        }, 350);
-        void prewarm(app.game, seat).finally(() => {
-          clearTimeout(slow);
-          if (alive) {
-            setThinking(null);
-            dispatch({ type: 'ai' });
-          }
-        });
+        dispatch({ type: 'ai' });
       }, aiDelayMs(app));
       return () => {
         alive = false;
         clearTimeout(t);
-        clearTimeout(slow);
+        controller.abort();
         setThinking(null);
       };
     }
@@ -105,6 +73,13 @@ export function App() {
     let generation = 0;
     const open = (): void => {
       const request = ++generation;
+      if (location.hash.startsWith('#q=')) {
+        const observation = decodeObservation(location.hash);
+        if (!observation) { setNativeError('This observation link could not be replayed.'); return; }
+        history.replaceState(null, '', location.pathname + location.search);
+        dispatch({ type: 'view-scenario', ...observation });
+        return;
+      }
       const flagId = /(?:^#|&)flag=([a-f0-9]{32})/.exec(location.hash)?.[1];
       if (flagId) {
         void api<FlagRecord>(`flags/${flagId}`).then((flag) => {

@@ -1,5 +1,5 @@
 /* Plunge service worker — cache-first app shell. Bump CACHE to invalidate. */
-const CACHE = 'plunge-v2';
+const CACHE = 'plunge-walt-v3';
 const SHELL = [
   '/',
   '/index.html',

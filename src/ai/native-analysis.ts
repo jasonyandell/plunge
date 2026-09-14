@@ -1,6 +1,6 @@
 /** Reconstruct a past actor's view and read only the evaluation that completed. */
 import { legalPlays, type GameState } from '../engine';
-import { explainRequestOf } from './walt/explain';
+import { explainRequestOf } from './review-request';
 import { tileOfId } from './walt/requests';
 import { requestTile, type NativeDecision, type NativeRequest } from './native';
 

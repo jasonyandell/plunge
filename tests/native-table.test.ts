@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+vi.hoisted(() => vi.stubEnv('VITE_NATIVE_TABLE', '1'));
 import { writeFileSync } from 'node:fs';
 import { applyAction, legalActions, newDealtGame, newGame, TOURNAMENT_CONFIG, type Declaration, type GameState, type Seat } from '../src/engine';
 import { checkedAction, nativeMove, requestOf, type NativeReceipt } from '../src/ai/native';

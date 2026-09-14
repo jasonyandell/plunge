@@ -9,8 +9,9 @@
  *   - pauses briefly after a completed trick so the table can show it.
  */
 
-import { chooseAction, type Difficulty } from '../ai';
-import { NATIVE_TABLE, isNative, requestOf, requestKey, checkedAction, type NativeReceipt, type FlagRecord } from '../ai/native';
+import type { Difficulty } from '../ai';
+import { chooseAction } from '../ai/table';
+import { isNative, requestOf, requestKey, checkedAction, type NativeReceipt, type FlagRecord } from '../ai/native';
 import {
   type Action,
   type Bid,
@@ -48,9 +49,7 @@ export interface Settings {
   readonly preset: Preset;
 }
 
-export const DEFAULT_SETTINGS: Settings = NATIVE_TABLE
-  ? { difficulty: 'native-partner', preset: 'tournament' }
-  : { difficulty: 'medium', preset: 'casual' };
+export const DEFAULT_SETTINGS: Settings = { difficulty: 'native-partner', preset: 'tournament' };
 
 /** Rotate the bidder with the shaker; use real engine auction transitions. */
 export function practice30(game: GameState): GameState {
@@ -103,6 +102,7 @@ export type AppEvent =
   | { readonly type: 'native-ai'; readonly receipt: NativeReceipt };
 
 export function initialApp(saved?: SavedState | null): AppState {
+  if (saved && !isNative(saved.settings.difficulty)) saved = null;
   return {
     screen: 'home',
     settings: saved?.settings ?? DEFAULT_SETTINGS,

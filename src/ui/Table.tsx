@@ -19,7 +19,7 @@ import {
   HUMAN_SEAT, SEAT_NAMES, bidLabel, contractLabel, ledChip, thinkingCopy, trumpChip,
 } from './store';
 import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet } from './sheets';
-import { ReviewSheet, TrickHistory } from './Review';
+import { TrickHistory } from './TrickHistory';
 import { NativeReview } from './NativeReview';
 import { isNative, nativeLabel } from '../ai/native';
 import './table.css';
@@ -131,11 +131,9 @@ export function Table({ app, dispatch, thinking = null }: TableProps) {
         />
       )}
       {(g.phase === 'hand-over' || g.phase === 'game-over') && review && (
-        isNative(app.settings.difficulty) || app.scenarioFlag ? (
           <NativeReview key={scenario ? (app.scenarioFlag?.id ?? g.dealt.flat().join('')) : `${app.sessionId}:${g.handNumber}`}
             g={g} onBack={() => setReview(false)} sessionId={app.sessionId}
             receipts={scenario ? {} : app.nativeReceipts} initialFlag={app.scenarioFlag} />
-        ) : <ReviewSheet g={g} onBack={() => setReview(false)} />
       )}
     </div>
   );

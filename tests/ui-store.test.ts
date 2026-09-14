@@ -9,7 +9,10 @@ import fc from 'fast-check';
 import type { Action, GameState, Seat } from '../src/engine';
 import { CASUAL_CONFIG, applyAction, legalActions, newGame } from '../src/engine';
 import type { Difficulty } from '../src/ai';
-import { chooseAction } from '../src/ai';
+import { chooseAction as legacyChoice } from '../src/ai';
+// Store transition tests inject a cheap legal policy; the asynchronous Walt
+// receipt boundary is exercised separately in native-table and phone tests.
+const chooseAction: typeof legacyChoice = (state, seat, _difficulty, rand) => legacyChoice(state, seat, 'easy', rand);
 import {
   type AppState,
   type ChooseFn,
@@ -72,7 +75,7 @@ function driveToHandOver(app: AppState, maxSteps = 400): AppState {
     if (g.phase === 'hand-over' || g.phase === 'game-over') return app;
     const before = g;
     if (pendingAiSeat(app) !== null) {
-      app = reducer(app, { type: 'ai' });
+      app = reducer(app, { type: 'ai', choose: chooseAction });
     } else if (app.showTrick) {
       app = reducer(app, { type: 'trick-shown' });
     } else if (g.turn === HUMAN_SEAT) {
@@ -141,13 +144,13 @@ describe('store: AI scheduling (timer-free)', () => {
   it("an 'ai' event applies exactly one legal action and is deterministic", () => {
     // find a seed whose first actor is an AI
     let app = start('ai-first');
-    if (pendingAiSeat(app) === null) {
+    while (pendingAiSeat(app) === null) {
       app = reducer(app, { type: 'human', action: humanPolicy(app.game!) });
     }
     const seat = pendingAiSeat(app);
     expect(seat).not.toBeNull();
-    const a = reducer(app, { type: 'ai' });
-    const b = reducer(app, { type: 'ai' });
+    const a = reducer(app, { type: 'ai', choose: chooseAction });
+    const b = reducer(app, { type: 'ai', choose: chooseAction });
     expect(a.game).toEqual(b.game); // deterministic given identical state
     expect(a.aiMoves).toBe(app.aiMoves + 1);
     expect(a.game!.bids.length + a.game!.tricks.length).toBeGreaterThanOrEqual(
@@ -157,7 +160,7 @@ describe('store: AI scheduling (timer-free)', () => {
 
   it("'ai' is a no-op when no AI is pending", () => {
     const home = initialApp(null);
-    expect(reducer(home, { type: 'ai' })).toEqual(home);
+    expect(reducer(home, { type: 'ai', choose: chooseAction })).toEqual(home);
   });
 
   it('difficulty is wired through to chooseAction', () => {
@@ -222,11 +225,12 @@ describe('store: full hand flow', () => {
     if (g.phase === 'hand-over') {
       // AI never advances the hand
       expect(pendingAiSeat(app)).toBeNull();
-      expect(reducer(app, { type: 'ai' })).toEqual(app);
+      expect(reducer(app, { type: 'ai', choose: chooseAction })).toEqual(app);
       const handNumber = g.handNumber;
       app = reducer(app, { type: 'human', action: { type: 'next-hand' } });
       expect(app.game!.handNumber).toBe(handNumber + 1);
-      expect(app.game!.phase).toBe('bidding');
+      expect(app.game!.phase).toBe('declaring');
+      expect(app.game!.contract).toEqual({kind:'points', value:30});
     }
   });
 
@@ -262,7 +266,7 @@ describe('store: persistence', () => {
     let app = start('persist-seed');
     // play a few steps so the game is mid-flight
     for (let i = 0; i < 5 && pendingAiSeat(app) !== null; i++) {
-      app = reducer(app, { type: 'ai' });
+      app = reducer(app, { type: 'ai', choose: chooseAction });
     }
     saveApp(storage, app);
     const loaded = loadApp(storage);
@@ -275,8 +279,8 @@ describe('store: persistence', () => {
     expect(resumedApp.aiMoves).toBe(app.aiMoves);
     // the resumed game keeps playing identically
     if (pendingAiSeat(resumedApp) !== null && pendingAiSeat(app) !== null) {
-      expect(reducer(resumedApp, { type: 'ai' }).game).toEqual(
-        reducer(app, { type: 'ai' }).game,
+      expect(reducer(resumedApp, { type: 'ai', choose: chooseAction }).game).toEqual(
+        reducer(app, { type: 'ai', choose: chooseAction }).game,
       );
     }
   });

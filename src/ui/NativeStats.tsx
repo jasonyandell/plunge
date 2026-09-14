@@ -27,7 +27,8 @@ export function NativeStats({ g, sel, position, receipt, loading }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const alive = useRef(true);
-  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const controller = useRef<AbortController | null>(null);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; controller.current?.abort(); }; }, []);
   const { request, remaining, legal, played } = position;
   const original = receipt ? decisionStats(receipt.response, request, legal) : null;
   const fresh = estimate ? decisionStats(estimate.response, request, legal) : null;
@@ -36,8 +37,9 @@ export function NativeStats({ g, sel, position, receipt, loading }: {
   const inspect = async (worlds: 40 | 160): Promise<void> => {
     if (busy) return;
     setBusy(true); setError('');
+    controller.current = new AbortController();
     try {
-      const value = await api<NativeEstimate>('estimates', { request, worlds });
+      const value = await api<NativeEstimate>('estimates', { request, worlds }, 18000, controller.current.signal);
       if (value.schema !== 'plunge-estimate-v1' || requestKey(value.identity.request) !== requestKey(request)
         || value.identity.player.n !== worlds) throw new Error('The estimate does not match this position.');
       if (alive.current) setEstimate(value);
@@ -58,6 +60,7 @@ export function NativeStats({ g, sel, position, receipt, loading }: {
         : original ? <Scores stats={original} played={played} />
         : <p class="setting-hint">{receipt ? 'No completed option scores were saved for this decision.'
           : 'No original Walt estimate for this play. Ask Walt to compare the options from this player’s view.'}</p>}
+      {receipt?.response.interruption && <p class="setting-hint">{receipt.response.interruption}</p>}
       {receipt?.response.review_result?.status === 'changed' && <p class="setting-hint">These are L1’s scores before the partner check changed the choice.</p>}
       {original && <p class="setting-hint">The recorded sample, from this player’s own hand and public history. Small gaps can be sampling noise.</p>}
       <div class="native-inspect-controls">

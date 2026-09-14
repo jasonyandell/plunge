@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Plunge — a free, open source, mobile web Texas 42 game",
+  "description": "Plunge \u2014 a free, open source, mobile web Texas 42 game",
   "license": "CC0-1.0",
   "scripts": {
     "dev": "vite",
@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prebuild": "node scripts/verify-walt.mjs"
   },
   "dependencies": {
     "onnxruntime-web": "^1.26.0",
