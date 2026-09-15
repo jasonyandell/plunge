@@ -21,6 +21,11 @@ trump and leads. Four passes throw the hand in. First team to seven marks wins.
   best sampled make estimate is at least 75%, otherwise passes, and passes over
   partner. This is a simple initial policy over uncalibrated model estimates.
   The winning trump is remembered; it is not searched again after bidding.
+  On the phone, two independent workers share the declaration queue (one when
+  the browser reports only one processor). Each runs the same Rust player.
+  Only complete surveys are ranked, with the same samples and seeded ties.
+  The entire pool stops on cancellation; a crashed job can retry once inside
+  the original time budget. Ordinary play still uses one worker.
 - **The table** saves games and original move scores on the device. After a hand,
   inspect a move, ask Walt to look closer with 160 worlds, or copy a portable
   observation link for the Mac gym. Leaving a position cancels its worker.
@@ -57,6 +62,12 @@ and host imports. The source repository's `walt/walt-player/README.md` documents
 budgets, protocol, tests and the native table launcher. The Mac's original-score
 and recheck paths support every straight contract; its older full counterfactual
 gym comparison is currently scoped to bid 30.
+
+With the development server running, `/scripts/auction-pool.html` compares one
+through four real WASM workers on three fixed hands. It checks exact survey
+agreement, wall deadlines, cancellation and subsequent play, and displays raw
+JSON receipts. It reads no saved games. This development page is not part of
+the production app; use it on the target device when tuning concurrency.
 
 ## License
 

@@ -1,5 +1,6 @@
 import type { NativeDecision, NativeRequest } from '../native';
 import type { AuctionCall, AuctionSurvey } from '../auction';
+import { runAuctionPool } from './auction-pool';
 
 export interface PlayerCall { request: NativeRequest; worlds: number; partner: boolean; budget_ms?: number }
 
@@ -10,7 +11,7 @@ export function runPlayer(call: PlayerCall, signal?: AbortSignal): Promise<Nativ
 }
 
 export function runAuction(call: AuctionCall, signal?: AbortSignal): Promise<AuctionSurvey> {
-  return runInWorker<AuctionSurvey>(() => new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }), call, signal);
+  return runAuctionPool(() => new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }), call, signal);
 }
 
 export function runInWorker<T extends { interruption?: string } = NativeDecision>(create: () => Worker, call: PlayerCall | AuctionCall, signal?: AbortSignal): Promise<T> {
@@ -32,13 +33,14 @@ export function runInWorker<T extends { interruption?: string } = NativeDecision
     const timer = setTimeout(() => interrupted('The host stopped the calculation; the last completed decision was retained.'), (call.budget_ms ?? 14000) + 4000);
     signal?.addEventListener('abort', abort, { once: true });
     worker.onmessage = ({ data }: MessageEvent) => {
-      const message = data as { checkpoint?: T; result?: T & { error?: string }; error?: string };
+      const message = data as { id: number; checkpoint?: T; result?: T & { error?: string }; error?: string };
+      if (message.id !== 0) return;
       if (message.checkpoint) saved = message.checkpoint;
       if (message.result?.error) finish(undefined, new Error(message.result.error));
       else if (message.result) finish(message.result);
       else if (message.error) interrupted(message.error);
     };
     worker.onerror = (event) => { event.preventDefault(); interrupted(event.message); };
-    worker.postMessage(call);
+    worker.postMessage({ id: 0, call });
   });
 }

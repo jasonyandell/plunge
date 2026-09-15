@@ -11,6 +11,7 @@ export interface AuctionSurvey extends AuctionRequest {
   schema: 'walt-auction-v1'; decl: number; eligible: boolean;
   prices: [number,string,string][]; worlds: number; route: string; elapsed_us: number;
   interruption?: string;
+  execution?: { kind: 'worker-pool'; workers: number; retries: number; completed_rounds: number[] };
 }
 export interface AuctionDecision { key: string; action: Action; survey: AuctionSurvey | null }
 export const AUCTION_BUDGET_MS=4500;

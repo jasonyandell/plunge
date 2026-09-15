@@ -1,9 +1,9 @@
 {
   "player": "walt-table-v2",
   "source_repository": "jasonyandell/texas-42",
-  "source_commit": "83b712f06b28d6bb76d62d4b9b9c63de14073ab1",
-  "source_sha256": "0010c34e1dbe55671de8c8a46ddc2f6da8992da1eeef615bee1f0077686fbae2",
-  "wasm_sha256": "95d2a4d948da4c5303f965c826ef6c1d84bef11a946be98f14a2487f8ce24cdf",
+  "source_commit": "7d5f3000c50d5fc5bf0668ace247756ff2b6a725",
+  "source_sha256": "9764850154d4c6383f4cba5adea131d796c6b70bc32148a7f8ded0810e55d5a0",
+  "wasm_sha256": "dda61d168d369fe4a237cd923100b3e003a4c9fd44ba65783a04f2fb119df464",
   "rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
   "worlds": 40,
   "inner_worlds": 8,

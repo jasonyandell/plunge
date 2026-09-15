@@ -17,7 +17,7 @@ class FakeWorker {
   onmessage: ((event:MessageEvent)=>void) | null = null;
   onerror: ((event:ErrorEvent)=>void) | null = null;
   postMessage=vi.fn();terminate=vi.fn();
-  send(value:unknown) { this.onmessage?.({data:value} as MessageEvent); }
+  send(value:unknown) { this.onmessage?.({data:{id:0,...value as object}} as MessageEvent); }
 }
 afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();});
 describe('phone player lifetime',()=>{
@@ -25,7 +25,7 @@ describe('phone player lifetime',()=>{
     const worker=new FakeWorker();const p=runInWorker(()=>worker as unknown as Worker,{request:position.request,worlds:40,partner:true});
     worker.send({checkpoint:response});worker.send({result:{...response,elapsed_us:8}});
     expect((await p).elapsed_us).toBe(8);expect(worker.terminate).toHaveBeenCalledOnce();
-    expect(Object.keys(worker.postMessage.mock.calls[0]![0].request).sort()).toEqual(['bid','bidder','decl','hand','plays','seat','seed']);
+    expect(Object.keys(worker.postMessage.mock.calls[0]![0].call.request).sort()).toEqual(['bid','bidder','decl','hand','plays','seat','seed']);
   });
   it('a hard timeout retains the last complete checkpoint, including its original scores',async()=>{
     vi.useFakeTimers();const worker=new FakeWorker();
