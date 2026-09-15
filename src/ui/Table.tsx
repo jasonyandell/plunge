@@ -23,8 +23,18 @@ import { NativeReview } from './NativeReview';
 import './table.css';
 import './questions.css';
 import { saveQuestion } from '../questions/client';
+import { MoveQuestionPrompt } from './MoveQuestionPrompt';
 
 const POS: readonly string[] = ['bottom', 'left', 'top', 'right'];
+
+interface QuestionSelection {
+  game: GameState;
+  ply: number;
+  sessionId: string;
+  receiptId: string | null;
+  target: HTMLElement;
+  label: string;
+}
 
 interface TableProps {
   app: AppState;
@@ -35,6 +45,9 @@ interface TableProps {
 }
 
 export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps) {
+  const [question, setQuestion] = useState<QuestionSelection | null>(null);
+  const g = app.scenarioGame ?? app.game;
+  useEffect(() => setQuestion(null), [app.sessionId, g?.handNumber, app.scenarioGame]);
   const [saved, setSaved] = useState<{ id: string; text: string } | null>(null);
   useEffect(() => {
     if (!saved) return;
@@ -55,12 +68,20 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
   useEffect(() => {
     if (scenario) setReview(true);
   }, [scenario]);
-  const g = app.scenarioGame ?? app.game;
   if (!g) return null;
 
-  const bookmark = (ply: number): void => {
-    const frozen = g;
-    void saveQuestion(frozen, ply, app.sessionId, app.nativeReceipts[`${g.handNumber}:${ply}`] ?? null)
+  const selectQuestion = (ply: number, target: HTMLElement): void => {
+    if (question?.target === target) { setQuestion(null); return; }
+    const play = [...g.tricks.flatMap(t => t.plays), ...g.currentTrick][ply];
+    if (!play) return;
+    // Keep the original evidence even if the trick clears before confirmation.
+    setQuestion({ game: g, ply, sessionId: app.sessionId, target,
+      receiptId: app.nativeReceipts[`${g.handNumber}:${ply}`] ?? null,
+      label: `${play.seat === HUMAN_SEAT ? 'You' : SEAT_NAMES[play.seat]} · ${play.domino.split('').join('–')}` });
+  };
+  const bookmark = (selected: QuestionSelection): void => {
+    setQuestion(null);
+    void saveQuestion(selected.game, selected.ply, selected.sessionId, selected.receiptId)
       .then(item => setSaved({ id: item.question.id, text: 'Saved for later' }))
       .catch(() => setSaved({ id: '', text: 'Could not save. Please try again.' }));
   };
@@ -85,7 +106,7 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
           plays={trickPlays}
           open={histOpen}
           onToggle={() => setHistOpen((o) => !o)}
-          onQuestion={scenario ? undefined : bookmark}
+          onQuestion={scenario ? undefined : selectQuestion}
         />
       )}
       <div class="felt">
@@ -98,7 +119,7 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
             winner={trickWinner}
             gathering={showingLast}
             thinking={thinking}
-            onQuestion={scenario ? undefined : (i) => bookmark((showingLast ? g.tricks.length - 1 : g.tricks.length) * 4 + i)}
+            onQuestion={scenario ? undefined : (i, target) => selectQuestion((showingLast ? g.tricks.length - 1 : g.tricks.length) * 4 + i, target)}
           />
           <OpponentSide g={g} seat={3} thinking={thinking} />
         </div>
@@ -133,6 +154,8 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
       </div>
 
       {saved && <div class="question-toast" role="status"><span>{saved.text}</span>{saved.id && <button class="text-btn" onClick={() => { onQuestion(saved.id); setSaved(null); }}>Add note</button>}</div>}
+      {question && <MoveQuestionPrompt key={`${question.sessionId}:${question.game.handNumber}:${question.ply}`}
+        target={question.target} label={question.label} onSave={() => bookmark(question)} onClose={() => setQuestion(null)} />}
       {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet g={g} dispatch={dispatch} />}
       {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet g={g} dispatch={dispatch} />}
       {g.phase === 'hand-over' && !review && (
@@ -222,7 +245,7 @@ function InfoBar({
   plays: readonly PlayRecord[];
   open: boolean;
   onToggle: () => void;
-  onQuestion?: ((ply: number) => void) | undefined;
+  onQuestion?: ((ply: number, target: HTMLElement) => void) | undefined;
 }) {
   const trump = trumpChip(g);
   const led = ledChip(g, plays);
@@ -253,7 +276,7 @@ function InfoBar({
           </button>
         )}
       </div>
-      {open && n > 0 && <>{onQuestion && <p class="question-history-hint">Tap a played domino to save a question.</p>}<TrickHistory g={g} actionLabel="save a question" onTapPlay={onQuestion ? (t,p) => onQuestion(t*4+p) : undefined} /></>}
+      {open && n > 0 && <>{onQuestion && <p class="question-history-hint">Curious about a move? Tap its domino.</p>}<TrickHistory g={g} actionLabel="Why this move?" onTapPlay={onQuestion ? (t, p, target) => onQuestion(t * 4 + p, target) : undefined} /></>}
     </div>
   );
 }
@@ -334,7 +357,7 @@ function TrickArea({
   winner: Seat | null;
   gathering: boolean;
   thinking: Seat | null;
-  onQuestion?: ((play: number) => void) | undefined;
+  onQuestion?: ((play: number, target: HTMLElement) => void) | undefined;
 }) {
   const leader = plays[0]?.seat ?? null;
   const partnerCallsTrump =
@@ -375,8 +398,11 @@ function TrickArea({
             .filter(Boolean)
             .join(' ')}
         >
-          <Domino id={p.domino} orientation="h" className="trick-dom" />
-          {onQuestion && !gathering && <button class="play-question" type="button" aria-label={`Save a question about ${p.seat === HUMAN_SEAT ? 'your' : SEAT_NAMES[p.seat] + '’s'} ${p.domino.split('').join('–')}`} onClick={() => onQuestion(i)}>?</button>}
+          {onQuestion ? <button class="played-domino" type="button" disabled={gathering}
+            aria-label={`About ${p.seat === HUMAN_SEAT ? 'your' : SEAT_NAMES[p.seat] + '’s'} ${p.domino.split('').join('–')}`}
+            onClick={event => onQuestion(i, event.currentTarget)}>
+            <Domino id={p.domino} orientation="h" className="trick-dom" />
+          </button> : <Domino id={p.domino} orientation="h" className="trick-dom" />}
           {p.seat === leader && (
             <span class="led-tag">{p.seat === HUMAN_SEAT ? 'You' : SEAT_NAMES[p.seat]} led</span>
           )}

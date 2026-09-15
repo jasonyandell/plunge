@@ -70,7 +70,7 @@ export function Questions({ initialId, onClose, dispatch }: {
     </header>
     <div class="questions-body">
       {!id ? <>
-        <p class="question-intro">Something catch your eye? Tap <strong>?</strong> beside a played domino. We’ll keep the moment here for later.</p>
+        <p class="question-intro">Something catch your eye? Tap a played domino, then <strong>Why this move?</strong> We’ll keep the moment here for later.</p>
         <p class="setting-hint">Saved on this device and sent anonymously for review. No account needed.</p>
         {loading && !items.length && <p role="status">Opening your notebook…</p>}
         {!loading && !items.length && <p class="questions-empty">No questions yet. There’s a whole table of possibilities.</p>}

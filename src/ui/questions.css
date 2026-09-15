@@ -32,11 +32,17 @@
 .questions-dialog .big-btn:disabled { opacity: .55; }
 .questions-dialog .native-held { justify-content: flex-start; }
 .questions-dialog textarea { min-height: 100px; }
-.play-question { position: absolute; width: 40px; height: 40px; right: -30px; top: 2px; z-index: 3; border: 1px solid #c1a773; border-radius: 50%; background: #3e2b1ce8; color: #fae8b9; font: bold 19px Georgia,serif; box-shadow: 0 2px 5px #0005; }
-.play-question:active { background: #806334; }
+.played-domino { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 0; border: 0; border-radius: 6px; background: none; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.played-domino:disabled { cursor: default; }
+.played-domino:focus-visible { outline: 2px solid #f2d794; outline-offset: 3px; }
+.move-question-prompt { position: fixed; z-index: 45; box-sizing: border-box; width: 180px; max-width: calc(100vw - 16px); padding: 8px; border: 1px solid #c6ae84; border-radius: 13px; background: #fff8e9; color: #4c3a24; box-shadow: 0 5px 24px #0005; }
+.move-question-context { display: block; padding: 1px 6px 5px; font-size: 11px; color: #796548; }
+.move-question-prompt button { display: flex; flex-direction: column; gap: 4px; width: 100%; min-height: 48px; padding: 8px 6px; border: 0; border-radius: 7px; background: #f2e6d0; color: inherit; text-align: left; cursor: pointer; }
+.move-question-prompt button strong { font-size: 15px; font-weight: 600; }
+.move-question-prompt button span { font-size: 12px; color: #796548; }
+.move-question-prompt button:active { background: #e6d4b6; }
+.move-question-prompt button:focus-visible { outline: 2px solid #8b692f; outline-offset: 1px; }
 .question-toast { position: fixed; bottom: max(190px, 24dvh); left: 50%; transform: translateX(-50%); z-index: 25; display: flex; align-items: center; gap: 8px; border: 1px solid #ceb982; border-radius: 14px; padding: 8px 14px; background: #fff5db; color: #4c3a24; box-shadow: 0 5px 25px #0006; max-width: 94vw; width: max-content; font-size: 14px; }
 .question-toast button { color: #644723; min-height: 40px; padding: 0 4px; }
 .question-history-hint { margin: 4px 16px; font-size: 12px; color: #f0d7a7; }
-@media(max-width:380px) { .questions-body { padding: 12px 14px; } .questions-footer { padding: 10px 12px; gap: 6px; } .questions-footer .text-btn { font-size: 12px; } .play-question { right: -23px; width: 32px; height: 34px; } }
-/* Side-seat tiles sit close to the hidden racks: keep their question below. */
-.slot-left .play-question, .slot-right .play-question { top: calc(100% + 4px); right: auto; left: 50%; transform: translateX(-50%); }
+@media(max-width:380px) { .questions-body { padding: 12px 14px; } .questions-footer { padding: 10px 12px; gap: 6px; } .questions-footer .text-btn { font-size: 12px; } }

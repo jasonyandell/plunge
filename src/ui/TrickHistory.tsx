@@ -10,7 +10,7 @@ export function TrickHistory({
 }: {
   g: GameState;
   actionLabel?: string;
-  onTapPlay?: ((trick: number, play: number) => void) | undefined;
+  onTapPlay?: ((trick: number, play: number, target: HTMLButtonElement) => void) | undefined;
   selected?: { trick: number; play: number } | null | undefined;
 }) {
   return (
@@ -46,7 +46,7 @@ export function TrickHistory({
                     type="button"
                     class={`${cls} hist-tap`}
                     title={`${title} — ${actionLabel}`}
-                    onClick={() => onTapPlay(i, j)}
+                    onClick={event => onTapPlay(i, j, event.currentTarget)}
                   >
                     {inner}
                   </button>
@@ -64,4 +64,3 @@ export function TrickHistory({
     </div>
   );
 }
-

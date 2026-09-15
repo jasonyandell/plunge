@@ -1,7 +1,10 @@
 # The question notebook
 
-Players tap **?** beside a played domino to save that play immediately. The trick
-history also accepts taps, so a question can be saved after a trick clears.
+Players tap a played domino to reveal **Why this move?**, then tap that prompt to
+save the play for later. The first tap alone does not save anything; tapping away
+or pressing Escape dismisses the prompt. It keeps the selected play even if the
+table advances. The trick history uses the same interaction, so a question can
+be saved after a trick clears.
 **Add note** opens the saved question. **Your questions** on the home screen lists
 all questions from that browser. Opening the notebook pauses computer play; closing
 it resumes. After a hand, the existing examiner also has **Save this question**.

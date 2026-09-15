@@ -22,7 +22,7 @@ seat **You**, and identifies Gran as your partner. The opening domino is marked
 with who led it. A named thinking indicator and gently animated pips follow
 actual computer decisions; the text remains visible with reduced motion enabled.
 
-Tap **?** beside a played domino to save a question mid-hand. It saves on the
+Tap a played domino, then **Why this move?** to save a question mid-hand. It saves on the
 phone first and uploads anonymously when connected. **Your questions** on the
 home screen holds notes, short links, and later explanations. Original evidence
 stays fixed; the finished hand is attached afterward. No login required.
