@@ -32,7 +32,8 @@ wasm=source/'walt/target/wasm32-unknown-unknown/release/walt_player.wasm'
 manifest=dict(player='walt-table-v2',source_repository='jasonyandell/texas-42',
     source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True).strip(),
     source_sha256=digest.hexdigest(),wasm_sha256=hashlib.sha256(wasm.read_bytes()).hexdigest(),
-    rustc=subprocess.check_output(['rustc','--version'],text=True).strip(),worlds=40,inner_worlds=8,budget_ms=14000,partner_ms=500)
+        rustc=subprocess.check_output(['rustc','--version'],text=True).strip(),worlds=40,inner_worlds=8,budget_ms=14000,partner_ms=500,
+        auction_worlds=160,auction_budget_ms=20000,opening_worlds=160,opening_budget_ms=20000,opening_partner=False)
 destination.mkdir(parents=True,exist_ok=True)
 shutil.copyfile(wasm,destination/'walt-player.wasm')
 (destination/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')

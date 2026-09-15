@@ -31,19 +31,19 @@ button.onclick = async () => {
     }
     const auction = { hand: fixtures[0]!, seat: 0, bid: 30, seed: 420914 };
     // Production wall budget and a deadline which cannot fit a complete round.
-    for (const budget_ms of [4500,500]) {
-      const result = checkedSurvey(auction, await runAuctionPool(create, { auction, budget_ms }, undefined, 2));
+    for (const budget_ms of [20000,500]) {
+      const result = checkedSurvey(auction, await runAuctionPool(create, { auction, worlds: 160, budget_ms }, undefined, 2));
       record({ check: 'wall-budget', budget_ms, ...result });
     }
     const controller = new AbortController();
-    const pending = runAuctionPool(create, { auction, budget_ms: 14000 }, controller.signal, 4);
+    const pending = runAuctionPool(create, { auction, worlds: 160, budget_ms: 20000 }, controller.signal, 4);
     const timer = setTimeout(() => controller.abort(), 150);
     try { await pending; throw new Error('Cancellation returned a move'); }
     catch (e) { if (!(e instanceof DOMException && e.name === 'AbortError')) throw e; }
     finally { clearTimeout(timer); }
     // A new request must work after cancellation; ordinary play uses this same
     // reusable worker implementation, but still owns only one worker.
-    const play = await runPlayer({ request: { ...auction, decl: 5, bidder: 0, plays: [] }, worlds: 40, partner: true });
+    const play = await runPlayer({ request: { ...auction, decl: 5, bidder: 0, plays: [] }, worlds: 160, partner: false, budget_ms: 20000 });
     if (!play.legal.includes(play.choice)) throw new Error('Invalid post-cancellation move');
     record({ check: 'post-cancellation-play', result: play });
     status.textContent = 'Passed: exact prices/ties across all pool sizes; bounded surveys; cancellation and subsequent play.';

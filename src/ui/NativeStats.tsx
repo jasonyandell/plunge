@@ -39,7 +39,7 @@ export function NativeStats({ g, sel, position, receipt, loading }: {
     setBusy(true); setError('');
     controller.current = new AbortController();
     try {
-      const value = await api<NativeEstimate>('estimates', { request, worlds }, 18000, controller.current.signal);
+      const value = await api<NativeEstimate>('estimates', { request, worlds }, worlds === 160 ? 24000 : 18000, controller.current.signal);
       if (value.schema !== 'plunge-estimate-v1' || requestKey(value.identity.request) !== requestKey(request)
         || value.identity.player.n !== worlds) throw new Error('The estimate does not match this position.');
       if (alive.current) setEstimate(value);
@@ -62,12 +62,13 @@ export function NativeStats({ g, sel, position, receipt, loading }: {
           : 'No original Walt estimate for this play. Ask Walt to compare the options from this player’s view.'}</p>}
       {receipt?.response.interruption && <p class="setting-hint">{receipt.response.interruption}</p>}
       {receipt?.response.review_result?.status === 'changed' && <p class="setting-hint">These are L1’s scores before the partner check changed the choice.</p>}
+      {receipt?.response.n === 160 && <p class="setting-hint">This opening requested 160 worlds; the scores show the largest comparison that finished.</p>}
       {original && <p class="setting-hint">The recorded sample, from this player’s own hand and public history. Small gaps can be sampling noise.</p>}
       <div class="native-inspect-controls">
         {!original && <button class="big-btn secondary" disabled={busy || loading} onClick={() => void inspect(40)}>Ask Walt · 40 worlds</button>}
         <button class="big-btn secondary" disabled={busy || loading} onClick={() => void inspect(160)}>Look closer · 160 worlds</button>
       </div>
-      {busy && <p role="status">Walt is comparing the options… usually a few seconds, up to 14 seconds.</p>}
+      {busy && <p role="status">Walt is comparing the options… usually a few seconds, up to 20 seconds.</p>}
       {estimate && <div class="native-fresh">
         <h4>Later L1 recheck · requested {estimate.identity.player.n} worlds</h4>
         {fresh ? <Scores stats={fresh} played={played} /> : <p>No complete comparison finished within the time limit. You can retry.</p>}

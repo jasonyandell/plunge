@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.hoisted(() => vi.stubEnv('VITE_NATIVE_TABLE', '1'));
 import { writeFileSync } from 'node:fs';
 import { applyAction, legalActions, newDealtGame, newGame, TOURNAMENT_CONFIG, type Declaration, type GameState, type Seat } from '../src/engine';
-import { checkedAction, nativeMove, requestOf, type NativeReceipt } from '../src/ai/native';
+import { checkedAction, livePlayerCall, nativeMove, requestOf, type NativeReceipt } from '../src/ai/native';
 import { tileOfId } from '../src/ai/walt/requests';
 import { initialApp, practice30, reducer, toSaved } from '../src/ui/store';
 import { encodeHand, decodeHand } from '../src/ui/share';
@@ -22,6 +22,15 @@ function receipt(g: GameState, session = 'test'): NativeReceipt {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('native table boundary', () => {
+  it('deepens only the bidder opening and leaves later partner play at the normal profile', () => {
+    const g=opening(), openingRequest=requestOf(g,g.turn!,'test');
+    expect(openingRequest.seat).toBe(openingRequest.bidder);expect(openingRequest.plays).toEqual([]);
+    expect(livePlayerCall(openingRequest,'native-partner')).toEqual({request:openingRequest,worlds:160,partner:false,budget_ms:20000});
+    expect(livePlayerCall({...openingRequest,seat:(openingRequest.seat+1)%4},'native-partner')).toEqual({
+      request:{...openingRequest,seat:(openingRequest.seat+1)%4},worlds:40,partner:true});
+    expect(livePlayerCall({...openingRequest,plays:[openingRequest.seat,openingRequest.hand[0]!]},'native-l1')).toMatchObject({worlds:40,partner:false});
+  });
+
   it('sends only own hand and public history, independent of hidden holdings', async () => {
     const g = opening(); const seat = g.turn!;
     const others = [0,1,2,3].filter((s) => s !== seat);

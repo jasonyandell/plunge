@@ -123,7 +123,9 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag }: {
         <h3>{SEAT_NAMES[current.seat]} played {current.domino.split('').join('–')} · play {ply! + 1}</h3>
         {matchedReceipt ? <div class="native-receipt">
           {matchedReceipt.storage === 'session' && <p>Device storage is unavailable. These scores last for this session; copy a link to keep them.</p>}
-          <p>Original decision: {matchedReceipt.identity.player.name === 'l1-default' ? 'L1' : 'L1 + partner check'} · {(matchedReceipt.response.elapsed_us / 1e6).toFixed(2)} s</p>
+          <p>Original decision: {matchedReceipt.response.n === 160
+            ? 'Deeper L1 opening · requested 160 worlds'
+            : matchedReceipt.identity.player.name === 'l1-default' ? 'L1' : 'L1 + partner check'} · {(matchedReceipt.response.elapsed_us / 1e6).toFixed(2)} s</p>
           <p>{review?.status === 'changed' ? `The check changed ${pips(review.baseline)} to ${pips(review.choice)}.`
             : review?.status === 'retained' ? 'The check kept L1’s move.'
             : review?.status === 'inactive' ? 'The partnership check did not trigger.'

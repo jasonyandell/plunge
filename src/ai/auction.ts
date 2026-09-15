@@ -14,7 +14,8 @@ export interface AuctionSurvey extends AuctionRequest {
   execution?: { kind: 'worker-pool'; workers: number; retries: number; completed_rounds: number[] };
 }
 export interface AuctionDecision { key: string; action: Action; survey: AuctionSurvey | null }
-export const AUCTION_BUDGET_MS=4500;
+export const AUCTION_WORLDS=160;
+export const AUCTION_BUDGET_MS=20000;
 
 export function auctionKey(g: GameState, gameId: string): string {
   return JSON.stringify([gameId,g.handNumber,g.phase,g.turn,g.bids,g.contract,g.hands[g.turn ?? 0]]);
@@ -34,7 +35,7 @@ function sameRequest(a: AuctionRequest,b: AuctionRequest): boolean {
 }
 export function checkedSurvey(req: AuctionRequest,s: AuctionSurvey): AuctionSurvey {
   if (s.schema!=='walt-auction-v1' || !sameRequest(req,s) || !waltDeclarationOf(s.decl)
-    || typeof s.eligible!=='boolean' || ![0,4,12,40].includes(s.worlds)) throw new Error('Walt returned a mismatched auction.');
+    || typeof s.eligible!=='boolean' || ![0,4,12,40,160].includes(s.worlds)) throw new Error('Walt returned a mismatched auction.');
   if (s.worlds===0) {
     if (s.eligible || s.prices.length || s.route!=='unpriced-pass') throw new Error('Invalid auction fallback.');
   } else {
@@ -58,8 +59,8 @@ export async function auctionMove(g: GameState, seat: Seat, gameId: string, prev
   const request=auctionRequest(g,gameId);
   const survey=previous && sameRequest(request,previous) ? checkedSurvey(request,previous)
     : checkedSurvey(request,await (NATIVE_TABLE
-      ? api<AuctionSurvey>('auction',{auction:request,budget_ms:AUCTION_BUDGET_MS},8500,signal)
-      : runAuction({auction:request,budget_ms:AUCTION_BUDGET_MS},signal)));
+      ? api<AuctionSurvey>('auction',{auction:request,worlds:AUCTION_WORLDS,budget_ms:AUCTION_BUDGET_MS},24000,signal)
+      : runAuction({auction:request,worlds:AUCTION_WORLDS,budget_ms:AUCTION_BUDGET_MS},signal)));
   let action: Action | undefined;
   if (g.phase==='declaring') {
     const decl=waltDeclarationOf(survey.decl)!;

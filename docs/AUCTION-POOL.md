@@ -11,8 +11,8 @@ Rust also merges all nine receipts, checking identity and sample size, rejecting
 missing/duplicate declarations and applying the existing exact seeded tie.
 Worker order cannot change the answer at a fixed completed sample size.
 
-Each auction retains its 4.5-second wall budget, including worker startup.
-It completes all nine declarations at 4 worlds before starting 12, then 40.
+Each auction has one 20-second wall budget, including worker startup.
+It completes all nine declarations at 4 worlds before starting 12, then 40 and 160.
 Only a completed Rust merge replaces the saved survey. Timeout retains that
 survey; leaving the position cancels every worker and discards the decision.
 Infrastructure failures get one retry per job inside the same deadline. All
@@ -40,8 +40,8 @@ the comparison was then bounded at 12 worlds for all three hands.
 
 These are small Mac timing checks, not Pixel measurements or strength evidence.
 The conservative phone default remains two workers pending on-device timing,
-memory and sustained-use observations. The same harness checks a production
-4.5-second budget, a short deadline, cancellation and subsequent ordinary play.
+memory and sustained-use observations. The same harness checks the bounded
+production budget, a short deadline, cancellation and subsequent ordinary play.
 Its fixtures and raw JSON output are at `/scripts/auction-pool.html` under the
 development server. That page does not read saved games or ship in the app.
 

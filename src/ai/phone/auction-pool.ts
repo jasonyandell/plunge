@@ -17,12 +17,12 @@ export function runAuctionPool(create: () => Worker, call: AuctionCall, signal?:
   size = auctionPoolSize()): Promise<AuctionSurvey> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) { reject(new DOMException('Stopped', 'AbortError')); return; }
-    if (!Number.isInteger(size) || size < 1 || size > 4 || ![4, 12, 40].includes(call.worlds ?? 40)
-      || !Number.isInteger(call.budget_ms) || call.budget_ms < 100 || call.budget_ms > 14000) {
+    if (!Number.isInteger(size) || size < 1 || size > 4 || ![4, 12, 40, 160].includes(call.worlds ?? 160)
+      || !Number.isInteger(call.budget_ms) || call.budget_ms < 100 || call.budget_ms > 20000) {
       reject(new Error('Invalid auction pool budget.')); return;
     }
     const start = performance.now(), end = start + call.budget_ms;
-    const slots: Slot[] = [], rounds = [4, 12, 40].filter(n => n <= (call.worlds ?? 40));
+    const slots: Slot[] = [], rounds = [4, 12, 40, 160].filter(n => n <= (call.worlds ?? 160));
     let settled = false, sequence = 0, round = -1, retries = 0;
     let queue: number[] = [], receipts: AuctionPrice[] = [], saved: AuctionSurvey | undefined;
     const completed: number[] = [];
@@ -45,7 +45,7 @@ export function runAuctionPool(create: () => Worker, call: AuctionCall, signal?:
       if (performance.now() >= end) { timedOut(); return; }
       if (work.kind === 'price') {
         // Reserve a little time for the complete-survey merge. Jobs share one
-        // wall deadline, rather than each getting a fresh 4.5 seconds.
+        // wall deadline, rather than each getting a fresh budget.
         work.call.budget_ms = Math.floor(end - performance.now() - 80);
         if (work.call.budget_ms < 5) { timedOut(); return; }
       }

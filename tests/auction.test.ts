@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyAction, legalActions, newGame, TOURNAMENT_CONFIG, type Action } from '../src/engine';
-import { auctionKey, auctionMove, auctionRequest, checkedSurvey, type AuctionSurvey } from '../src/ai/auction';
+import { AUCTION_BUDGET_MS, AUCTION_WORLDS, auctionKey, auctionMove, auctionRequest, checkedSurvey, type AuctionSurvey } from '../src/ai/auction';
 import { requestOf } from '../src/ai/native';
 import { initialApp, reducer, toSaved } from '../src/ui/store';
 import { encodeHand, decodeHand } from '../src/ui/share';
@@ -28,6 +28,7 @@ describe('regular Walt auction',()=>{
     expect(Object.keys(auctionRequest(g,'test')).sort()).toEqual(['bid','hand','seat','seed']);
     const decision=await auctionMove(g,seat,'test');
     expect(decision.action).toEqual({type:'bid',bid:{kind:'points',value:30}});
+    expect(runAuction).toHaveBeenCalledWith({auction:auctionRequest(g,'test'),worlds:AUCTION_WORLDS,budget_ms:AUCTION_BUDGET_MS},undefined);
     let won=applyAction(g,decision.action);
     for(let i=0;i<3;i++) won=applyAction(won,{type:'bid',bid:{kind:'pass'}});
     const declared=await auctionMove(won,seat,'test',reply);
@@ -48,6 +49,7 @@ describe('regular Walt auction',()=>{
     expect(()=>checkedSurvey(req,{...r,prices:r.prices.slice(1)})).toThrow(/Incomplete/);
     expect(()=>checkedSurvey(req,{...r,bid:31})).toThrow(/mismatched/);
     expect(()=>checkedSurvey(req,{...r,eligible:false})).toThrow(/threshold/);
+    expect(checkedSurvey(req,{...r,worlds:160})).toMatchObject({worlds:160});
     const app={...reducer(initialApp(),{type:'new-game',seed:'auction-test',sessionId:'test'}),game:g};
     const decision={key:auctionKey(g,'test'),action:{type:'bid',bid:{kind:'points',value:30}} as Action,survey:r};
     const next=reducer(app,{type:'auction-ai',decision});

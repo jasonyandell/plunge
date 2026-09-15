@@ -22,7 +22,8 @@ export interface NativeEvaluation {
 }
 export interface NativeDecision {
   choice: number; legal: number[]; route: string; leader: number; points: number[]; elapsed_us: number;
-  interruption?: string; player_version?: string; mode?: string; phases?: { name: string; status: string }[];
+  interruption?: string; player_version?: string; mode?: string; review?: string; n?: number; budget_ms?: number;
+  phases?: { name: string; status: string; worlds?: number }[];
   evaluation?: NativeEvaluation | null; fallback_evaluation?: NativeEvaluation | null;
   review_result?: { status: string; baseline: number; choice: number; samples?: number; support?: number;
     coverage?: string; values?: [number, number][]; paired?: number[][] } | null;
@@ -67,7 +68,8 @@ export async function api<T>(path: string, body?: unknown, milliseconds = 18000,
     if (path.startsWith('receipts/') && body === undefined) return await getReceipt(path.slice(9)) as T;
     if (path === 'estimates') {
       const { request, worlds } = body as { request: NativeRequest; worlds: 40 | 160 };
-      const response = await runPlayer({ request, worlds, partner: false }, signal);
+      const response = await runPlayer({ request, worlds, partner: false,
+        ...(worlds === 160 ? { budget_ms: 20000 } : {}) }, signal);
       return { schema: 'plunge-estimate-v1', id: await digest({ request, worlds, response }),
         created: new Date().toISOString(), identity: { request, player: { n: worlds } }, response } as T;
     }
@@ -106,14 +108,22 @@ export function requestTile(tile: number): string {
   return `${hi}${tile - hi * (hi + 1) / 2}`;
 }
 
+export function livePlayerCall(request: NativeRequest, difficulty: NativeDifficulty) {
+  return request.seat === request.bidder && request.plays.length === 0
+    ? { request, worlds: 160, partner: false, budget_ms: 20000 }
+    : { request, worlds: 40, partner: difficulty === 'native-partner' };
+}
+
 export async function nativeMove(g: GameState, seat: Seat, difficulty: NativeDifficulty, gameId: string, signal?: AbortSignal): Promise<NativeReceipt> {
   const request = requestOf(g, seat, gameId);
   const player = difficulty === 'native-l1' ? 'l1-default' : 'l1-partner-rollout';
+  const call = livePlayerCall(request, difficulty);
+  const deeperOpening = call.worlds === 160;
   let receipt: NativeReceipt;
   if (NATIVE_TABLE) {
-    receipt = await api<NativeReceipt>('decide', { request, player, game_id: gameId, hand_number: g.handNumber }, 18000, signal);
+    receipt = await api<NativeReceipt>('decide', { request, player, game_id: gameId, hand_number: g.handNumber }, deeperOpening ? 24000 : 18000, signal);
   } else {
-    const response = await runPlayer({ request, worlds: 40, partner: difficulty === 'native-partner' }, signal);
+    const response = await runPlayer(call, signal);
     const identity = { request, player: { name: player }, implementation: { ...manifest, app: BUILD_ID }, game_id: gameId, hand_number: g.handNumber };
     receipt = { schema: 'plunge-decision-v1', id: await digest({ identity, response }), created: new Date().toISOString(), identity, response };
     checkedAction(g, request, receipt);

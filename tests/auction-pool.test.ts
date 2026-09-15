@@ -40,11 +40,11 @@ describe('declaration pool', () => {
   it('caps the phone default conservatively', () => {
     expect([1,2,4,8,32].map(auctionPoolSize)).toEqual([1,2,2,2,2]);
   });
-  it('queues independent jobs and waits for Rust to merge each full survey', async () => {
-    const { workers, result } = setup(12);
+  it('queues independent jobs through 160 and waits for Rust to merge each full survey', async () => {
+    const { workers, result } = setup(160);
     expect(workers).toHaveLength(2);
     workers[0]!.send({ result: fallback });
-    for (const n of [4,12]) {
+    for (const n of [4,12,40,160]) {
       const merger = completePrices(workers, n);
       const receipts = merger.job.call.receipts as { auction: unknown; worlds: number; price: number[] }[];
       expect(receipts).toHaveLength(9);
@@ -53,7 +53,7 @@ describe('declaration pool', () => {
       expect(workers.flatMap(w=>w.postMessage.mock.calls).some(([m])=>Number(m.call.worlds) > n)).toBe(false);
       merger.send({ result: { ...fallback, worlds: n, route: 'priced' } });
     }
-    expect(await result).toMatchObject({ worlds: 12, execution: { workers: 2, completed_rounds: [4,12] } });
+    expect(await result).toMatchObject({ worlds: 160, execution: { workers: 2, completed_rounds: [4,12,40,160] } });
     for (const worker of workers) expect(worker.terminate).toHaveBeenCalledOnce();
   });
   it('a deadline discards a partially priced round and releases the entire pool', async () => {

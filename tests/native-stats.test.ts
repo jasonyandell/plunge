@@ -31,6 +31,12 @@ describe('native review evidence', () => {
     expect(decisionStats({...response,phases:[{name:'baseline',status:'timeout'}]},request,legal)).toBeNull();
     expect(decisionStats({...response,route:'legal-fallback'},request,legal)).toBeNull();
   });
+  it('uses a retained ordinary comparison when a requested deeper stage stops', () => {
+    const kept={...response,n:160,evaluation:{...response.evaluation!,outer_worlds:40},
+      phases:[{name:'baseline',status:'completed',worlds:40},{name:'baseline',status:'deadline',worlds:160}]};
+    const stats=decisionStats(kept,request,legal)!;
+    expect(stats.worlds).toBe(40);expect(stats.fallback).toBe(false);
+  });
   it('does not invent estimates for forced moves, invalid fractions or incomplete options', () => {
     expect(decisionStats({...response,route:'forced',evaluation:null},request,[27])).toBeNull();
     for(const options of [[[14,'1','0']],[[14,'2','1']],[[14,'NaN','2']],[[29,'1','2']],[[14,'1','2'],[14,'1','2']]] as [number,string,string][][]) {
