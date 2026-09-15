@@ -1,5 +1,5 @@
 /* Bottom sheets (bid / declare) and overlay cards (hand-over / game-over).
-   Sheets anchor above the hand and its turn label (~160px tall) so your dominoes stay visible;
+   Sheets anchor above the hand and its turn label (~176px tall) so your dominoes stay visible;
    max-height keeps them from clipping on short phones (scroll inside). */
 
 .sheet {
@@ -7,8 +7,8 @@
   left: 50%;
   width: min(520px, calc(100% - 16px));
   transform: translateX(-50%);
-  bottom: calc(160px + env(safe-area-inset-bottom, 0px));
-  max-height: min(56vh, calc(100dvh - 210px));
+  bottom: calc(176px + env(safe-area-inset-bottom, 0px));
+  max-height: min(56vh, calc(100dvh - 226px));
   overflow-y: auto;
   background: var(--cream);
   color: var(--brown-9);

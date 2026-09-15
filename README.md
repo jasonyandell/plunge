@@ -17,6 +17,11 @@ decision details expand separately, and **Save or share this move** holds notes,
 portable links, and the native Mac gym tools. Original scores remain separate
 from later estimates.
 
+The table keeps **Trump** and **Suit led** in prominent panels, labels your own
+seat **You**, and identifies Gran as your partner. The opening domino is marked
+with who led it. A named thinking indicator and gently animated pips follow
+actual computer decisions; the text remains visible with reduced motion enabled.
+
 ## What's inside
 
 - **Walt** is one shared Rust player, native on the Mac and WebAssembly on the
