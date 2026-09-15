@@ -112,17 +112,19 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag }: {
   const current = sel && g.tricks[sel.trick]?.plays[sel.play];
   const review = matchedReceipt?.response.review_result;
 
-  return <div class="overlay"><div class="card review-card native-review" role="dialog" aria-label="Research hand review">
+  return <div class="overlay"><div class="card review-card native-review" role="dialog" aria-label="Hand review">
     <h2 class="card-title">How it went</h2>
     <p class="card-detail">{g.declarer !== null && `${SEAT_NAMES[g.declarer]} bid `}{g.contract && contractLabel(g.contract)}
       {g.declaration && ` in ${declLabel(g.declaration)}`} · Us {g.points[0]} · Them {g.points[1]}.</p>
-    <p class="card-detail">Tap any play for Walt’s stats, a closer look, or the gym.</p>
+    <p class="review-hint">Tap a domino to see the player’s hand and what Walt thinks.</p>
     <div class="review-scroll">
       <div class="native-history"><TrickHistory g={g} onTapPlay={select} selected={sel} /></div>
       {sel && current && <section class="native-question" ref={question}>
         <h3>{SEAT_NAMES[current.seat]} played {current.domino.split('').join('–')} · play {ply! + 1}</h3>
-        {matchedReceipt ? <div class="native-receipt">
-          {matchedReceipt.storage === 'session' && <p>Device storage is unavailable. These scores last for this session; copy a link to keep them.</p>}
+        {matchedReceipt?.storage === 'session' && <p>Device storage is unavailable. These scores last for this session; copy a link to keep them.</p>}
+        {position && <NativeStats key={`${ply}:${requestKey(position.request)}`} g={g} sel={sel} position={position}
+          receipt={matchedReceipt} loading={receiptLoading} />}
+        {matchedReceipt ? <details class="disclosure native-receipt"><summary>Decision details</summary>
           <p>Original decision: {matchedReceipt.response.n === 160
             ? 'Deeper L1 opening · requested 160 worlds'
             : matchedReceipt.identity.player.name === 'l1-default' ? 'L1' : 'L1 + partner check'} · {(matchedReceipt.response.elapsed_us / 1e6).toFixed(2)} s</p>
@@ -132,10 +134,10 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag }: {
             : review ? 'The check was unresolved; L1’s move was kept.' : matchedReceipt.response.route === 'forced' ? 'Only one legal move.' : 'The baseline player chose this move.'}</p>
           {review && (review.samples ?? 0) > 0 && <p>{review.samples} of {review.support} compatible hands compared
             {review.coverage === 'census' ? ' · full census' : ' · sampled guess'}.</p>}
-        </div> : null}
-        {position && <NativeStats key={`${ply}:${requestKey(position.request)}`} g={g} sel={sel} position={position}
-          receipt={matchedReceipt} loading={receiptLoading} />}
-        <h4>Save an observation</h4>
+          {matchedReceipt.response.n === 160 && <p>This opening requested 160 worlds; the scores show the largest comparison that finished.</p>}
+        </details> : null}
+        <details class="disclosure observation-tools" open={Boolean(initialFlag)}>
+        <summary>Save or share this move</summary>
         <label class="native-label">What caught your eye?
           <textarea disabled={locked} value={note} maxLength={4000} placeholder="I thought Gran could have given me the five…"
             onInput={(e) => { setNote(e.currentTarget.value); setFlag(null); }} />
@@ -150,9 +152,9 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag }: {
           {busy ? 'Saving…' : flag && !flag.portable ? 'Saved for the gym' : 'Save this move for the gym'}
         </button>}
         <button type="button" class="big-btn secondary" disabled={receiptLoading} onClick={() => void copy(portableLink())}>
-          {copied ? 'Link copied!' : 'Copy observation link'}
+          {copied ? 'Link copied!' : 'Copy a link to this move'}
         </button>
-        {!NATIVE_TABLE && <p class="setting-hint">This link includes the hand, selected move, note and original scores when available. Bring it back to the Mac gym.</p>}
+        {!NATIVE_TABLE && <p class="setting-hint">The link includes this hand, your note and Walt’s original scores when available. It also works with the research gym on your Mac.</p>}
         {NATIVE_TABLE && flag && !flag.portable && <div class="native-analysis">
           <p>Saved on your Mac. <button class="text-btn" onClick={() => void copy(`${location.origin}${location.pathname}#flag=${flag.id}`)}>Copy flagged-move link</button></p>
           <label class="native-label">Players used for the continuation
@@ -177,6 +179,7 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag }: {
             <p class="setting-hint">{comparison.meaning}</p>
           </>}
         </div>}
+        </details>
       </section>}
       {error && <p role="alert" class="native-warning">{error}</p>}
     </div>

@@ -40,8 +40,9 @@
 }
 
 .status-line {
-  font-size: 13px;
-  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -75,7 +76,7 @@
 }
 
 .chip {
-  font-size: 11px;
+  font-size: 13px;
   white-space: nowrap;
   color: var(--cream);
   border: 1px solid rgba(233, 192, 122, 0.4);
@@ -239,7 +240,7 @@
 
 .seat-name {
   font-family: var(--display, serif);
-  font-size: 14px;
+  font-size: 16px;
   color: var(--cream);
   display: flex;
   align-items: center;
@@ -330,7 +331,8 @@
   min-width: 0;
   position: relative;
   border-radius: 16px;
-  background: radial-gradient(ellipse at 50% 45%, rgba(233, 192, 122, 0.1), rgba(0, 0, 0, 0.18) 75%);
+  border: 1px solid #e8c79210;
+  background: radial-gradient(ellipse at 50% 45%, #e9c07a09, #160f0920 85%);
 }
 
 .trick-plays {
@@ -413,7 +415,7 @@
 .gather-right  { animation: gather-r 260ms ease-in 480ms forwards; }
 
 /* ---------- your hand ---------- */
-/* 7 tiles × clamp(42px, (100vw − 36px)/7, 58px): 46px @360, 50px @390. */
+/* 7 tiles × clamp(38px, (100vw − 36px)/7, 58px): 46px @360, 50px @390. */
 
 .hand-area {
   padding-top: 10px;
@@ -429,7 +431,7 @@
 }
 
 .hand > .dom {
-  width: clamp(42px, calc((100vw - 36px) / 7), 58px);
+  width: clamp(38px, calc((100vw - 36px) / 7), 58px);
 }
 
 .hand.sit-out { opacity: 0.55; position: relative; }
@@ -449,3 +451,23 @@
   }
   .trick { transition: none; }
 }
+
+.hand-caption {
+  margin: 0 0 10px;
+  min-height: 20px;
+  color: #e1cbae;
+  font-size: 13px;
+  text-align: center;
+}
+.hand-caption.your-turn { color: var(--teal-bright); font-weight: 650; }
+.status-tallies { padding: 8px; border-radius: 10px; background: #ffffff06; }
+.status-sub { margin-top: 3px; }
+.seat-tag { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+.seat.active .seat-name { color: #ffe3b0; text-shadow: 0 0 12px #e9c07a50; }
+@media (min-width: 760px) {
+  .felt { width: min(920px, 100%); margin-inline: auto; padding-top: 16px; }
+  .status, .info-bar { padding-inline: max(16px, calc((100vw - 920px) / 2)); }
+}
+
+.status-tallies .tally-svg { width: 30px; }
+.status-tallies { gap: 6px; padding: 7px 6px; }

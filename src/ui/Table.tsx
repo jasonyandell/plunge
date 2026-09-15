@@ -21,7 +21,6 @@ import {
 import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet } from './sheets';
 import { TrickHistory } from './TrickHistory';
 import { NativeReview } from './NativeReview';
-import { isNative, nativeLabel } from '../ai/native';
 import './table.css';
 
 const POS: readonly string[] = ['bottom', 'left', 'top', 'right'];
@@ -65,9 +64,6 @@ export function Table({ app, dispatch, thinking = null }: TableProps) {
   return (
     <div class="table-screen">
       <StatusStrip g={g} dispatch={dispatch} />
-      {isNative(app.settings.difficulty) && <div class="native-strip">
-        Straight 42 · {nativeLabel(app.settings.difficulty)}
-      </div>}
       {g.phase === 'playing' && (
         <InfoBar
           g={g}
@@ -90,6 +86,11 @@ export function Table({ app, dispatch, thinking = null }: TableProps) {
           <OpponentSide g={g} seat={3} />
         </div>
         <div class="hand-area">
+          <p class={`hand-caption${humanTurn && !showingLast ? ' your-turn' : ''}`} role="status">
+            {humanTurn && !showingLast
+              ? g.currentTrick.length === 0 ? 'Your turn to lead' : 'Your turn'
+              : 'Your hand'}
+          </p>
           {humanSitsOut ? (
             <div class="hand sit-out">
               {humanHand.map((id) => (
@@ -156,8 +157,9 @@ function StatusStrip({ g, dispatch }: { g: GameState; dispatch: (e: AppEvent) =>
       </button>
       <div class="status-mid">
         <div class="status-line">{statusLine(g)}</div>
+        {g.phase === 'bidding' && <div class="status-sub">{g.shaker === HUMAN_SEAT ? 'You' : SEAT_NAMES[g.shaker]} shook</div>}
         {g.phase === 'playing' && (
-          <div class="status-sub">
+          <div class="status-sub" aria-label="Points this hand">
             Us {g.points[0] ?? 0} &middot; Them {g.points[1] ?? 0}
           </div>
         )}
@@ -174,9 +176,9 @@ function statusLine(g: GameState): string {
   const name = (s: Seat | null) => (s === null ? '' : s === HUMAN_SEAT ? 'You' : SEAT_NAMES[s] ?? '');
   switch (g.phase) {
     case 'bidding':
-      return `Hand ${g.handNumber} — ${name(g.shaker)} shook. Bidding…`;
+      return `Hand ${g.handNumber} · Bidding`;
     case 'declaring':
-      return `${name(g.declarer)} won it at ${g.contract ? contractLabel(g.contract) : ''} — naming trump…`;
+      return `${name(g.declarer)} won the bid at ${g.contract ? contractLabel(g.contract) : ''}`;
     case 'playing':
       // Trump itself lives in the info bar chip, where it can't truncate.
       return `${name(g.declarer)} bid ${g.contract ? contractLabel(g.contract) : ''}`;

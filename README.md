@@ -10,6 +10,13 @@ The live table plays **straight 42** with regular bidding: 30–41, then marks.
 Each player bids once or passes, starting left of the shaker; the winner calls
 trump and leads. Four passes throw the hand in. First team to seven marks wins.
 
+**Deal me in** starts the game with the saved computer player. **Advanced settings**
+keeps the L1 and partner-check choices available. After a hand, **See how it went**
+opens the move scores; **Think deeper** requests a larger comparison. Sample and
+decision details expand separately, and **Save or share this move** holds notes,
+portable links, and the native Mac gym tools. Original scores remain separate
+from later estimates.
+
 ## What's inside
 
 - **Walt** is one shared Rust player, native on the Mac and WebAssembly on the
@@ -30,7 +37,7 @@ trump and leads. Four passes throw the hand in. First team to seven marks wins.
   The entire pool stops on cancellation; a crashed job can retry once inside
   the original time budget. Ordinary play still uses one worker.
 - **The table** saves games and original move scores on the device. After a hand,
-  inspect a move, ask Walt to look closer with 160 worlds, or copy a portable
+  inspect a move, ask Walt to think deeper with 160 worlds, or copy a portable
   observation link for the Mac gym. Leaving a position cancels its worker.
 - **The rules engine** is an independent pure state machine, with legal actions,
   replayable hands, points/marks scoring, and property tests. Historical variants

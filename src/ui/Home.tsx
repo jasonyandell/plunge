@@ -5,6 +5,7 @@
 import type { Difficulty } from '../ai';
 import { NATIVE_TABLE, isNative, nativeLabel } from '../ai/native';
 import type { AppEvent, AppState } from './store';
+import { Domino } from './Domino';
 import './home.css';
 
 interface HomeProps {
@@ -19,8 +20,13 @@ export function Home({ app, dispatch }: HomeProps) {
   return (
     <div class="home">
       <div class="home-card">
+        <p class="eyebrow">Texas 42</p>
+        <div class="home-dominoes" aria-hidden="true">
+          <Domino id="64" /><Domino id="55" /><Domino id="42" />
+        </div>
         <h1 class="title">Plunge</h1>
-        <p class="tagline">{NATIVE_TABLE ? 'The sunshine table · on your Mac' : 'The sunshine table · Walt on your phone'}</p>
+        <p class="tagline">Pull up a chair.</p>
+        <p class="home-welcome">You and Gran against Earl and Ruby.<br />First to seven marks wins.</p>
 
         {resumable && (
           <button type="button" class="big-btn" onClick={() => dispatch({ type: 'resume' })}>
@@ -35,30 +41,6 @@ export function Home({ app, dispatch }: HomeProps) {
           Deal me in
         </button>
 
-        <div class="setting">
-          <span class="setting-label">Your partner and opponents</span>
-          <div class="seg" role="radiogroup" aria-label="Difficulty">
-            {DIFFS.map((d) => (
-              <button
-                key={d}
-                type="button"
-                role="radio"
-                aria-checked={app.settings.difficulty === d}
-                class={`seg-btn${app.settings.difficulty === d ? ' on' : ''}`}
-                onClick={() => dispatch({ type: 'set-difficulty', difficulty: d })}
-              >
-                {isNative(d) ? nativeLabel(d) : d}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <p class="setting-hint native-intro">
-          Straight 42 with regular bidding. Bid or pass in turn; the winner calls trump.
-          Walt plays from its own hand and public history. After a hand, tap a move
-          for its scores or share an observation link.
-        </p>
-
         <div class="link-row">
           <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'how' })}>
             How to play
@@ -67,6 +49,33 @@ export function Home({ app, dispatch }: HomeProps) {
             About
           </button>
         </div>
+
+        <details class="disclosure home-settings">
+          <summary>Advanced settings</summary>
+          <div class="setting">
+            <span class="setting-label">Computer player</span>
+            <p class="setting-hint">Walt plays the three computer seats. Choose which version to use.</p>
+            <div class="seg" role="radiogroup" aria-label="Computer player">
+              {DIFFS.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  role="radio"
+                  aria-checked={app.settings.difficulty === d}
+                  class={`seg-btn${app.settings.difficulty === d ? ' on' : ''}`}
+                  onClick={() => dispatch({ type: 'set-difficulty', difficulty: d })}
+                >
+                  {isNative(d) ? nativeLabel(d) : d}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p class="setting-hint native-intro">
+            {NATIVE_TABLE ? 'Walt runs on your Mac.' : 'Walt runs right on your device.'}
+            {' '}It uses only its own hand and the public plays. After a hand,
+            “See how it went” lets you inspect its estimates and share a move.
+          </p>
+        </details>
       </div>
     </div>
   );

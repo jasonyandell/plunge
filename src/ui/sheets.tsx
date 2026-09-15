@@ -5,7 +5,7 @@
 
 import { useState } from 'preact/hooks';
 import type { Bid, Declaration, GameState } from '../engine';
-import { legalBids, legalDeclarations } from '../engine';
+import { highBid, legalBids, legalDeclarations } from '../engine';
 import type { AppEvent } from './store';
 import {
   HUMAN_SEAT, PIP_SUIT_NAMES, SEAT_NAMES,
@@ -32,6 +32,7 @@ interface EndSheetProps extends SheetProps {
 
 export function BidSheet({ g, dispatch }: SheetProps) {
   const bids = legalBids(g);
+  const currentBid = highBid(g.bids);
   const canPass = bids.some((b) => b.kind === 'pass');
   const pointValues = bids
     .filter((b): b is Bid & { kind: 'points' } => b.kind === 'points')
@@ -54,6 +55,7 @@ export function BidSheet({ g, dispatch }: SheetProps) {
   return (
     <div class="sheet bid-sheet" role="dialog" aria-label="Your bid">
       <h2 class="sheet-title">Your bid</h2>
+      <p class="hint">{!canPass ? 'Choose your bid.' : currentBid ? `The bid is ${bidLabel(currentBid.bid)}. Raise it or pass.` : 'Bidding starts at 30. Bid or pass.'}</p>
       {pt !== null && minPt !== null && maxPt !== null && (
         <div class="bid-stepper">
           <button
@@ -144,7 +146,7 @@ export function DeclareSheet({ g, dispatch }: SheetProps) {
     g.declarer !== HUMAN_SEAT;
   const title = forPartner
     ? `${SEAT_NAMES[g.declarer ?? 0]} ${g.contract?.kind === 'plunge' ? 'plunged' : 'splashed'} — you call trump`
-    : 'Call your trump';
+    : 'You won the bid. Call trump.';
   const declare = (decl: Declaration) =>
     dispatch({ type: 'human', action: { type: 'declare', decl } });
   return (
@@ -189,6 +191,7 @@ export function HandOverSheet({ g, dispatch, onReview, scenario }: EndSheetProps
   return (
     <div class="overlay">
       <div class="card" role="dialog" aria-label="Hand over">
+        <p class="eyebrow">Hand {g.handNumber}</p>
         <h2 class="card-title">{copy.title}</h2>
         <p class="card-detail">{copy.detail}</p>
         <div class="card-tallies">
@@ -224,6 +227,7 @@ export function GameOverSheet({ g, dispatch, onReview }: EndSheetProps) {
   return (
     <div class="overlay">
       <div class={`card ${won ? 'card-win' : 'card-loss'}`} role="dialog" aria-label="Game over">
+        <p class="eyebrow">{won ? 'A good game' : 'Until the next hand'}</p>
         <h2 class="card-title">{copy.title}</h2>
         <p class="card-detail">{copy.detail}</p>
         <div class="card-tallies">
