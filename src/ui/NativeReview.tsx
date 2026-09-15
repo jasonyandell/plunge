@@ -4,6 +4,7 @@ import { type GameState } from '../engine';
 import { NATIVE_TABLE, api, nativeSeed, requestKey, requestTile, type NativeReceipt, type FlagRecord, type Comparison } from '../ai/native';
 import { reviewPosition } from '../ai/native-analysis';
 import { encodeHand, shareUrl } from './share';
+import { saveQuestion } from '../questions/client';
 import { observationUrl } from './observation-link';
 import { TrickHistory } from './TrickHistory';
 import { Domino } from './Domino';
@@ -15,8 +16,8 @@ export { reviewLegal } from '../ai/native-analysis';
 type Selection = { trick: number; play: number };
 const pips = (tile: number): string => requestTile(tile).split('').join('–');
 
-export function NativeReview({ g, onBack, sessionId, receipts, initialFlag }: {
-  g: GameState; onBack: () => void; sessionId: string; receipts: Record<string,string>; initialFlag: FlagRecord | null;
+export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQuestion }: {
+  g: GameState; onBack: () => void; sessionId: string; receipts: Record<string,string>; initialFlag: FlagRecord | null; onQuestion: (id: string) => void;
 }) {
   const [sel, setSel] = useState<Selection | null>(initialFlag ? { trick: Math.floor(initialFlag.ply / 4), play: initialFlag.ply % 4 } : null);
   const [receipt, setReceipt] = useState<NativeReceipt | null>(initialFlag?.original_receipt ?? null);
@@ -148,6 +149,13 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag }: {
             {legal.map((tile) => <option value={tile} key={tile}>{pips(tile)}</option>)}
           </select>
         </label>
+        <button type="button" class="big-btn" disabled={locked || receiptLoading} onClick={() => {
+          if (ply === null || !position) return;
+          setBusy(true);
+          void saveQuestion(g, ply, sessionId, matchedReceipt?.id ?? rid ?? null, note,
+            alternative === '' ? null : Number(alternative), matchedReceipt, position.request.seed)
+            .then(item => onQuestion(item.question.id)).catch(e => setError(String(e))).finally(() => setBusy(false));
+        }}>{busy ? 'Saving…' : 'Save this question'}</button>
         {NATIVE_TABLE && <button type="button" class="big-btn" disabled={locked || Boolean(flag && !flag.portable) || (Boolean(rid) && matchedReceipt === null)} onClick={() => void save()}>
           {busy ? 'Saving…' : flag && !flag.portable ? 'Saved for the gym' : 'Save this move for the gym'}
         </button>}

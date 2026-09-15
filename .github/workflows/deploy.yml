@@ -15,7 +15,11 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: printf '{"build":"%s"}' "$GITHUB_SHA" > dist/version.json
-      - uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Prepare question database and deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node scripts/prepare-questions.mjs
+          npx wrangler d1 migrations apply QUESTIONS --remote
+          npx wrangler deploy

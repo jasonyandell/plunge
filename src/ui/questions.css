@@ -1,0 +1,42 @@
+.questions-dialog { box-sizing: border-box; border: 1px solid #c6ae84; border-radius: 22px; padding: 0; color: #3e2d1e; background: #fff8e9; width: min(650px, 94vw); max-height: 92dvh; box-shadow: 0 20px 80px #0007; }
+.questions-dialog[open] { display: flex; flex-direction: column; }
+.questions-dialog::backdrop { background: #16100bdd; backdrop-filter: blur(4px); }
+.questions-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 22px 12px; border-bottom: 1px solid #d7c7ad; }
+.questions-header .eyebrow { margin: 0 0 5px; font-size: 11px; color: #806744; }
+.questions-header h2 { margin: 0; font: 27px Georgia, serif; }
+.question-close { width: 44px; height: 44px; border: 0; border-radius: 50%; background: #eedfca; color: #58422c; font-size: 28px; }
+.questions-body { overflow-y: auto; min-height: 0; padding: 14px 22px 22px; overscroll-behavior: contain; }
+.questions-body .setting-hint { color: #766348; }
+.question-intro { line-height: 1.55; }
+.questions-empty { padding: 26px 10px; font: italic 19px/1.6 Georgia, serif; text-align: center; color: #78664c; }
+.questions-list { display: grid; gap: 10px; margin-top: 20px; }
+.question-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 15px 12px; text-align: left; border: 1px solid #d9c6a8; border-radius: 14px; background: #f5ead5; color: inherit; }
+.question-item > .dom { width: 50px; flex-shrink: 0; }
+.question-item > span:nth-child(2) { display: grid; gap: 5px; min-width: 0; flex: 1; }
+.question-item strong { font-size: 14px; }
+.question-item span span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.question-item small { color: #796548; font-size: 11px; }
+.question-move { display: flex; gap: 16px; align-items: center; margin-bottom: 12px; }
+.question-move > .dom { width: 68px; flex-shrink: 0; }
+.question-move h3 { margin: 4px 0; font-size: 19px; }
+.question-move p { margin: 4px 0; font-size: 12px; color: #766348; }
+.question-note, .question-answer { padding: 12px 16px; background: #f2e6d0; border-radius: 12px; margin: 14px 0; }
+.question-note p, .question-answer p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.question-answer { background: #e7edde; border: 1px solid #c3d0b2; }
+.question-answer h3 { font: 23px Georgia, serif; margin: 5px 0; }
+.question-status, .question-wait { font-size: 13px; line-height: 1.6; color: #67583f; }
+.question-contract { line-height: 1.6; border-top: 1px solid #d5c4a8; padding-top: 16px; }
+.questions-footer { border-top: 1px solid #d7c7ad; padding: 12px 20px; display: flex; align-items: center; gap: 12px; background: #fff8e9; }
+.questions-footer .big-btn { margin: 0; flex: 1; font-size: 15px; }
+.questions-dialog .text-btn { color: #72572f; min-height: 44px; }
+.questions-dialog .big-btn:disabled { opacity: .55; }
+.questions-dialog .native-held { justify-content: flex-start; }
+.questions-dialog textarea { min-height: 100px; }
+.play-question { position: absolute; width: 40px; height: 40px; right: -30px; top: 2px; z-index: 3; border: 1px solid #c1a773; border-radius: 50%; background: #3e2b1ce8; color: #fae8b9; font: bold 19px Georgia,serif; box-shadow: 0 2px 5px #0005; }
+.play-question:active { background: #806334; }
+.question-toast { position: fixed; bottom: max(190px, 24dvh); left: 50%; transform: translateX(-50%); z-index: 25; display: flex; align-items: center; gap: 8px; border: 1px solid #ceb982; border-radius: 14px; padding: 8px 14px; background: #fff5db; color: #4c3a24; box-shadow: 0 5px 25px #0006; max-width: 94vw; width: max-content; font-size: 14px; }
+.question-toast button { color: #644723; min-height: 40px; padding: 0 4px; }
+.question-history-hint { margin: 4px 16px; font-size: 12px; color: #f0d7a7; }
+@media(max-width:380px) { .questions-body { padding: 12px 14px; } .questions-footer { padding: 10px 12px; gap: 6px; } .questions-footer .text-btn { font-size: 12px; } .play-question { right: -23px; width: 32px; height: 34px; } }
+/* Side-seat tiles sit close to the hidden racks: keep their question below. */
+.slot-left .play-question, .slot-right .play-question { top: calc(100% + 4px); right: auto; left: 50%; transform: translateX(-50%); }

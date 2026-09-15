@@ -5,7 +5,7 @@ import preact from '@preact/preset-vite';
 export default defineConfig({
   plugins: [preact()],
   server: {
-    proxy: { '/api': { target: `http://127.0.0.1:${process.env.PLUNGE_BRIDGE_PORT ?? '4245'}` } },
+    proxy: { '/api/questions': { target: `http://127.0.0.1:${process.env.PLUNGE_QUESTIONS_PORT ?? '8787'}` }, '/api': { target: `http://127.0.0.1:${process.env.PLUNGE_BRIDGE_PORT ?? '4245'}` } },
   },
   build: { target: 'es2022' },
   test: {

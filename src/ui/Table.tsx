@@ -21,6 +21,8 @@ import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet } from './sheets';
 import { TrickHistory } from './TrickHistory';
 import { NativeReview } from './NativeReview';
 import './table.css';
+import './questions.css';
+import { saveQuestion } from '../questions/client';
 
 const POS: readonly string[] = ['bottom', 'left', 'top', 'right'];
 
@@ -29,9 +31,16 @@ interface TableProps {
   dispatch: (e: AppEvent) => void;
   /** Seat whose slow AI think is in flight (walt solving) — shows a note. */
   thinking?: Seat | null;
+  onQuestion: (id: string) => void;
 }
 
-export function Table({ app, dispatch, thinking = null }: TableProps) {
+export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps) {
+  const [saved, setSaved] = useState<{ id: string; text: string } | null>(null);
+  useEffect(() => {
+    if (!saved) return;
+    const timer = setTimeout(() => setSaved(null), 7000);
+    return () => clearTimeout(timer);
+  }, [saved]);
   const [histOpen, setHistOpen] = useState(false);
   // A shared hand from a link is shown instead of the player's own game,
   // view-only, and opens straight into review.
@@ -48,6 +57,13 @@ export function Table({ app, dispatch, thinking = null }: TableProps) {
   }, [scenario]);
   const g = app.scenarioGame ?? app.game;
   if (!g) return null;
+
+  const bookmark = (ply: number): void => {
+    const frozen = g;
+    void saveQuestion(frozen, ply, app.sessionId, app.nativeReceipts[`${g.handNumber}:${ply}`] ?? null)
+      .then(item => setSaved({ id: item.question.id, text: 'Saved for later' }))
+      .catch(() => setSaved({ id: '', text: 'Could not save. Please try again.' }));
+  };
 
   const lastTrick: CompletedTrick | null =
     g.tricks.length > 0 ? (g.tricks[g.tricks.length - 1] ?? null) : null;
@@ -69,6 +85,7 @@ export function Table({ app, dispatch, thinking = null }: TableProps) {
           plays={trickPlays}
           open={histOpen}
           onToggle={() => setHistOpen((o) => !o)}
+          onQuestion={scenario ? undefined : bookmark}
         />
       )}
       <div class="felt">
@@ -81,6 +98,7 @@ export function Table({ app, dispatch, thinking = null }: TableProps) {
             winner={trickWinner}
             gathering={showingLast}
             thinking={thinking}
+            onQuestion={scenario ? undefined : (i) => bookmark((showingLast ? g.tricks.length - 1 : g.tricks.length) * 4 + i)}
           />
           <OpponentSide g={g} seat={3} thinking={thinking} />
         </div>
@@ -114,6 +132,7 @@ export function Table({ app, dispatch, thinking = null }: TableProps) {
         </div>
       </div>
 
+      {saved && <div class="question-toast" role="status"><span>{saved.text}</span>{saved.id && <button class="text-btn" onClick={() => { onQuestion(saved.id); setSaved(null); }}>Add note</button>}</div>}
       {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet g={g} dispatch={dispatch} />}
       {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet g={g} dispatch={dispatch} />}
       {g.phase === 'hand-over' && !review && (
@@ -134,7 +153,7 @@ export function Table({ app, dispatch, thinking = null }: TableProps) {
       {(g.phase === 'hand-over' || g.phase === 'game-over') && review && (
           <NativeReview key={scenario ? (app.scenarioFlag?.id ?? g.dealt.flat().join('')) : `${app.sessionId}:${g.handNumber}`}
             g={g} onBack={() => setReview(false)} sessionId={app.sessionId}
-            receipts={scenario ? {} : app.nativeReceipts} initialFlag={app.scenarioFlag} />
+            receipts={scenario ? {} : app.nativeReceipts} initialFlag={app.scenarioFlag} onQuestion={onQuestion} />
       )}
     </div>
   );
@@ -197,11 +216,13 @@ function InfoBar({
   plays,
   open,
   onToggle,
+  onQuestion,
 }: {
   g: GameState;
   plays: readonly PlayRecord[];
   open: boolean;
   onToggle: () => void;
+  onQuestion?: ((ply: number) => void) | undefined;
 }) {
   const trump = trumpChip(g);
   const led = ledChip(g, plays);
@@ -232,7 +253,7 @@ function InfoBar({
           </button>
         )}
       </div>
-      {open && n > 0 && <TrickHistory g={g} />}
+      {open && n > 0 && <>{onQuestion && <p class="question-history-hint">Tap a played domino to save a question.</p>}<TrickHistory g={g} actionLabel="save a question" onTapPlay={onQuestion ? (t,p) => onQuestion(t*4+p) : undefined} /></>}
     </div>
   );
 }
@@ -306,12 +327,14 @@ function TrickArea({
   winner,
   gathering,
   thinking,
+  onQuestion,
 }: {
   g: GameState;
   plays: readonly PlayRecord[];
   winner: Seat | null;
   gathering: boolean;
   thinking: Seat | null;
+  onQuestion?: ((play: number) => void) | undefined;
 }) {
   const leader = plays[0]?.seat ?? null;
   const partnerCallsTrump =
@@ -339,7 +362,7 @@ function TrickArea({
         </div>
       )}
       <div class={`trick-plays${gathering && winner !== null ? ` gather-${POS[winner]}` : ''}`}>
-      {plays.map((p) => (
+      {plays.map((p, i) => (
         <div
           key={`${p.seat}-${p.domino}`}
           class={[
@@ -353,6 +376,7 @@ function TrickArea({
             .join(' ')}
         >
           <Domino id={p.domino} orientation="h" className="trick-dom" />
+          {onQuestion && !gathering && <button class="play-question" type="button" aria-label={`Save a question about ${p.seat === HUMAN_SEAT ? 'your' : SEAT_NAMES[p.seat] + '’s'} ${p.domino.split('').join('–')}`} onClick={() => onQuestion(i)}>?</button>}
           {p.seat === leader && (
             <span class="led-tag">{p.seat === HUMAN_SEAT ? 'You' : SEAT_NAMES[p.seat]} led</span>
           )}

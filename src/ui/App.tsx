@@ -21,11 +21,30 @@ import { decodeObservation } from './observation-link';
 import { api, isNative, nativeMove, type FlagRecord } from '../ai/native';
 import { auctionMove } from '../ai/auction';
 import './app.css';
+import { Questions } from './Questions';
+import { attachGame, syncQuestions } from '../questions/client';
 
 export function App() {
   const [app, dispatch] = useReducer(reducer, undefined, () =>
     initialApp(typeof localStorage !== 'undefined' ? loadApp(localStorage) : null),
   );
+
+  const [questions, setQuestions] = useState<{ id: string | null } | null>(null);
+  const openQuestion = (id: string) => setQuestions({ id });
+  useEffect(() => {
+    const sync = () => void syncQuestions();
+    const timer = setInterval(sync, 30000);
+    window.addEventListener('online', sync);
+    window.addEventListener('focus', sync);
+    sync();
+    return () => { clearInterval(timer); window.removeEventListener('online', sync); window.removeEventListener('focus', sync); };
+  }, []);
+  useEffect(() => {
+    const attach = () => { if (app.game) void attachGame(app.game, app.sessionId).then(() => syncQuestions()).catch(() => {}); };
+    attach();
+    window.addEventListener('plunge-questions-changed', attach);
+    return () => window.removeEventListener('plunge-questions-changed', attach);
+  }, [app.game, app.sessionId]);
 
   // The same shared player runs through a native transport or a browser worker.
   const [thinking, setThinking] = useState<Seat | null>(null);
@@ -33,6 +52,7 @@ export function App() {
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     setNativeError(null);
+    if (questions) return;
     const seat = pendingAiSeat(app);
     if (seat !== null) {
       let alive = true;
@@ -68,7 +88,7 @@ export function App() {
       return () => clearTimeout(t);
     }
     return undefined;
-  }, [app, retry]);
+  }, [app, retry, questions]);
 
   // Persist settings + in-progress game. (A shared hand opened from a link
   // is never part of the save — the player's own game stays underneath.)
@@ -82,6 +102,12 @@ export function App() {
     let generation = 0;
     const open = (): void => {
       const request = ++generation;
+      const questionId = /^#question=([a-f0-9]{32})$/.exec(location.hash)?.[1];
+      if (questionId) {
+        history.replaceState(null, '', location.pathname + location.search);
+        setQuestions({ id: questionId });
+        return;
+      }
       if (location.hash.startsWith('#q=')) {
         const observation = decodeObservation(location.hash);
         if (!observation) { setNativeError('This observation link could not be replayed.'); return; }
@@ -153,16 +179,16 @@ export function App() {
   const screen = (() => {
     switch (app.screen) {
       case 'home':
-        return <Home app={app} dispatch={dispatch} />;
+        return <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} />;
       case 'how':
         return <HowTo dispatch={dispatch} />;
       case 'about':
         return <About dispatch={dispatch} />;
       case 'table':
         return app.game || app.scenarioGame ? (
-          <Table app={app} dispatch={dispatch} thinking={thinking} />
+          <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} />
         ) : (
-          <Home app={app} dispatch={dispatch} />
+          <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} />
         );
     }
   })();
@@ -170,6 +196,7 @@ export function App() {
   return (
     <>
       {screen}
+      {questions && <Questions key={questions.id ?? "list"} initialId={questions.id} onClose={() => setQuestions(null)} dispatch={dispatch} />}
       {nativeError && (
         <div class="native-error" role="alert">
           <span>{nativeError}</span>

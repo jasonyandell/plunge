@@ -17,5 +17,5 @@
     "noEmit": true,
     "types": ["vite/client"]
   },
-  "include": ["src", "tests", "scripts/auction-pool.ts"]
+  "include": ["src", "worker", "tests", "scripts/auction-pool.ts"]
 }

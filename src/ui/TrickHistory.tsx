@@ -6,8 +6,10 @@ export function TrickHistory({
   g,
   onTapPlay,
   selected,
+  actionLabel = 'ask Walt',
 }: {
   g: GameState;
+  actionLabel?: string;
   onTapPlay?: ((trick: number, play: number) => void) | undefined;
   selected?: { trick: number; play: number } | null | undefined;
 }) {
@@ -43,7 +45,7 @@ export function TrickHistory({
                     key={p.seat}
                     type="button"
                     class={`${cls} hist-tap`}
-                    title={`${title} — ask walt`}
+                    title={`${title} — ${actionLabel}`}
                     onClick={() => onTapPlay(i, j)}
                   >
                     {inner}
