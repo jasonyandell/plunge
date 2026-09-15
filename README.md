@@ -14,10 +14,13 @@ trump and leads. Four passes throw the hand in. First team to seven marks wins.
 
 - **Walt** is one shared Rust player, native on the Mac and WebAssembly on the
   phone. It chooses plays from its own hand and public history with fixed L1
-  40/8 and an optional bounded partner count-offer check. No hidden hands cross
-  the live decision boundary.
+  40/8 and an optional bounded partner count-offer check. The bidder's opening
+  lead asks deeper L1 for 160 worlds with 20 seconds, retaining a complete
+  40-world comparison first; later play keeps 40 worlds and 14 seconds. The
+  deeper opening does not reinterpret the 40/8-only partner check. No hidden
+  hands cross the live decision boundary.
 - **Bidding** compares all nine declarations at the cheapest legal raise. Each
-  computer has 4.5 seconds for complete 4/12/40-world surveys. It bids when the
+  computer has 20 seconds for complete 4/12/40/160-world surveys. It bids when the
   best sampled make estimate is at least 75%, otherwise passes, and passes over
   partner. This is a simple initial policy over uncalibrated model estimates.
   The winning trump is remembered; it is not searched again after bidding.

@@ -1,7 +1,7 @@
 {
   "player": "walt-table-v2",
   "source_repository": "jasonyandell/texas-42",
-  "source_commit": "657576e8971967cc1cd08c604d5dbd0c7d5bd92a",
+  "source_commit": "5e8cd0f710f35a8fb1f48cdd42803524cd102e7d",
   "source_sha256": "ecaf0c7729c26eed877f5ca071218295a4a3a1580bb07a3c9193d71575e48eb5",
   "wasm_sha256": "2730dc305e3399863235a273e5c0df8a4928a03a7671811a6f9772cfdebd6aa7",
   "rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
