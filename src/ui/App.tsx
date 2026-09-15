@@ -19,6 +19,7 @@ import { Table } from './Table';
 import { codeFromHash, decodeHand } from './share';
 import { decodeObservation } from './observation-link';
 import { api, isNative, nativeMove, type FlagRecord } from '../ai/native';
+import { auctionMove } from '../ai/auction';
 import './app.css';
 
 export function App() {
@@ -37,6 +38,14 @@ export function App() {
       let alive = true;
       const controller = new AbortController();
       const t = setTimeout(() => {
+        if (isNative(app.settings.difficulty) && app.game && ['bidding','declaring'].includes(app.game.phase)) {
+          setThinking(seat);
+          void auctionMove(app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal).then(
+            decision=>{if(alive) dispatch({type:'auction-ai',decision});},
+            (error:unknown)=>{if(alive) setNativeError(String(error));},
+          ).finally(()=>{if(alive) setThinking(null);});
+          return;
+        }
         if (isNative(app.settings.difficulty) && app.game?.phase === 'playing') {
           setThinking(seat);
           void nativeMove(app.game, seat, app.settings.difficulty, app.sessionId, controller.signal).then(
@@ -65,7 +74,7 @@ export function App() {
   // is never part of the save — the player's own game stays underneath.)
   useEffect(() => {
     if (typeof localStorage !== 'undefined') saveApp(localStorage, app);
-  }, [app.game, app.settings, app.seed, app.aiMoves, app.nativeReceipts, app.sessionId]);
+  }, [app.game, app.settings, app.seed, app.aiMoves, app.nativeReceipts, app.auctionSurveys, app.sessionId]);
 
   // A share link (#r=...) opens that hand in view-only review. The hash is
   // consumed on load so reloads and future navigation stay clean.

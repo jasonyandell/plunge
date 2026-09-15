@@ -229,8 +229,8 @@ describe('store: full hand flow', () => {
       const handNumber = g.handNumber;
       app = reducer(app, { type: 'human', action: { type: 'next-hand' } });
       expect(app.game!.handNumber).toBe(handNumber + 1);
-      expect(app.game!.phase).toBe('declaring');
-      expect(app.game!.contract).toEqual({kind:'points', value:30});
+      expect(app.game!.phase).toBe('bidding');
+      expect(app.game!.contract).toBeNull();
     }
   });
 

@@ -54,7 +54,7 @@ export function Home({ app, dispatch }: HomeProps) {
         </div>
 
         <p class="setting-hint native-intro">
-          Straight 42, a 30 bid every hand. The bidder rotates and chooses trump.
+          Straight 42 with regular bidding. Bid or pass in turn; the winner calls trump.
           Walt plays from its own hand and public history. After a hand, tap a move
           for its scores or share an observation link.
         </p>
@@ -86,9 +86,10 @@ export function HowTo({ dispatch }: { dispatch: (e: AppEvent) => void }) {
         </p>
         <h2>Bidding</h2>
         <p>
-          This practice table assigns a 30 bid, rotating the bidder each hand.
-          The bidder names trump. Your team's job is to capture at least 30 points;
-          the defenders need 13 to set it.
+          Starting left of the shaker, each player bids once or passes. Bidding starts
+          at 30 and each new bid must be higher. Bid 42 (one mark) or more marks to
+          promise all seven tricks. The winner names trump and leads. If everybody
+          passes, shake again. Walt may take a few seconds to consider its bid.
         </p>
         <h2>Trumps and following</h2>
         <p>
@@ -128,7 +129,7 @@ export function About({ dispatch }: { dispatch: (e: AppEvent) => void }) {
           dominoes and a wood table.
         </p>
         <p class="fine">
-          Straight 42 practice with Walt. One shared player on the Mac and in your browser.
+          Straight 42 with Walt. One shared player on the Mac and in your browser.
         </p>
       </div>
     </div>

@@ -66,7 +66,7 @@ export function Table({ app, dispatch, thinking = null }: TableProps) {
     <div class="table-screen">
       <StatusStrip g={g} dispatch={dispatch} />
       {isNative(app.settings.difficulty) && <div class="native-strip">
-        Practice 30 · {nativeLabel(app.settings.difficulty)}
+        Straight 42 · {nativeLabel(app.settings.difficulty)}
       </div>}
       {g.phase === 'playing' && (
         <InfoBar

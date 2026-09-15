@@ -51,7 +51,7 @@ describe('native table boundary', () => {
   it('applies a receipt only once and retains it across a save and resume', () => {
     let app = reducer(initialApp(null), { type:'set-difficulty', difficulty:'native-partner' });
     app = reducer(app,{type:'new-game',seed:'native-test',sessionId:'test'});
-    expect(app.game!.contract).toEqual({kind:'points',value:30});
+    expect(app.game!.phase).toBe('bidding');
     app = {...app,game:opening()};
     // Pick an AI opening for this fixture (default shaker zero, bidder one).
     expect(app.game!.turn).not.toBe(0);

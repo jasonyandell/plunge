@@ -12,6 +12,7 @@
 import type { Difficulty } from '../ai';
 import { chooseAction } from '../ai/table';
 import { isNative, requestOf, requestKey, checkedAction, type NativeReceipt, type FlagRecord } from '../ai/native';
+import { auctionKey, type AuctionDecision, type AuctionSurvey } from '../ai/auction';
 import {
   type Action,
   type Bid,
@@ -83,6 +84,7 @@ export interface AppState {
   readonly sessionId: string;
   readonly nativeReceipts: Record<string, string>;
   readonly scenarioFlag: FlagRecord | null;
+  readonly auctionSurveys: Record<string, AuctionSurvey>;
 }
 
 export type ChooseFn = typeof chooseAction;
@@ -99,7 +101,8 @@ export type AppEvent =
   | { readonly type: 'trick-shown' }
   /** Open a shared hand (from a share link) in view-only review. */
   | { readonly type: 'view-scenario'; readonly game: GameState; readonly flag?: FlagRecord }
-  | { readonly type: 'native-ai'; readonly receipt: NativeReceipt };
+  | { readonly type: 'native-ai'; readonly receipt: NativeReceipt }
+  | { readonly type: 'auction-ai'; readonly decision: AuctionDecision };
 
 export function initialApp(saved?: SavedState | null): AppState {
   if (saved && !isNative(saved.settings.difficulty)) saved = null;
@@ -114,6 +117,7 @@ export function initialApp(saved?: SavedState | null): AppState {
     scenarioFlag: null,
     sessionId: saved?.sessionId ?? 'legacy',
     nativeReceipts: saved?.nativeReceipts ?? {},
+    auctionSurveys: saved?.auctionSurveys ?? {},
   };
 }
 
@@ -162,7 +166,8 @@ export function reducer(s: AppState, e: AppEvent): AppState {
         scenarioFlag: null,
         sessionId: e.sessionId ?? `seed-${e.seed.replace(/[^a-zA-Z0-9_-]/g, '').slice(0,60) || 'game'}`,
         nativeReceipts: {},
-        game: isNative(s.settings.difficulty) ? practice30(newGame(TOURNAMENT_CONFIG, e.seed)) : newGame(configFor(s.settings.preset), e.seed),
+        auctionSurveys: {},
+        game: newGame(isNative(s.settings.difficulty) ? TOURNAMENT_CONFIG : configFor(s.settings.preset), e.seed),
       };
     case 'resume':
       return s.game ? { ...s, screen: 'table', scenarioGame: null, scenarioFlag: null } : s;
@@ -175,11 +180,20 @@ export function reducer(s: AppState, e: AppEvent): AppState {
       let game: GameState;
       try {
         game = applyAction(s.game, e.action);
-        if (isNative(s.settings.difficulty) && e.action.type === 'next-hand') game = practice30(game);
       } catch {
         return s; // defensive: stale tap / double tap — ignore
       }
-      return { ...s, game, showTrick: trickJustCompleted(s.game, game) };
+      return { ...s, game, showTrick: trickJustCompleted(s.game, game),
+        auctionSurveys: e.action.type === 'next-hand' ? {} : s.auctionSurveys };
+    }
+    case 'auction-ai': {
+      const seat=pendingAiSeat(s), g=s.game, d=e.decision;
+      if (seat===null || !g || !['bidding','declaring'].includes(g.phase) || d.key!==auctionKey(g,s.sessionId)) return s;
+      if ((g.phase==='bidding' && d.action.type!=='bid') || (g.phase==='declaring' && d.action.type!=='declare')) return s;
+      try {
+        const game=applyAction(g,d.action);
+        return {...s,game,aiMoves:s.aiMoves+1,auctionSurveys:d.survey ? {...s.auctionSurveys,[`${g.handNumber}:${seat}`]:d.survey} : s.auctionSurveys};
+      } catch { return s; }
     }
     case 'native-ai': {
       const seat = pendingAiSeat(s);
@@ -234,6 +248,7 @@ export interface SavedState {
   readonly aiMoves: number;
   readonly sessionId?: string;
   readonly nativeReceipts?: Record<string, string>;
+  readonly auctionSurveys?: Record<string, AuctionSurvey>;
 }
 
 export interface StorageLike {
@@ -246,7 +261,7 @@ export const STORAGE_KEY = 'plunge:save:v1';
 
 export function toSaved(s: AppState): SavedState {
   return { v: 1, settings: s.settings, seed: s.seed, game: s.game, aiMoves: s.aiMoves,
-    sessionId: s.sessionId, nativeReceipts: s.nativeReceipts };
+    sessionId: s.sessionId, nativeReceipts: s.nativeReceipts, auctionSurveys: s.auctionSurveys };
 }
 
 export function saveApp(storage: StorageLike, s: AppState): void {

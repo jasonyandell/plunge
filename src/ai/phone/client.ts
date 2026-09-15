@@ -1,4 +1,5 @@
 import type { NativeDecision, NativeRequest } from '../native';
+import type { AuctionCall, AuctionSurvey } from '../auction';
 
 export interface PlayerCall { request: NativeRequest; worlds: number; partner: boolean; budget_ms?: number }
 
@@ -8,13 +9,17 @@ export function runPlayer(call: PlayerCall, signal?: AbortSignal): Promise<Nativ
   return runInWorker(() => new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }), call, signal);
 }
 
-export function runInWorker(create: () => Worker, call: PlayerCall, signal?: AbortSignal): Promise<NativeDecision> {
+export function runAuction(call: AuctionCall, signal?: AbortSignal): Promise<AuctionSurvey> {
+  return runInWorker<AuctionSurvey>(() => new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }), call, signal);
+}
+
+export function runInWorker<T extends { interruption?: string } = NativeDecision>(create: () => Worker, call: PlayerCall | AuctionCall, signal?: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) { reject(new DOMException('Stopped', 'AbortError')); return; }
     const worker = create();
-    let saved: NativeDecision | undefined;
+    let saved: T | undefined;
     let settled = false;
-    const finish = (result?: NativeDecision, error?: unknown): void => {
+    const finish = (result?: T, error?: unknown): void => {
       if (settled) return;
       settled = true; clearTimeout(timer); worker.terminate(); signal?.removeEventListener('abort', abort);
       if (result) resolve(result); else reject(error ?? new Error('Walt did not finish. Please retry.'));
@@ -27,7 +32,7 @@ export function runInWorker(create: () => Worker, call: PlayerCall, signal?: Abo
     const timer = setTimeout(() => interrupted('The host stopped the calculation; the last completed decision was retained.'), (call.budget_ms ?? 14000) + 4000);
     signal?.addEventListener('abort', abort, { once: true });
     worker.onmessage = ({ data }: MessageEvent) => {
-      const message = data as { checkpoint?: NativeDecision; result?: NativeDecision & { error?: string }; error?: string };
+      const message = data as { checkpoint?: T; result?: T & { error?: string }; error?: string };
       if (message.checkpoint) saved = message.checkpoint;
       if (message.result?.error) finish(undefined, new Error(message.result.error));
       else if (message.result) finish(message.result);

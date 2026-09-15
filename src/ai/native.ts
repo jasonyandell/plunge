@@ -54,7 +54,7 @@ export function nativeSeed(gameId: string, handNumber: number): number {
 }
 export function requestOf(g: GameState, seat: Seat, gameId: string): NativeRequest {
   const req = playRequestOf(observe(g, seat), { n: 40, n0: 8 });
-  if (!req || req.bid !== 30) throw new Error('Walt needs straight 42 with a 30 bid.');
+  if (!req || req.bid < 30 || req.bid > 42) throw new Error('Walt needs a straight 42 contract.');
   return { decl: req.decl, bid: req.bid, bidder: req.bidder, seat: req.seat,
     hand: [...req.hand], plays: [...req.plays], seed: nativeSeed(gameId, g.handNumber) };
 }

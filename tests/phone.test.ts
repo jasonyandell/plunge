@@ -70,8 +70,9 @@ describe('portable phone observations',()=>{
       expect(decodeObservation('#q='+encodeURIComponent(JSON.stringify(bad)))).toBeNull();
     }
   });
-  it('the only default table player is shared Walt in fixed-30 practice',()=>{
+  it('the default table player is shared Walt with an open auction',()=>{
     const app=reducer(initialApp(),{type:'new-game',seed:'phone'});
-    expect(app.settings.difficulty).toBe('native-partner');expect(app.game!.contract).toEqual({kind:'points',value:30});
+    expect(app.settings.difficulty).toBe('native-partner');expect(app.game!.contract).toBeNull();
+    expect(app.game!.phase).toBe('bidding');expect(app.game!.bids).toEqual([]);
   });
 });
