@@ -61,6 +61,13 @@ export function validQuestion(value: unknown): Question {
       || typeof r.identity.player?.name !== 'string' || !Number.isFinite(r.response.elapsed_us)
       || !Array.isArray(r.response.phases) || r.response.phases.length > 100
       || !r.response.phases.every(p => p && typeof p.name === 'string' && typeof p.status === 'string')) throw new Error('Invalid original scores.');
+    const response = r.response;
+    if (typeof response.route !== 'string' || (response.interruption !== undefined && typeof response.interruption !== 'string')) throw new Error('Invalid score details.');
+    const review = response.review_result;
+    if (review && (typeof review !== 'object' || typeof review.status !== 'string'
+      || !Number.isInteger(review.baseline) || !Number.isInteger(review.choice)
+      || (review.samples !== undefined && !Number.isSafeInteger(review.samples))
+      || (review.support !== undefined && !Number.isSafeInteger(review.support)))) throw new Error('Invalid partner review.');
     const req = r.identity.request;
     const expected = { ...built.req, seed: q.seed };
     for (const k of ['decl', 'bid', 'bidder', 'seat', 'hand', 'plays', 'seed'] as const) {

@@ -18,13 +18,20 @@ async function request<T>(path: string, init: RequestInit = {}, privateRequest =
   return await r.json() as T;
 }
 export async function saveQuestion(g: GameState, ply: number, sessionId: string, receiptId: string | null,
-  note = '', alternative: number | null = null, original: NativeReceipt | null = null, seed?: number): Promise<LocalQuestion> {
+  note: string | undefined = undefined, alternative: number | null = null, original: NativeReceipt | null = null, seed?: number): Promise<LocalQuestion> {
   const replay = encodeReplay(g);
   if (!replay || !allPlays(g)[ply]) throw new Error('That play could not be saved.');
   const question = validQuestion({ schema:'plunge-question-v1', id:randomHex(16), created:new Date().toISOString(),
     game_id:sessionId, hand_number:g.handNumber, ply, seed:seed ?? original?.identity.request.seed ?? nativeSeed(sessionId,g.handNumber),
-    snapshot:replay, replay, note, alternative, receipt_id:receiptId, receipt:original, build:BUILD_ID });
-  const saved = await insertQuestion(question);
+    snapshot:replay, replay, note:note ?? '', alternative, receipt_id:receiptId, receipt:original, build:BUILD_ID });
+  let saved = await insertQuestion(question);
+  // A plain table tap preserves the note; an explicit examiner save applies its edits.
+  if (note !== undefined) saved = (await changeQuestion(saved.question.id, old => {
+    if (!old) return old;
+    const next = validQuestion({...old.question,note,alternative,
+      replay:replay.startsWith(old.question.replay) ? replay : old.question.replay});
+    return JSON.stringify(next) === JSON.stringify(old.question) ? old : {...old,question:next,revision:old.revision+1};
+  }))!;
   changed();
   // The bookmark is durable before loading its separate original receipt.
   // Missing receipts are retried too; the durable bookmark can upload immediately.

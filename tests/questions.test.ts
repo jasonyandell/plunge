@@ -4,7 +4,8 @@ import { decodeReplay, encodeReplay } from '../src/engine/replay-code';
 import { decodeHand, encodeHand } from '../src/ui/share';
 import { type Question, validQuestion, validUpdate, publicQuestion } from '../src/questions/model';
 import { insertQuestion, ownerToken, listQuestions, changeQuestion } from '../src/questions/storage';
-import { attachGame, editNote, syncQuestions } from '../src/questions/client';
+import { type NativeReceipt } from '../src/ai/native';
+import { attachGame, editNote, syncQuestions, saveQuestion } from '../src/questions/client';
 
 const code='v1t366615143403021656463533231106250423320110060555452444122.P303132D9222132624440644255515350';
 const prefix=code.slice(0,code.indexOf('D9')+4); // one opening play, 2-2
@@ -31,6 +32,18 @@ describe('question evidence',()=>{
     expect(validUpdate(q,{...q,snapshot:code,replay:code})).toBe(false);
     expect(validUpdate({...q,replay:code},q)).toBe(false);
   });
+  it('preserves matching original scores and rejects another actor or malformed review',()=>{
+    const q=question(),rid='e'.repeat(64);
+    const receipt:NativeReceipt={schema:'plunge-decision-v1',id:rid,created:q.created,
+      identity:{request:{decl:9,bid:32,bidder:3,seat:3,hand:[5,11,14,17,19,20,21],plays:[],seed:q.seed},
+        player:{name:'l1-default'},implementation:{test:true},game_id:q.game_id,hand_number:1},
+      response:{choice:5,legal:[5,11,14,17,19,20,21],route:'baseline',leader:3,points:[0,0],elapsed_us:100,
+        phases:[{name:'baseline',status:'completed'}],evaluation:{outer_worlds:160,options:[[5,'77','80']]}}};
+    const captured={...q,receipt_id:rid,receipt};expect(validQuestion(captured).receipt).toEqual(receipt);
+    expect(()=>validQuestion({...captured,seed:1})).toThrow();
+    expect(()=>validQuestion({...captured,receipt:{...receipt,response:{...receipt.response,phases:{}}}})).toThrow();
+    expect(validUpdate(captured,{...captured,receipt:{...receipt,response:{...receipt.response,choice:20}}})).toBe(false);
+  });
   it('withholds hidden hands, scores and answers from unfinished public links',()=>{
     const q=question(),answer={body:'An explanation',updated:new Date().toISOString()};
     const shown=publicQuestion(q,answer);
@@ -43,6 +56,17 @@ describe('durable anonymous notebook',()=>{
     const tokens=await Promise.all([ownerToken(),ownerToken()]);expect(tokens[0]).toMatch(/^[a-f0-9]{64}$/);expect(tokens[0]).toBe(tokens[1]);
     const q=question();const [a,b]=await Promise.all([insertQuestion(q),insertQuestion({...q,id:'f'.repeat(32),note:''})]);
     expect(a.question.id).toBe(b.question.id);expect(b.question.note).toBe('Why this lead?');
+  });
+  it('lets an explicit examiner save update a bookmarked note while repeat taps preserve it',async()=>{
+    vi.stubGlobal('fetch',vi.fn().mockRejectedValue(new Error('offline')));
+    const game=decodeReplay(prefix)!;
+    const a=await saveQuestion(game,0,'review-note-test',null);
+    const b=await saveQuestion(decodeReplay(code)!,0,'review-note-test',null,'Now I have a question');
+    expect(b.question.id).toBe(a.question.id);expect(b.question.note).toBe('Now I have a question');
+    expect(b.question.snapshot).toBe(prefix);expect(b.question.replay).toBe(code);
+    const c=await saveQuestion(game,0,'review-note-test',null);
+    expect(c.question.note).toBe(b.question.note);
+    await syncQuestions();
   });
   it('keeps offline questions and later uploads the same id',async()=>{
     const q=question();await insertQuestion(q);
