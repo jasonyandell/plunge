@@ -37,8 +37,8 @@ function completePrices(workers: FakeWorker[], worlds: number) {
 }
 afterEach(() => vi.useRealTimers());
 describe('declaration pool', () => {
-  it('caps the phone default conservatively', () => {
-    expect([1,2,4,8,32].map(auctionPoolSize)).toEqual([1,2,2,2,2]);
+  it('caps the phone default at four, leaving room on smaller devices', () => {
+    expect([1,2,4,8,32,NaN].map(auctionPoolSize)).toEqual([1,1,3,4,4,2]);
   });
   it('queues independent jobs through 160 and waits for Rust to merge each full survey', async () => {
     const { workers, result } = setup(160);
@@ -63,6 +63,19 @@ describe('declaration pool', () => {
     workers[1]!.price(); vi.advanceTimersByTime(4500);
     expect(await result).toMatchObject({ worlds: 4, interruption: expect.any(String) });
     for (const worker of workers) expect(worker.terminate).toHaveBeenCalledOnce();
+  });
+  it('revalidates a prepared survey in Rust and skips already completed rounds',async()=>{
+    const workers: FakeWorker[] = [], onSurvey=vi.fn();
+    const initial={...fallback,worlds:40,route:'priced',prices:[0,1,2,3,4,5,6,7,9].map(d=>[d,'1','1'] as [number,string,string])};
+    const result=runAuctionPool(()=>{const w=new FakeWorker();workers.push(w);return w as unknown as Worker;},
+      {...call,worlds:160},undefined,2,{initial,onSurvey});
+    expect(workers[0]!.job.call).toMatchObject({auction_merge:auction,worlds:40});
+    expect(workers[0]!.job.call.receipts).toHaveLength(9);
+    workers[0]!.send({result:initial});
+    expect(workers[1]!.job.call.worlds).toBe(160);
+    completePrices(workers,160).send({result:{...initial,worlds:160}});
+    expect((await result).execution!.completed_rounds).toEqual([40,160]);
+    expect(onSurvey.mock.calls.map(([s])=>s.worlds)).toEqual([40,160]);
   });
   it('a complete set of job receipts is still unranked until Rust merges it', async () => {
     vi.useFakeTimers(); const { workers, result } = setup(4);

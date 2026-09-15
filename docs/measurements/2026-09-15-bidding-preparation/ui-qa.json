@@ -1,0 +1,13 @@
+{
+  "maxWorkers": 4,
+  "foreground_start_ms": 35.40000009536743,
+  "checks": [
+    "own-seat preparation while human bids",
+    "all three seats prepared",
+    "skip prepared rounds",
+    "start before presentation delay",
+    "minimum bid pacing",
+    "all-pass normal hand completion",
+    "workers released"
+  ]
+}

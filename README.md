@@ -43,11 +43,16 @@ research inbox and deployment details.
   best sampled make estimate is at least 75%, otherwise passes, and passes over
   partner. This is a simple initial policy over uncalibrated model estimates.
   The winning trump is remembered; it is not searched again after bidding.
-  On the phone, two independent workers share the declaration queue (one when
-  the browser reports only one processor). Each runs the same Rust player.
+  On modern phones, up to four independent workers share the declaration queue,
+  with fewer on smaller devices. Each runs the same Rust player.
   Only complete surveys are ranked, with the same samples and seeded ties.
   The entire pool stops on cancellation; a crashed job can retry once inside
   the original time budget. Ordinary play still uses one worker.
+  While you consider a bid, that same bounded pool prepares the remaining
+  computer seats at 12, then 40 worlds. Their turns continue matching completed
+  surveys toward 160; an intervening raise is evaluated afresh. Computation
+  starts immediately while bids retain their readable presentation pace.
+  Early-pass screening is an experiment, not an enabled playing rule.
 - **The table** saves games and original move scores on the device. After a hand,
   inspect a move, ask Walt to think deeper with 160 worlds, or copy a portable
   observation link for the Mac gym. Leaving a position cancels its worker.

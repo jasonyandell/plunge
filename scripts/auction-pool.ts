@@ -13,6 +13,7 @@ const comparison = (s: AuctionSurvey) => JSON.stringify([s.worlds,s.prices,s.dec
 button.onclick = async () => {
   button.disabled = true;
   const rows: unknown[] = [];
+  let prepared: AuctionSurvey | undefined, fresh: AuctionSurvey | undefined;
   const record = (row: unknown) => { rows.push(row); output.value = JSON.stringify({ userAgent: navigator.userAgent,
     hardwareConcurrency: navigator.hardwareConcurrency, rows }, null, 2); };
   try {
@@ -22,17 +23,27 @@ button.onclick = async () => {
       for (const workers of [1,2,3,4]) {
         status.textContent = `Hand ${index+1}/3, ${workers} workers…`;
         const call = { auction, worlds: 12, budget_ms: 14000 };
-        const result = checkedSurvey(auction, await runAuctionPool(create, call, undefined, workers));
+        const result = checkedSurvey(auction, await runAuctionPool(create, call, undefined, workers, {
+          onSurvey: s => { if (index === 0 && workers === 4 && s.worlds === 4) prepared = s; },
+        }));
         if (result.worlds !== 12) throw new Error('Fixture did not finish all 12 worlds: '+JSON.stringify(result));
         if (workers === 1) reference = comparison(result);
         else if (reference !== comparison(result)) throw new Error('Pool result differs from single worker');
         record({ fixture: index, workers, ...result });
+        if (index === 0 && workers === 4) fresh = result;
       }
     }
     const auction = { hand: fixtures[0]!, seat: 0, bid: 30, seed: 420914 };
+    const resumed = checkedSurvey(auction, await runAuctionPool(create, { auction, worlds: 12, budget_ms: 20000 }, undefined, 4, { initial: prepared }));
+    if (!fresh || comparison(fresh) !== comparison(resumed)) throw new Error('Prepared survey changed the fixed-size result');
+    record({ check: 'prepared-continuation', ...resumed });
+    let rejected = false;
+    try { await runAuctionPool(create, { auction: { ...auction, bid: 31 }, worlds: 12, budget_ms: 20000 }, undefined, 4, { initial: prepared }); }
+    catch { rejected = true; }
+    if (!rejected) throw new Error('Changed-bid preparation was accepted');
     // Production wall budget and a deadline which cannot fit a complete round.
     for (const budget_ms of [20000,500]) {
-      const result = checkedSurvey(auction, await runAuctionPool(create, { auction, worlds: 160, budget_ms }, undefined, 2));
+      const result = checkedSurvey(auction, await runAuctionPool(create, { auction, worlds: 160, budget_ms }, undefined, 4));
       record({ check: 'wall-budget', budget_ms, ...result });
     }
     const controller = new AbortController();

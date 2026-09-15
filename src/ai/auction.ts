@@ -14,6 +14,7 @@ export interface AuctionSurvey extends AuctionRequest {
   execution?: { kind: 'worker-pool'; workers: number; retries: number; completed_rounds: number[] };
 }
 export interface AuctionDecision { key: string; action: Action; survey: AuctionSurvey | null }
+export type AuctionEvaluator = (request: AuctionRequest, signal?: AbortSignal) => Promise<AuctionSurvey>;
 export const AUCTION_WORLDS=160;
 export const AUCTION_BUDGET_MS=20000;
 
@@ -50,7 +51,7 @@ export function checkedSurvey(req: AuctionRequest,s: AuctionSurvey): AuctionSurv
   return s;
 }
 
-export async function auctionMove(g: GameState, seat: Seat, gameId: string, previous?: AuctionSurvey, signal?: AbortSignal): Promise<AuctionDecision> {
+export async function auctionMove(g: GameState, seat: Seat, gameId: string, previous?: AuctionSurvey, signal?: AbortSignal, evaluate?: AuctionEvaluator): Promise<AuctionDecision> {
   if (g.turn!==seat) throw new Error('Not this bidder’s turn.');
   const key=auctionKey(g,gameId), actions=legalActions(g);
   const pass=actions.find(a=>a.type==='bid'&&a.bid.kind==='pass');
@@ -58,7 +59,7 @@ export async function auctionMove(g: GameState, seat: Seat, gameId: string, prev
   if (g.phase==='bidding' && pass && high && teamOf(high.seat)===teamOf(seat)) return {key,action:pass,survey:null};
   const request=auctionRequest(g,gameId);
   const survey=previous && sameRequest(request,previous) ? checkedSurvey(request,previous)
-    : checkedSurvey(request,await (NATIVE_TABLE
+    : checkedSurvey(request,await (evaluate ? evaluate(request,signal) : NATIVE_TABLE
       ? api<AuctionSurvey>('auction',{auction:request,worlds:AUCTION_WORLDS,budget_ms:AUCTION_BUDGET_MS},24000,signal)
       : runAuction({auction:request,worlds:AUCTION_WORLDS,budget_ms:AUCTION_BUDGET_MS},signal)));
   let action: Action | undefined;
@@ -69,4 +70,15 @@ export async function auctionMove(g: GameState, seat: Seat, gameId: string, prev
   else action=actions.find(a=>target(a)===request.bid);
   if (!action) throw new Error('No legal auction action.');
   return {key,action,survey};
+}
+
+/** Speculative requests predict only the current minimum raise. Actual bids
+ * always rebuild their request, so an intervening raise invalidates this work. */
+export function anticipatedAuctions(g: GameState, gameId: string, humanSeat: Seat): AuctionRequest[] {
+  if (g.phase !== 'bidding' || g.turn === null) return [];
+  const high = highBid(g.bids);
+  return Array.from({ length: 4 }, (_, i) => ((g.turn! + i) % 4) as Seat)
+    .filter(seat => seat !== humanSeat && !g.bids.some(b => b.seat === seat)
+      && !(high && teamOf(high.seat) === teamOf(seat)))
+    .map(seat => auctionRequest({ ...g, turn: seat }, gameId));
 }

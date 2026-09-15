@@ -1,6 +1,6 @@
 import type { NativeDecision, NativeRequest } from '../native';
 import type { AuctionCall, AuctionSurvey } from '../auction';
-import { runAuctionPool } from './auction-pool';
+import { runAuctionPool, auctionPoolSize, type AuctionPoolOptions } from './auction-pool';
 
 export interface PlayerCall { request: NativeRequest; worlds: number; partner: boolean; budget_ms?: number }
 
@@ -10,8 +10,8 @@ export function runPlayer(call: PlayerCall, signal?: AbortSignal): Promise<Nativ
   return runInWorker(() => new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }), call, signal);
 }
 
-export function runAuction(call: AuctionCall, signal?: AbortSignal): Promise<AuctionSurvey> {
-  return runAuctionPool(() => new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }), call, signal);
+export function runAuction(call: AuctionCall, signal?: AbortSignal, options?: AuctionPoolOptions): Promise<AuctionSurvey> {
+  return runAuctionPool(() => new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }), call, signal, auctionPoolSize(), options);
 }
 
 export function runInWorker<T extends { interruption?: string } = NativeDecision>(create: () => Worker, call: PlayerCall | AuctionCall, signal?: AbortSignal): Promise<T> {

@@ -8,13 +8,19 @@ type Work = { kind: 'merge'; call: MergeCall; attempt: number }
   | { kind: 'price'; call: PriceCall; attempt: number };
 interface Slot { worker: Worker; current?: { id: number; work: Work } }
 
-// A phone's reported core count is a ceiling, not a useful concurrency target.
+// Reserve a core for the interface on smaller devices; cap modern phones at four.
 export function auctionPoolSize(cores = navigator.hardwareConcurrency): number {
-  return cores === 1 ? 1 : 2;
+  return Number.isFinite(cores) && cores > 0 ? Math.max(1, Math.min(4, Math.floor(cores) - 1)) : 2;
+}
+
+export interface AuctionPoolOptions {
+  /** Complete earlier survey. Rust revalidates its receipts before continuing. */
+  initial?: AuctionSurvey | undefined;
+  onSurvey?: ((survey: AuctionSurvey) => void) | undefined;
 }
 
 export function runAuctionPool(create: () => Worker, call: AuctionCall, signal?: AbortSignal,
-  size = auctionPoolSize()): Promise<AuctionSurvey> {
+  size = auctionPoolSize(), options: AuctionPoolOptions = {}): Promise<AuctionSurvey> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) { reject(new DOMException('Stopped', 'AbortError')); return; }
     if (!Number.isInteger(size) || size < 1 || size > 4 || ![4, 12, 40, 160].includes(call.worlds ?? 160)
@@ -22,7 +28,11 @@ export function runAuctionPool(create: () => Worker, call: AuctionCall, signal?:
       reject(new Error('Invalid auction pool budget.')); return;
     }
     const start = performance.now(), end = start + call.budget_ms;
-    const slots: Slot[] = [], rounds = [4, 12, 40, 160].filter(n => n <= (call.worlds ?? 160));
+    const initial = options.initial;
+    if (initial && (![4,12,40,160].includes(initial.worlds) || initial.worlds > (call.worlds ?? 160))) {
+      reject(new Error('Invalid prepared auction size.')); return;
+    }
+    const slots: Slot[] = [], rounds = [4, 12, 40, 160].filter(n => n <= (call.worlds ?? 160) && n > (initial?.worlds ?? 0));
     let settled = false, sequence = 0, round = -1, retries = 0;
     let queue: number[] = [], receipts: AuctionPrice[] = [], saved: AuctionSurvey | undefined;
     const completed: number[] = [];
@@ -90,6 +100,8 @@ export function runAuctionPool(create: () => Worker, call: AuctionCall, signal?:
           // sample size and ties before producing this checkpoint.
           saved = result as AuctionSurvey;
           if (saved.worlds) completed.push(saved.worlds);
+          try { options.onSurvey?.({ ...saved, elapsed_us: Math.round((performance.now() - start) * 1000) }); }
+          catch (error) { finish(undefined, error); return; }
           if (++round === rounds.length) { finish(); return; }
           queue = [...DECLS]; receipts = []; pump();
         } else {
@@ -104,9 +116,12 @@ export function runAuctionPool(create: () => Worker, call: AuctionCall, signal?:
       for (let i = 0; i < size; i++) {
         const slot: Slot = { worker: create() }; slots.push(slot); attach(slot);
       }
-      // Ask Rust for the validated unpriced fallback before starting any jobs.
+      // Rust also validates restored preparation; no cached host ranking is trusted.
       send(slots[0]!, { kind: 'merge', attempt: 0,
-        call: { auction_merge: call.auction, worlds: 0, receipts: [] } });
+        call: { auction_merge: call.auction, worlds: initial?.worlds ?? 0,
+          receipts: initial ? initial.prices.map(price => ({ schema: 'walt-auction-price-v1',
+            auction: { hand: initial.hand, seat: initial.seat, bid: initial.bid, seed: initial.seed },
+            worlds: initial.worlds, inner_worlds: 8, price })) : [] } });
     } catch (error) { finish(undefined, error); }
   });
 }

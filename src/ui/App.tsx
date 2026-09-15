@@ -6,10 +6,10 @@
  * All decisions live in the pure store (src/ui/store.ts).
  */
 
-import { useEffect, useReducer, useState } from 'preact/hooks';
+import { useEffect, useReducer, useRef, useState } from 'preact/hooks';
 import type { Seat } from '../engine';
 import {
-  TRICK_SHOW_MS, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
+  HUMAN_SEAT, TRICK_SHOW_MS, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
 } from './store';
 import {
   BUILD_ID, UPDATE_POLL_MS, fetchRemoteVersion, updateAvailable,
@@ -18,8 +18,9 @@ import { Home, HowTo, About } from './Home';
 import { Table } from './Table';
 import { codeFromHash, decodeHand } from './share';
 import { decodeObservation } from './observation-link';
-import { api, isNative, nativeMove, type FlagRecord } from '../ai/native';
-import { auctionMove } from '../ai/auction';
+import { api, isNative, nativeMove, NATIVE_TABLE, type FlagRecord } from '../ai/native';
+import { anticipatedAuctions, auctionMove } from '../ai/auction';
+import { AuctionPreparation } from '../ai/auction-preparation';
 import './app.css';
 import { Questions } from './Questions';
 import { attachGame, syncQuestions } from '../questions/client';
@@ -46,6 +47,21 @@ export function App() {
     return () => window.removeEventListener('plunge-questions-changed', attach);
   }, [app.game, app.sessionId]);
 
+  const preparation = useRef<AuctionPreparation>();
+  useEffect(() => {
+    if (NATIVE_TABLE || !isNative(app.settings.difficulty) || app.screen !== 'table'
+      || app.scenarioGame || questions || app.game?.phase !== 'bidding') return;
+    const current = new AuctionPreparation();
+    preparation.current = current;
+    return () => { current.close(); preparation.current = undefined; };
+  }, [app.sessionId, app.game?.handNumber, app.game?.phase === 'bidding', app.screen,
+    app.scenarioGame !== null, app.settings.difficulty, questions !== null]);
+  useEffect(() => {
+    if (app.game?.turn === HUMAN_SEAT && !questions) {
+      preparation.current?.prepare(anticipatedAuctions(app.game, app.sessionId, HUMAN_SEAT));
+    } else preparation.current?.pause();
+  }, [app.game, app.sessionId, app.screen, app.settings.difficulty, questions !== null, app.scenarioGame]);
+
   // The same shared player runs through a native transport or a browser worker.
   const [thinking, setThinking] = useState<Seat | null>(null);
   const [nativeError, setNativeError] = useState<string | null>(null);
@@ -57,15 +73,20 @@ export function App() {
     if (seat !== null) {
       let alive = true;
       const controller = new AbortController();
-      const t = setTimeout(() => {
-        if (isNative(app.settings.difficulty) && app.game && ['bidding','declaring'].includes(app.game.phase)) {
-          setThinking(seat);
-          void auctionMove(app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal).then(
-            decision=>{if(alive) dispatch({type:'auction-ai',decision});},
-            (error:unknown)=>{if(alive) setNativeError(String(error));},
-          ).finally(()=>{if(alive) setThinking(null);});
-          return;
-        }
+      let t: ReturnType<typeof setTimeout> | undefined;
+      if (isNative(app.settings.difficulty) && app.game && ['bidding','declaring'].includes(app.game.phase)) {
+        // Think during the presentation pause, then reveal the bid at its usual pace.
+        const started = performance.now();
+        setThinking(seat);
+        void auctionMove(app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal,preparation.current?.evaluate).then(
+          decision => {
+            if (!alive) return;
+            t = setTimeout(() => { if (alive) dispatch({type:'auction-ai',decision}); },
+              Math.max(0, aiDelayMs(app) - (performance.now() - started)));
+          },
+          (error:unknown) => { if (alive) setNativeError(String(error)); },
+        ).finally(() => { if (alive) setThinking(null); });
+      } else t = setTimeout(() => {
         if (isNative(app.settings.difficulty) && app.game?.phase === 'playing') {
           setThinking(seat);
           void nativeMove(app.game, seat, app.settings.difficulty, app.sessionId, controller.signal).then(
@@ -78,7 +99,7 @@ export function App() {
       }, aiDelayMs(app));
       return () => {
         alive = false;
-        clearTimeout(t);
+        if (t !== undefined) clearTimeout(t);
         controller.abort();
         setThinking(null);
       };
