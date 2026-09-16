@@ -11,5 +11,5 @@ not_found_handling = "single-page-application"
 [[d1_databases]]
 binding = "QUESTIONS"
 database_name = "plunge-questions"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "98730843-94b0-4507-b3c1-91fb12f0702a"
 migrations_dir = "migrations"

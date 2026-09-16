@@ -86,6 +86,14 @@ UUID is only an initial/local placeholder; setup resolves it before deployment.
 Once the real database id is recorded in `wrangler.toml`, setup verifies it matches
 the account and refuses a different database. No paid resources are requested.
 
+The production database is now recorded in `wrangler.toml`. The repository's
+deployment secret uses the existing macOS Keychain entry `cloudflare-table42`,
+which includes D1 write and Workers deployment permission for this account.
+`cloudflare-workers-deploy-token` only has D1 read permission and cannot apply
+these migrations. Keep the global API key out of GitHub Actions. For local reviewer
+commands, load the scoped token into `CLOUDFLARE_API_TOKEN` without printing it and
+set `CLOUDFLARE_ACCOUNT_ID` to the account documented in the global Cloudflare skill.
+
 ## Verification
 
 Tests cover partial replay, immutable evidence, anonymous ownership boundaries,
