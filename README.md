@@ -84,6 +84,12 @@ To import a new shared player after committing its source:
 python3 scripts/update-walt.py /path/to/texas-42
 ```
 
+The importer requires committed Walt sources and builds a fresh, single-threaded
+`wasm32-unknown-unknown` artifact with `cpu-speedups` explicitly enabled. It clears
+inherited native compiler flags and records the feature set, release profile,
+compiler, source digest and asset digest. The embedded Scheme inputs are part of
+the source digest. Pass `--receipt /fresh/path` to keep build provenance.
+
 Commit the resulting wasm and manifest together. Builds verify the asset hash
 and host imports. The source repository's `walt/walt-player/README.md` documents
 budgets, protocol, tests and the native table launcher. The Mac's original-score

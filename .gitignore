@@ -4,3 +4,6 @@ dist/
 *.local
 .wrangler/
 scratch/
+
+# Local Python release-tool caches
+__pycache__/

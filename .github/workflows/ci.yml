@@ -15,5 +15,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: python3 scripts/test-update-walt.py
       - run: npm test
       - run: npm run build
