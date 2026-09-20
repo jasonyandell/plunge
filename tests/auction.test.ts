@@ -15,8 +15,10 @@ describe('regular Walt auction',()=>{
   it('starts with an open auction and rotates it on the next hand',()=>{
     let s=reducer(initialApp(),{type:'new-game',seed:'auction',sessionId:'test'});
     expect(s.game!.phase).toBe('bidding');expect(s.game!.bids).toEqual([]);
-    for(let i=0;i<4;i++) s={...s,game:applyAction(s.game!,{type:'bid',bid:{kind:'pass'}})};
-    expect(s.game!.thrownIn).toBe(true);
+    for(let i=0;i<3;i++) s={...s,game:applyAction(s.game!,{type:'bid',bid:{kind:'pass'}})};
+    expect(legalActions(s.game!)).not.toContainEqual({type:'bid',bid:{kind:'pass'}});
+    while(s.game!.phase!=='hand-over') s={...s,game:applyAction(s.game!,legalActions(s.game!)[0]!)};
+    expect(s.game!.thrownIn).toBe(false);
     const shaker=s.game!.shaker;
     s=reducer(s,{type:'human',action:{type:'next-hand'}});
     expect(s.game!.bids).toEqual([]);expect(s.game!.shaker).toBe((shaker+1)%4);

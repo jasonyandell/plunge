@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import type { Action, GameState, Seat } from '../src/engine';
-import { CASUAL_CONFIG, applyAction, legalActions, newGame } from '../src/engine';
+import { CASUAL_CONFIG, PLUNGE_CONFIG, applyAction, legalActions, newGame } from '../src/engine';
 import type { Difficulty } from '../src/ai';
 import { chooseAction as legacyChoice } from '../src/ai';
 // Store transition tests inject a cheap legal policy; the asynchronous Walt
@@ -111,7 +111,7 @@ describe('store: new game / settings', () => {
     let app = initialApp(null);
     app = reducer(app, { type: 'set-preset', preset: 'tournament' });
     app = reducer(app, { type: 'new-game', seed: 'x' });
-    expect(app.game!.config).toEqual(configFor('tournament'));
+    expect(app.game!.config).toEqual(PLUNGE_CONFIG);
   });
 
   it('persists deeper play without replacing the current game', () => {

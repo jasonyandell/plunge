@@ -29,6 +29,11 @@ stays fixed; the finished hand is attached afterward. No login required.
 See [the question notebook guide](docs-question-notebook.md) for the private
 research inbox and deployment details.
 
+The shaker (last bidder) must bid at least 30 when the first three players pass.
+This applies to new hands and resumed auctions; hands already in play keep
+their recorded rules. Question links preserve the house rule (`v1f`), while
+older casual/tournament links keep their original rules.
+
 ## What's inside
 
 - **Walt** is one shared Rust player, native on the Mac and WebAssembly on the

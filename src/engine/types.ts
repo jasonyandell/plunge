@@ -89,6 +89,9 @@ export const TOURNAMENT_CONFIG: GameConfig = {
   allPass: 'reshake',
 };
 
+/** Plunge's straight house game: the last bidder must take at least 30. */
+export const PLUNGE_CONFIG: GameConfig = { ...TOURNAMENT_CONFIG, allPass: 'force-30' };
+
 // ---------------------------------------------------------------------------
 // Bids and contracts
 // ---------------------------------------------------------------------------

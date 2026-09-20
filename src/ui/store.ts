@@ -26,6 +26,7 @@ import {
   CALLED_SUIT,
   CASUAL_CONFIG,
   TOURNAMENT_CONFIG,
+  PLUNGE_CONFIG,
   applyAction,
   fromId,
   ledSuitOf,
@@ -113,7 +114,9 @@ export function initialApp(saved?: SavedState | null): AppState {
     screen: 'home',
     settings: { ...DEFAULT_SETTINGS, ...saved?.settings },
     seed: saved?.seed ?? 'plunge',
-    game: saved?.game ?? null,
+    // Apply the house rule to a resumed auction; preserve already-played hands.
+    game: saved?.game?.phase === 'bidding'
+      ? { ...saved.game, config: PLUNGE_CONFIG } : saved?.game ?? null,
     aiMoves: saved?.aiMoves ?? 0,
     showTrick: false,
     scenarioGame: null,
@@ -173,7 +176,7 @@ export function reducer(s: AppState, e: AppEvent): AppState {
         nativeReceipts: {},
         auctionSurveys: {},
         game: isNative(s.settings.difficulty)
-          ? catalogueDeal(newGame(TOURNAMENT_CONFIG,e.seed),e.seed)
+          ? catalogueDeal(newGame(PLUNGE_CONFIG,e.seed),e.seed)
           : newGame(configFor(s.settings.preset),e.seed),
       };
     case 'resume':
@@ -187,7 +190,7 @@ export function reducer(s: AppState, e: AppEvent): AppState {
       let game: GameState;
       try {
         game = applyAction(s.game, e.action);
-        if (e.action.type === 'next-hand' && isNative(s.settings.difficulty)) game=catalogueDeal(game,s.seed);
+        if (e.action.type === 'next-hand' && isNative(s.settings.difficulty)) game=catalogueDeal({ ...game, config: PLUNGE_CONFIG },s.seed);
       } catch {
         return s; // defensive: stale tap / double tap — ignore
       }

@@ -111,8 +111,9 @@ export function HowTo({ dispatch }: { dispatch: (e: AppEvent) => void }) {
         <p>
           Starting left of the shaker, each player bids once or passes. Bidding starts
           at 30 and each new bid must be higher. Bid 42 (one mark) or more marks to
-          promise all seven tricks. The winner names trump and leads. If everybody
-          passes, shake again. Walt’s bids are ready when it’s time to speak.
+          promise all seven tricks. If the first three players pass, the shaker
+          must bid at least 30. The winner names trump and leads. Walt’s bids are
+          ready when it’s time to speak.
         </p>
         <h2>Trumps and following</h2>
         <p>

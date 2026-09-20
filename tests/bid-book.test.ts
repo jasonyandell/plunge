@@ -67,10 +67,12 @@ describe('empirical bid book',()=>{
   const seeds=Array.from({length:125},(_,i)=>catalogueSeed('match',i+1));expect(new Set(seeds).size).toBe(125);
   expect(seeds).toEqual(Array.from({length:125},(_,i)=>catalogueSeed('match',i+1)));
   let s=reducer(initialApp(),{type:'new-game',seed:'catalogue',sessionId:'catalogue'});
-  for(let i=0;i<7;i++){
+  for(let i=0;i<6;i++){
    const g=s.game!;for(let seat=0;seat<4;seat++)expect(playedHand(g.hands[seat]!.map(tileOfId),seat)).toBeDefined();
    const resumed=initialApp(toSaved(s));expect(resumed.game).toEqual(g);
-   for(let pass=0;pass<4;pass++)s={...s,game:applyAction(s.game!,{type:'bid',bid:{kind:'pass'}})};
+   for(let pass=0;pass<3;pass++)s={...s,game:applyAction(s.game!,{type:'bid',bid:{kind:'pass'}})};
+   expect(legalActions(s.game!)).not.toContainEqual({type:'bid',bid:{kind:'pass'}});
+   while(s.game!.phase!=='hand-over')s={...s,game:applyAction(s.game!,legalActions(s.game!)[0]!)};
    s=reducer(s,{type:'human',action:{type:'next-hand'}});expect(s.game!.handNumber).toBe(g.handNumber+1);expect(s.game!.shaker).toBe((g.shaker+1)%4);
   }
   const plain=newGame(TOURNAMENT_CONFIG,'carry'),changed=catalogueDeal({...plain,marks:[3,4],handNumber:8},'carry');

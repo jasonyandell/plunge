@@ -5,7 +5,7 @@
 
 import { useState } from 'preact/hooks';
 import type { Bid, Declaration, GameState } from '../engine';
-import { highBid, legalBids, legalDeclarations } from '../engine';
+import { highBid, isForcedBidTurn, legalBids, legalDeclarations } from '../engine';
 import type { AppEvent } from './store';
 import {
   HUMAN_SEAT, PIP_SUIT_NAMES, SEAT_NAMES,
@@ -55,7 +55,7 @@ export function BidSheet({ g, dispatch }: SheetProps) {
   return (
     <div class="sheet bid-sheet" role="dialog" aria-label="Your bid">
       <h2 class="sheet-title">Your bid</h2>
-      <p class="hint">{!canPass ? 'Choose your bid.' : currentBid ? `The bid is ${bidLabel(currentBid.bid)}. Raise it or pass.` : 'Bidding starts at 30. Bid or pass.'}</p>
+      <p class="hint">{isForcedBidTurn(g) ? 'Everyone passed. You must bid at least 30.' : !canPass ? 'Choose your bid.' : currentBid ? `The bid is ${bidLabel(currentBid.bid)}. Raise it or pass.` : 'Bidding starts at 30. Bid or pass.'}</p>
       {pt !== null && minPt !== null && maxPt !== null && (
         <div class="bid-stepper">
           <button
