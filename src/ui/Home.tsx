@@ -100,7 +100,7 @@ export function HowTo({ dispatch }: { dispatch: (e: AppEvent) => void }) {
           Starting left of the shaker, each player bids once or passes. Bidding starts
           at 30 and each new bid must be higher. Bid 42 (one mark) or more marks to
           promise all seven tricks. The winner names trump and leads. If everybody
-          passes, shake again. Walt may take a few seconds to consider its bid.
+          passes, shake again. Walt’s bids are ready when it’s time to speak.
         </p>
         <h2>Trumps and following</h2>
         <p>
@@ -138,6 +138,10 @@ export function About({ dispatch }: { dispatch: (e: AppEvent) => void }) {
           <strong>Plunge</strong> is a free, open-source, single-player game of 42:
           you and Gran against Earl and Ruby. No ads, no accounts, no sound — just
           dominoes and a wood table.
+        </p>
+        <p>
+          Quick bidding: Walt uses results from games already played. This edition
+          draws from a shuffled collection of 125 deals, with fresh choices during play.
         </p>
         <p class="fine">
           Straight 42 with Walt. One shared player on the Mac and in your browser.

@@ -1,9 +1,11 @@
-/** Auction policy at the table boundary. Rust compares declarations using only
- * this bidder's own hand. The engine owns the bid ladder and validates actions. */
+/** Auction policy at the table boundary. Recorded complete-game scores handle
+ * known hands; uncovered hands retain the live solver. The engine owns legality. */
 import { legalActions, highBid, teamOf, type Action, type GameState, type Seat } from '../engine';
 import { NATIVE_TABLE, api, nativeSeed } from './native';
 import { tileOfId, waltContractBid, waltDeclarationOf } from './walt/requests';
 import { runAuction } from './phone/client';
+import { playedHand, type BookAuctionSurvey } from './bid-book';
+import { bookAuction } from './book-auction';
 
 export interface AuctionRequest { hand: number[]; seat: number; bid: number; seed: number }
 export interface AuctionCall { auction: AuctionRequest; budget_ms: number; worlds?: number }
@@ -13,7 +15,8 @@ export interface AuctionSurvey extends AuctionRequest {
   interruption?: string;
   execution?: { kind: 'worker-pool'; workers: number; retries: number; completed_rounds: number[] };
 }
-export interface AuctionDecision { key: string; action: Action; survey: AuctionSurvey | null }
+export type AuctionEvidence = AuctionSurvey | BookAuctionSurvey;
+export interface AuctionDecision { key: string; action: Action; survey: AuctionEvidence | null }
 export type AuctionEvaluator = (request: AuctionRequest, signal?: AbortSignal) => Promise<AuctionSurvey>;
 export const AUCTION_WORLDS=160;
 export const AUCTION_BUDGET_MS=20000;
@@ -51,14 +54,17 @@ export function checkedSurvey(req: AuctionRequest,s: AuctionSurvey): AuctionSurv
   return s;
 }
 
-export async function auctionMove(g: GameState, seat: Seat, gameId: string, previous?: AuctionSurvey, signal?: AbortSignal, evaluate?: AuctionEvaluator): Promise<AuctionDecision> {
+export async function auctionMove(g: GameState, seat: Seat, gameId: string, previous?: AuctionEvidence, signal?: AbortSignal, evaluate?: AuctionEvaluator): Promise<AuctionDecision> {
+  if (signal?.aborted) throw new DOMException('Stopped','AbortError');
   if (g.turn!==seat) throw new Error('Not this bidder’s turn.');
   const key=auctionKey(g,gameId), actions=legalActions(g);
   const pass=actions.find(a=>a.type==='bid'&&a.bid.kind==='pass');
   const high=highBid(g.bids);
   if (g.phase==='bidding' && pass && high && teamOf(high.seat)===teamOf(seat)) return {key,action:pass,survey:null};
   const request=auctionRequest(g,gameId);
-  const survey=previous && sameRequest(request,previous) ? checkedSurvey(request,previous)
+  const fromBook=bookAuction(g,request);
+  if (fromBook) return {key,...fromBook};
+  const survey=previous?.schema==='walt-auction-v1' && sameRequest(request,previous) ? checkedSurvey(request,previous)
     : checkedSurvey(request,await (evaluate ? evaluate(request,signal) : NATIVE_TABLE
       ? api<AuctionSurvey>('auction',{auction:request,worlds:AUCTION_WORLDS,budget_ms:AUCTION_BUDGET_MS},24000,signal)
       : runAuction({auction:request,worlds:AUCTION_WORLDS,budget_ms:AUCTION_BUDGET_MS},signal)));
@@ -80,5 +86,6 @@ export function anticipatedAuctions(g: GameState, gameId: string, humanSeat: Sea
   return Array.from({ length: 4 }, (_, i) => ((g.turn! + i) % 4) as Seat)
     .filter(seat => seat !== humanSeat && !g.bids.some(b => b.seat === seat)
       && !(high && teamOf(high.seat) === teamOf(seat)))
-    .map(seat => auctionRequest({ ...g, turn: seat }, gameId));
+    .map(seat => auctionRequest({ ...g, turn: seat }, gameId))
+    .filter(request => !playedHand(request.hand,request.seat));
 }
