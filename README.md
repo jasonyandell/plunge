@@ -36,7 +36,10 @@ research inbox and deployment details.
   40/8 and an optional bounded partner count-offer check. The bidder's opening
   lead asks deeper L1 for 160 worlds with 20 seconds, retaining a complete
   40-world comparison first; later play keeps 40 worlds and 14 seconds. The
-  deeper opening does not reinterpret the 40/8-only partner check. No hidden
+  **Think deeper** switch in Home → Advanced settings applies that 160-world,
+  20-second profile to every computer move. It defaults off and persists across
+  reloads; turn it off to restore normal later play. Deeper play skips the
+  40/8-only partner check, and does not change the empirical bid book. No hidden
   hands cross the live decision boundary.
 - **Bidding** compares all nine declarations at the cheapest legal raise. Each
   computer has 20 seconds for complete 4/12/40/160-world surveys. It bids when the

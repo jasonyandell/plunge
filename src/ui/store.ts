@@ -49,9 +49,10 @@ export type Preset = 'casual' | 'tournament';
 export interface Settings {
   readonly difficulty: Difficulty;
   readonly preset: Preset;
+  readonly thinkDeeper: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { difficulty: 'native-partner', preset: 'tournament' };
+export const DEFAULT_SETTINGS: Settings = { difficulty: 'native-partner', preset: 'tournament', thinkDeeper: false };
 
 /** Rotate the bidder with the shaker; use real engine auction transitions. */
 export function practice30(game: GameState): GameState {
@@ -94,6 +95,7 @@ export type AppEvent =
   | { readonly type: 'go'; readonly screen: Screen }
   | { readonly type: 'set-difficulty'; readonly difficulty: Difficulty }
   | { readonly type: 'set-preset'; readonly preset: Preset }
+  | { readonly type: 'set-think-deeper'; readonly enabled: boolean }
   | { readonly type: 'new-game'; readonly seed: string; readonly sessionId?: string }
   | { readonly type: 'resume' }
   | { readonly type: 'human'; readonly action: Action }
@@ -109,7 +111,7 @@ export function initialApp(saved?: SavedState | null): AppState {
   if (saved && !isNative(saved.settings.difficulty)) saved = null;
   return {
     screen: 'home',
-    settings: saved?.settings ?? DEFAULT_SETTINGS,
+    settings: { ...DEFAULT_SETTINGS, ...saved?.settings },
     seed: saved?.seed ?? 'plunge',
     game: saved?.game ?? null,
     aiMoves: saved?.aiMoves ?? 0,
@@ -156,6 +158,8 @@ export function reducer(s: AppState, e: AppEvent): AppState {
         preset: isNative(e.difficulty) ? 'tournament' : s.settings.preset } };
     case 'set-preset':
       return { ...s, settings: { ...s.settings, preset: e.preset } };
+    case 'set-think-deeper':
+      return { ...s, settings: { ...s.settings, thinkDeeper: e.enabled } };
     case 'new-game':
       return {
         ...s,
@@ -287,6 +291,7 @@ export function loadApp(storage: StorageLike): SavedState | null {
     if (p === null || typeof p !== 'object' || p.v !== 1) return null;
     if (!DIFFICULTIES.includes(p.settings?.difficulty)) return null;
     if (!PRESETS.includes(p.settings?.preset)) return null;
+    if (p.settings.thinkDeeper !== undefined && typeof p.settings.thinkDeeper !== 'boolean') return null;
     if (typeof p.seed !== 'string' || typeof p.aiMoves !== 'number') return null;
     if (p.sessionId !== undefined && (typeof p.sessionId !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(p.sessionId))) return null;
     if (p.nativeReceipts !== undefined && (typeof p.nativeReceipts !== 'object' || p.nativeReceipts === null
@@ -297,7 +302,7 @@ export function loadApp(storage: StorageLike): SavedState | null {
       if (!Array.isArray(g.hands) || g.hands.length !== 4) return null;
       if (!Array.isArray(g.marks) || g.marks.length !== 2) return null;
     }
-    return p;
+    return { ...p, settings: { ...p.settings, thinkDeeper: p.settings.thinkDeeper ?? false } };
   } catch {
     return null;
   }

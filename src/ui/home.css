@@ -58,6 +58,16 @@
 .home .text-btn { color: var(--teal-ink); }
 .doc .text-btn { color: var(--teal-bright); }
 .home-settings { margin-top: 10px; }
+.thinking-switch {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  width: 100%; min-height: 44px; padding: 0; border: 0; border-radius: 8px;
+  color: var(--brown-9); background: transparent; font-size: 14px; font-weight: 650;
+  cursor: pointer; text-align: left;
+}
+.switch-track { display: block; flex: 0 0 44px; height: 26px; padding: 3px; border-radius: 20px; background: #8c7b68; }
+.switch-track > span { display: block; width: 20px; height: 20px; border-radius: 50%; background: #fff9ed; }
+.thinking-switch[aria-checked="true"] .switch-track { background: var(--teal); }
+.thinking-switch[aria-checked="true"] .switch-track > span { transform: translateX(18px); }
 .home-settings > summary { text-align: center; font-size: 13px; color: #725a40; font-weight: 400; }
 .home-settings .native-intro { margin-bottom: 12px; }
 .home button:focus-visible { outline-color: var(--teal-ink); }

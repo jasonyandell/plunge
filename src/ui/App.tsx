@@ -89,7 +89,7 @@ export function App() {
       } else t = setTimeout(() => {
         if (isNative(app.settings.difficulty) && app.game?.phase === 'playing') {
           setThinking(seat);
-          void nativeMove(app.game, seat, app.settings.difficulty, app.sessionId, controller.signal).then(
+          void nativeMove(app.game, seat, app.settings.difficulty, app.sessionId, controller.signal, app.settings.thinkDeeper).then(
             (receipt) => { if (alive) dispatch({ type: 'native-ai', receipt }); },
             (error: unknown) => { if (alive) setNativeError(String(error)); },
           ).finally(() => { if (alive) setThinking(null); });

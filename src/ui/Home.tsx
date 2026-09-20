@@ -72,6 +72,18 @@ export function Home({ app, dispatch, onQuestions }: HomeProps) {
               ))}
             </div>
           </div>
+          <div class="setting">
+            <button type="button" role="switch" class="thinking-switch"
+              aria-checked={app.settings.thinkDeeper} aria-describedby="thinking-hint"
+              onClick={() => dispatch({ type: 'set-think-deeper', enabled: !app.settings.thinkDeeper })}>
+              <span>Think deeper</span>
+              <span class="switch-track" aria-hidden="true"><span /></span>
+            </button>
+            <p id="thinking-hint" class="setting-hint">
+              A larger sample for every computer move. May take longer. Bidding stays instant.
+              {app.settings.difficulty === 'native-partner' && ' Uses deeper analysis in place of the regular partner check.'}
+            </p>
+          </div>
           <p class="setting-hint native-intro">
             {NATIVE_TABLE ? 'Walt runs on your Mac.' : 'Walt runs right on your device.'}
             {' '}It uses only its own hand and the public plays. After a hand,

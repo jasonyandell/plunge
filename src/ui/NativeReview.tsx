@@ -127,7 +127,7 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQu
           receipt={matchedReceipt} loading={receiptLoading} />}
         {matchedReceipt ? <details class="disclosure native-receipt"><summary>Decision details</summary>
           <p>Original decision: {matchedReceipt.response.n === 160
-            ? 'Deeper L1 opening · requested 160 worlds'
+            ? 'Deeper L1 comparison · requested 160 worlds'
             : matchedReceipt.identity.player.name === 'l1-default' ? 'L1' : 'L1 + partner check'} · {(matchedReceipt.response.elapsed_us / 1e6).toFixed(2)} s</p>
           <p>{review?.status === 'changed' ? `The check changed ${pips(review.baseline)} to ${pips(review.choice)}.`
             : review?.status === 'retained' ? 'The check kept L1’s move.'
@@ -135,7 +135,7 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQu
             : review ? 'The check was unresolved; L1’s move was kept.' : matchedReceipt.response.route === 'forced' ? 'Only one legal move.' : 'The baseline player chose this move.'}</p>
           {review && (review.samples ?? 0) > 0 && <p>{review.samples} of {review.support} compatible hands compared
             {review.coverage === 'census' ? ' · full census' : ' · sampled guess'}.</p>}
-          {matchedReceipt.response.n === 160 && <p>This opening requested 160 worlds; the scores show the largest comparison that finished.</p>}
+          {matchedReceipt.response.n === 160 && <p>This move requested 160 worlds; the scores show the largest comparison that finished.</p>}
         </details> : null}
         <details class="disclosure observation-tools" open={Boolean(initialFlag)}>
         <summary>Save or share this move</summary>

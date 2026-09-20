@@ -114,6 +114,31 @@ describe('store: new game / settings', () => {
     expect(app.game!.config).toEqual(configFor('tournament'));
   });
 
+  it('persists deeper play without replacing the current game', () => {
+    const app=start(), storage=fakeStorage();
+    expect(app.settings.thinkDeeper).toBe(false);
+    const deeper=reducer(app,{type:'set-think-deeper',enabled:true});
+    expect(deeper.game).toBe(app.game);
+    saveApp(storage,deeper);
+    const restored=initialApp(loadApp(storage));
+    expect(restored.settings.thinkDeeper).toBe(true);
+    expect(restored.game).toEqual(app.game);
+    expect(reducer(restored,{type:'set-think-deeper',enabled:false}).settings.thinkDeeper).toBe(false);
+  });
+
+  it('keeps existing saves with deeper play off and rejects invalid flags', () => {
+    const app=start(), storage=fakeStorage(), saved=toSaved(app);
+    const {thinkDeeper:_,...legacySettings}=saved.settings;
+    storage.setItem(STORAGE_KEY,JSON.stringify({...saved,settings:legacySettings}));
+    const restored=initialApp(loadApp(storage));
+    expect(restored.settings.thinkDeeper).toBe(false);
+    expect(restored.game).toEqual(app.game);
+    for (const invalid of ['true',1,null]) {
+      storage.setItem(STORAGE_KEY,JSON.stringify({...saved,settings:{...saved.settings,thinkDeeper:invalid}}));
+      expect(loadApp(storage)).toBeNull();
+    }
+  });
+
   it('settings events update settings only', () => {
     let app = initialApp(null);
     app = reducer(app, { type: 'set-difficulty', difficulty: 'hard' });

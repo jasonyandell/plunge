@@ -31,6 +31,25 @@ describe('native table boundary', () => {
     expect(livePlayerCall({...openingRequest,plays:[openingRequest.seat,openingRequest.hand[0]!]},'native-l1')).toMatchObject({worlds:40,partner:false});
   });
 
+  it('can deepen every later seat with either computer setting', () => {
+    const g=opening();
+    const req=requestOf(g,g.turn!,'test');
+    for (const seat of [0,1,2,3]) for (const difficulty of ['native-l1','native-partner'] as const) {
+      const later={...req,seat,plays:[req.seat,req.hand[0]!]};
+      expect(livePlayerCall(later,difficulty,true)).toEqual({request:later,worlds:160,partner:false,budget_ms:20000});
+      expect(livePlayerCall(later,difficulty,false)).toMatchObject({worlds:40,partner:difficulty==='native-partner'});
+    }
+  });
+
+  it('sends the opt-in deeper profile to the Mac without extra game information', async () => {
+    const g=opening();
+    const fetcher=vi.fn(async () => new Response(JSON.stringify(receipt(g)),{status:200}));
+    vi.stubGlobal('fetch',fetcher);
+    await nativeMove(g,g.turn!,'native-partner','test',undefined,true);
+    const body=JSON.parse((fetcher.mock.calls[0] as unknown as [string,RequestInit])[1].body as string);
+    expect(body).toEqual({request:requestOf(g,g.turn!,'test'),player:'l1-partner-rollout',game_id:'test',hand_number:g.handNumber,think_deeper:true});
+  });
+
   it('sends only own hand and public history, independent of hidden holdings', async () => {
     const g = opening(); const seat = g.turn!;
     const others = [0,1,2,3].filter((s) => s !== seat);

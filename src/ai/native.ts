@@ -108,20 +108,21 @@ export function requestTile(tile: number): string {
   return `${hi}${tile - hi * (hi + 1) / 2}`;
 }
 
-export function livePlayerCall(request: NativeRequest, difficulty: NativeDifficulty) {
-  return request.seat === request.bidder && request.plays.length === 0
+export function livePlayerCall(request: NativeRequest, difficulty: NativeDifficulty, thinkDeeper = false) {
+  return thinkDeeper || (request.seat === request.bidder && request.plays.length === 0)
     ? { request, worlds: 160, partner: false, budget_ms: 20000 }
     : { request, worlds: 40, partner: difficulty === 'native-partner' };
 }
 
-export async function nativeMove(g: GameState, seat: Seat, difficulty: NativeDifficulty, gameId: string, signal?: AbortSignal): Promise<NativeReceipt> {
+export async function nativeMove(g: GameState, seat: Seat, difficulty: NativeDifficulty, gameId: string, signal?: AbortSignal, thinkDeeper = false): Promise<NativeReceipt> {
   const request = requestOf(g, seat, gameId);
   const player = difficulty === 'native-l1' ? 'l1-default' : 'l1-partner-rollout';
-  const call = livePlayerCall(request, difficulty);
-  const deeperOpening = call.worlds === 160;
+  const call = livePlayerCall(request, difficulty, thinkDeeper);
+  const deeper = call.worlds === 160;
   let receipt: NativeReceipt;
   if (NATIVE_TABLE) {
-    receipt = await api<NativeReceipt>('decide', { request, player, game_id: gameId, hand_number: g.handNumber }, deeperOpening ? 24000 : 18000, signal);
+    receipt = await api<NativeReceipt>('decide', { request, player, game_id: gameId, hand_number: g.handNumber,
+      ...(thinkDeeper ? { think_deeper: true } : {}) }, deeper ? 24000 : 18000, signal);
   } else {
     const response = await runPlayer(call, signal);
     const identity = { request, player: { name: player }, implementation: { ...manifest, app: BUILD_ID }, game_id: gameId, hand_number: g.handNumber };
