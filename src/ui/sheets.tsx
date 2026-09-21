@@ -20,6 +20,8 @@ interface SheetProps {
   dispatch: (e: AppEvent) => void;
 }
 
+interface AuctionSheetProps extends SheetProps { sessionId: string; onQuestion: (id: string) => void }
+
 interface EndSheetProps extends SheetProps {
   /** Swap to the hand-review card (trick-by-trick history). */
   onReview?: (() => void) | undefined;
@@ -31,7 +33,7 @@ interface EndSheetProps extends SheetProps {
 // Bidding
 // ---------------------------------------------------------------------------
 
-export function BidSheet({ g, dispatch }: SheetProps) {
+export function BidSheet({ g, dispatch, sessionId, onQuestion }: AuctionSheetProps) {
   const bids = legalBids(g);
   const currentBid = highBid(g.bids);
   const canPass = bids.some((b) => b.kind === 'pass');
@@ -57,7 +59,7 @@ export function BidSheet({ g, dispatch }: SheetProps) {
     <div class="sheet bid-sheet" role="dialog" aria-label="Your bid">
       <h2 class="sheet-title">Your bid</h2>
       <p class="hint">{isForcedBidTurn(g) ? 'Everyone passed. You must bid at least 30.' : !canPass ? 'Choose your bid.' : currentBid ? `The bid is ${bidLabel(currentBid.bid)}. Raise it or pass.` : 'Bidding starts at 30. Bid or pass.'}</p>
-      <BiddingHint g={g} />
+      <BiddingHint g={g} sessionId={sessionId} onQuestion={onQuestion} />
       {pt !== null && minPt !== null && maxPt !== null && (
         <div class="bid-stepper">
           <button
@@ -139,7 +141,7 @@ function specialHint(b: Bid & { kind: 'marks' }): string {
 // Declaring trump
 // ---------------------------------------------------------------------------
 
-export function DeclareSheet({ g, dispatch }: SheetProps) {
+export function DeclareSheet({ g, dispatch, sessionId, onQuestion }: AuctionSheetProps) {
   const decls = legalDeclarations(g);
   const forPartner =
     g.contract !== null &&
@@ -155,7 +157,7 @@ export function DeclareSheet({ g, dispatch }: SheetProps) {
     <div class="sheet declare-sheet" role="dialog" aria-label="Declare trump">
       <h2 class="sheet-title">{title}</h2>
       {forPartner && <p class="hint">Pick from your own hand — no hints across the table.</p>}
-      <BiddingHint g={g} />
+      <BiddingHint g={g} sessionId={sessionId} onQuestion={onQuestion} />
       <div class="decl-grid">
         {decls.map((d) => (
           <button

@@ -33,7 +33,8 @@ export async function ownerToken(): Promise<string> {
     tx.onabort = tx.onerror = () => reject(new Error('This browser could not save its question key.'));
   });
 }
-export const questionTarget = (q: Question): string => `${q.game_id}:${q.hand_number}:${q.ply}:${q.snapshot.slice(0,61)}`;
+export const questionTarget = (q: Question): string => `${q.game_id}:${q.hand_number}:${q.ply}:${q.snapshot.slice(0,61)}`
+  + (q.schema === 'plunge-question-v2' ? `:hint:${q.snapshot}:${q.hint_id}` : '');
 export async function listQuestions(): Promise<LocalQuestion[]> {
   const database = await db();
   return new Promise((resolve, reject) => {

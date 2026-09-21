@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Miniflare } from 'miniflare';
 import { readFile } from 'node:fs/promises';
 import worker from '../worker/index';
+import { hintQuestion, auctionFixture, bookEvidence, finish, moveFixture } from './hint-question-fixtures';
+import { encodeReplay } from '../src/engine/replay-code';
 import type { Question } from '../src/questions/model';
 const code='v1t366615143403021656463533231106250423320110060555452444122.P303132D9222132624440644255515350';
 const prefix=code.slice(0,code.indexOf('D9')+4);
@@ -55,5 +57,24 @@ describe('anonymous question service',()=>{
     expect((await call(`/${id}`,'PUT',{question:{...question,note:'x'.repeat(100000)},revision:4},token)).status).toBe(400);
     expect((await call(`/${id}`,'PUT',{question:{...question,replay:'garbage'},revision:4},token)).status).toBe(400);
     expect((await call('/admin','GET',undefined,token)).status).toBe(404);
+  });
+});
+
+describe('hint evidence through D1', () => {
+  it('stores all three hint kinds, keeps original advice, and withholds unfinished private evidence', async () => {
+    for (const [i,g] of [moveFixture(),auctionFixture(),auctionFixture(true)].entries()) {
+      const id = (i+1).toString(16).repeat(32);
+      const q = {...(g.phase === 'playing' ? hintQuestion(g) : hintQuestion(g,bookEvidence(g))),id};
+      expect((await call(`/${id}`,'PUT',{question:q,revision:1},token)).status).toBe(200);
+      const publicBefore = await (await call(`/${id}`)).json() as {question:unknown;domino:unknown};
+      expect(publicBefore.question).toBeNull(); expect(publicBefore.domino).toBeNull();
+      const changed = structuredClone(q); changed.hint!.explanation = 'Replaced';
+      expect((await call(`/${id}`,'PUT',{question:changed,revision:2},token)).status).toBe(409);
+      const complete = {...q,replay:encodeReplay(finish(g))!,note:'My question'};
+      expect((await call(`/${id}`,'PUT',{question:complete,revision:2},token)).status).toBe(200);
+      const publicAfter = await (await call(`/${id}`)).json() as {question:Question;complete:boolean};
+      expect(publicAfter.complete).toBe(true); expect(publicAfter.question.hint).toEqual(q.hint);
+      expect((await call(`/${id}`,'PUT',{question:complete,revision:3},other)).status).toBe(403);
+    }
   });
 });

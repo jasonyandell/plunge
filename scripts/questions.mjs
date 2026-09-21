@@ -19,7 +19,7 @@ function query(sql) {
 }
 try {
   if(command==='list') {
-    console.log(JSON.stringify(query(`SELECT id,created,json_extract(payload,'$.ply') AS ply,json_extract(payload,'$.note') AS note,
+    console.log(JSON.stringify(query(`SELECT id,created,json_extract(payload,'$.ply') AS ply,json_extract(payload,'$.note') AS note,COALESCE(json_extract(payload,'$.hint.kind'),'play') AS kind,
       CASE WHEN answer IS NULL THEN 'waiting' ELSE 'answered' END AS status FROM questions ORDER BY created DESC LIMIT 100;`),null,2));
   } else if(command==='get' || command==='export') {
     validId();const row=query(`SELECT payload,answer,answered_at FROM questions WHERE id=${quote(id)};`)[0];
@@ -29,8 +29,11 @@ try {
     else {
       if(!file)throw new Error('Supply an output JSON file.');
       const q=question;
-      writeFileSync(file,JSON.stringify({v:2,hand:q.replay,ply:q.ply,seed:q.seed,note:q.note,alternative:q.alternative,receipt:q.receipt,build:q.build},null,2)+'\n',{flag:'wx'});
-      console.log(`Exported ${id} to ${file}. A complete hand can be imported as a portable observation.`);
+      const hint=q.schema==='plunge-question-v2';
+      const exported=hint ? {schema:'plunge-hint-observation-v1',question:q}
+        : {v:2,hand:q.replay,ply:q.ply,seed:q.seed,note:q.note,alternative:q.alternative,receipt:q.receipt,build:q.build};
+      writeFileSync(file,JSON.stringify(exported,null,2)+'\n',{flag:'wx'});
+      console.log(`Exported ${id} to ${file}. ${hint ? 'Hint capture includes original advice and replay; it is not a played-move observation.' : 'A complete hand can be imported as a portable observation.'}`);
     }
   } else if(command==='reply') {
     validId();if(!file)throw new Error('Supply a plain text explanation file.');

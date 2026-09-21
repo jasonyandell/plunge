@@ -134,7 +134,7 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
                 : 'Your hand'}</span>
             </p>
             {humanTurn && !showingLast && !scenario && g.sittingOut === null && isNative(app.settings.difficulty) &&
-              <MoveHint key={`${app.sessionId}:${g.handNumber}:${g.tricks.length}:${g.currentTrick.length}`} g={g} sessionId={app.sessionId} />}
+              <MoveHint key={`${app.sessionId}:${g.handNumber}:${g.tricks.length}:${g.currentTrick.length}`} g={g} sessionId={app.sessionId} onQuestion={onQuestion} />}
           </div>
           {humanSitsOut ? (
             <div class="hand sit-out">
@@ -162,8 +162,8 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
       {saved && <div class="question-toast" role="status"><span>{saved.text}</span>{saved.id && <button class="text-btn" onClick={() => { onQuestion(saved.id); setSaved(null); }}>Add note</button>}</div>}
       {question && <MoveQuestionPrompt key={`${question.sessionId}:${question.game.handNumber}:${question.ply}`}
         target={question.target} label={question.label} onSave={() => bookmark(question)} onClose={() => setQuestion(null)} />}
-      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet g={g} dispatch={dispatch} />}
-      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet g={g} dispatch={dispatch} />}
+      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet g={g} dispatch={dispatch} sessionId={app.sessionId} onQuestion={onQuestion} />}
+      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet g={g} dispatch={dispatch} sessionId={app.sessionId} onQuestion={onQuestion} />}
       {g.phase === 'hand-over' && !review && (
         <HandOverSheet
           g={g}

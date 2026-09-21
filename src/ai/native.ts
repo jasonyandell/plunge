@@ -36,7 +36,7 @@ export interface NativeReceipt {
 }
 export interface NativeEstimate {
   schema: 'plunge-estimate-v1'; id: string; created: string;
-  identity: { request: NativeRequest; player: { n: number } };
+  identity: { request: NativeRequest; player: { n: number }; implementation?: unknown };
   response: NativeDecision;
 }
 export interface FlagRecord {
@@ -71,7 +71,7 @@ export async function api<T>(path: string, body?: unknown, milliseconds = 18000,
       const response = await runPlayer({ request, worlds, partner: false,
         ...(worlds === 160 ? { budget_ms: 20000 } : {}) }, signal);
       return { schema: 'plunge-estimate-v1', id: await digest({ request, worlds, response }),
-        created: new Date().toISOString(), identity: { request, player: { n: worlds } }, response } as T;
+        created: new Date().toISOString(), identity: { request, player: { n: worlds }, implementation: { ...manifest, app: BUILD_ID } }, response } as T;
     }
     throw new Error('This operation needs the Mac gym. Copy an observation link to bring the hand back.');
   }

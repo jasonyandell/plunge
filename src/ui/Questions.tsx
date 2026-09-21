@@ -3,10 +3,11 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { decodeReplay } from '../engine/replay-code';
 import { type AppEvent, SEAT_NAMES, contractLabel, declLabel } from './store';
 import { editNote, getPublicQuestion, listQuestions, questionLink, refreshQuestions } from '../questions/client';
-import { publicQuestion, type LocalQuestion, type PublicQuestion } from '../questions/model';
+import { ownerQuestion, type LocalQuestion, type PublicQuestion } from '../questions/model';
 import { NativeStats } from './NativeStats';
 import { reviewPosition } from '../ai/native-analysis';
 import { TrickHistory } from './TrickHistory';
+import { SavedHint } from './SavedHint';
 import { Domino } from './Domino';
 import './questions.css';
 
@@ -47,10 +48,10 @@ export function Questions({ initialId, onClose, dispatch }: {
       .catch(()=>{if(live)setNotice('A shared question needs a connection and a completed upload. Saved copies still work here.');});
     return()=>{live=false;};
   },[id,Boolean(owned)]);
-  const current=owned ? publicQuestion(owned.question,owned.answer) : shared;
+  const current=owned ? ownerQuestion(owned.question,owned.answer) : shared;
   const q=current?.question;
-  const game=q ? decodeReplay(q.replay) : null;
-  const sel=q ? {trick:Math.floor(q.ply/4),play:q.ply%4} : null;
+  const game=q && current?.complete ? decodeReplay(q.replay) : null;
+  const sel=q?.schema === 'plunge-question-v1' ? {trick:Math.floor(q.ply/4),play:q.ply%4} : null;
   const position=game && sel && q ? reviewPosition(game,sel,q.seed) : null;
   const choose=(next:string|null)=>{setId(next);setNotice('');};
   const copy=async()=>{
@@ -70,15 +71,15 @@ export function Questions({ initialId, onClose, dispatch }: {
     </header>
     <div class="questions-body">
       {!id ? <>
-        <p class="question-intro">Something catch your eye? Tap a played domino, then <strong>Why this move?</strong> We’ll keep the moment here for later.</p>
+        <p class="question-intro">Something catch your eye? Tap a played domino, then <strong>Why this move?</strong> For advice, tap <strong>Why this hint?</strong> inside a hint. We’ll keep the moment here for later.</p>
         <p class="setting-hint">Saved on this device and sent anonymously for review. No account needed.</p>
         {loading && !items.length && <p role="status">Opening your notebook…</p>}
         {!loading && !items.length && <p class="questions-empty">No questions yet. There’s a whole table of possibilities.</p>}
         <div class="questions-list">{items.map(item=>{
-          const p=publicQuestion(item.question,item.answer);
+          const p=ownerQuestion(item.question,item.answer);
           return <button class="question-item" key={p.id} onClick={()=>choose(p.id)}>
-            <Domino id={p.domino} orientation="h" />
-            <span><strong>{SEAT_NAMES[p.seat]} played {p.domino.split('').join('–')}</strong>
+            <QuestionIcon question={p} />
+            <span><strong>{questionTitle(p)}</strong>
               <span>{p.note || 'What was the thinking here?'}</span>
               <small>{item.answer ? 'Explanation ready' : item.revision>item.syncedRevision ? 'Saved here · waiting to send' : 'Sent for later'}
                 {' · '}{new Date(p.created).toLocaleDateString()}</small></span>
@@ -86,9 +87,9 @@ export function Questions({ initialId, onClose, dispatch }: {
           </button>;
         })}</div>
       </> : current ? <>
-        <div class="question-move"><Domino id={current.domino} orientation="h" />
-          <div><h3>{SEAT_NAMES[current.seat]} played {current.domino.split('').join('–')}</h3>
-            <p>Trick {Math.floor(current.ply/4)+1} · play {current.ply%4+1} of the trick</p></div></div>
+        <div class="question-move"><QuestionIcon question={current} />
+          <div><h3>{questionTitle(current)}</h3>
+            <p>{current.kind === 'bid' ? 'Before your bid' : current.kind === 'trump' ? 'Before choosing trump' : `Trick ${Math.floor(current.ply/4)+1} · ${current.kind === 'move' ? 'before ' : ''}play ${current.ply%4+1} of the trick`}</p></div></div>
         {owned && <p class="question-status" role="status">{owned.revision>owned.syncedRevision ? 'Saved on this device. Sending when connected.' : 'Saved here and sent anonymously for review.'}</p>}
         {editing ? <label class="native-label">What caught your eye?
           <textarea autoFocus maxLength={4000} value={note} onInput={e=>setNote(e.currentTarget.value)} />
@@ -100,7 +101,11 @@ export function Questions({ initialId, onClose, dispatch }: {
         </div>}
         {current.answer ? <section class="question-answer"><h3>A closer look</h3><p>{current.answer.body}</p></section>
           : <p class="setting-hint">Saved for a later explanation. Interesting questions help us learn and improve Walt.</p>}
-        {!current.complete && <p class="question-wait">Finish the hand to see the hands and move scores. Your question is already safe here.</p>}
+        {!current.complete && <p class="question-wait">{current.kind === 'play' ? 'Finish the hand to see the hands and move scores.' : 'The hint details stay private until you finish the hand; the short link already shares your note.'} Your question is already safe here.</p>}
+        {q?.schema === 'plunge-question-v2' && <>
+          <SavedHint key={q.id} question={q} complete={current.complete} />
+          {game && <button class="text-btn" onClick={() => { dispatch({ type: 'view-scenario', game }); onClose(); }}>Explore the whole hand</button>}
+        </>}
         {game && q && sel && position && <div class="native-review">
           <p class="question-contract">{game.declarer!==null && SEAT_NAMES[game.declarer]} bid {game.contract && contractLabel(game.contract)}
             {game.declaration && ` in ${declLabel(game.declaration)}`} · Us {game.points[0]} · Them {game.points[1]}.</p>
@@ -123,4 +128,15 @@ export function Questions({ initialId, onClose, dispatch }: {
       </> : <button class="big-btn" onClick={onClose}>Back to the game</button>}
     </footer>
   </dialog>;
+}
+
+function questionTitle(q: PublicQuestion): string {
+  if (q.kind === 'bid') return q.question?.hint?.kind === 'bid' ? q.question.hint.heading : 'A question about a bidding hint';
+  if (q.kind === 'trump') return 'A question about choosing trump';
+  if (q.kind === 'move') return q.domino ? `Walt suggested ${q.domino.split('').join('–')}` : 'A question about a move hint';
+  return `${SEAT_NAMES[q.seat]} played ${q.domino?.split('').join('–')}`;
+}
+function QuestionIcon({ question: q }: { question: PublicQuestion }) {
+  return q.domino ? <Domino id={q.domino} orientation="h" />
+    : <span class="question-hint-icon" aria-hidden="true">{q.kind === 'bid' ? 'Bid' : q.kind === 'trump' ? 'Trump' : 'Hint'}</span>;
 }

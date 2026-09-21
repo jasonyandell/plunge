@@ -10,6 +10,7 @@ export interface Hint {
   choice: number | null;
   forced: boolean;
   stats: MoveStats | null;
+  estimate: NativeEstimate | null;
 }
 
 export async function getHint(g: GameState, sessionId: string, worlds: 40 | 160, signal?: AbortSignal): Promise<Hint> {
@@ -17,7 +18,7 @@ export async function getHint(g: GameState, sessionId: string, worlds: 40 | 160,
   if (g.phase !== 'playing' || g.turn !== 0) throw new Error('Hints are for your turn.');
   const request = requestOf(g, 0, sessionId);
   const legal = legalDominoes(g).map(tileOfId);
-  if (legal.length === 1) return { request, requestedWorlds: worlds, choice: legal[0]!, forced: true, stats: null };
+  if (legal.length === 1) return { request, requestedWorlds: worlds, choice: legal[0]!, forced: true, stats: null, estimate: null };
   const estimate = await api<NativeEstimate>('estimates', { request, worlds }, worlds === 160 ? 24000 : 18000, signal);
   if (signal?.aborted) throw new DOMException('Stopped', 'AbortError');
   if (estimate.schema !== 'plunge-estimate-v1' || requestKey(estimate.identity.request) !== requestKey(request)
@@ -27,9 +28,9 @@ export async function getHint(g: GameState, sessionId: string, worlds: 40 | 160,
     || JSON.stringify(response.points) !== JSON.stringify(g.points)) throw new Error('The hint disagrees with the table.');
   const stats = decisionStats(response, request, legal);
   // A legal emergency fallback is not a measured recommendation.
-  if (!stats) return { request, requestedWorlds: worlds, choice: null, forced: false, stats: null };
+  if (!stats) return { request, requestedWorlds: worlds, choice: null, forced: false, stats: null, estimate };
   if (!stats.options.some(a => a.tile === response.choice && a.best)) throw new Error('The hint disagrees with its scores.');
-  return { request, requestedWorlds: worlds, choice: response.choice, forced: false, stats };
+  return { request, requestedWorlds: worlds, choice: response.choice, forced: false, stats, estimate };
 }
 
 /** Explain only measured comparisons, never invent a strategic motive. */

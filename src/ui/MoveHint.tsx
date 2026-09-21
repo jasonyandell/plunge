@@ -3,6 +3,7 @@ import { countValue, fromId, trickWinnerIndex, type GameState } from '../engine'
 import { requestTile } from '../ai/native';
 import { getHint, hintExplanation, type Hint } from '../ai/hint';
 import { Domino } from './Domino';
+import { SaveHint } from './SaveHint';
 import { MoveScores } from './MoveScores';
 import { SEAT_NAMES, ledChip, trumpChip } from './store';
 import './hint.css';
@@ -20,7 +21,7 @@ export function hintTrickEffect(g: GameState, tile: number): string {
 }
 
 /** Parent keys this component by position. Closing or leaving cancels its worker. */
-export function MoveHint({ g, sessionId }: { g: GameState; sessionId: string }) {
+export function MoveHint({ g, sessionId, onQuestion }: { g: GameState; sessionId: string; onQuestion: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const [hint, setHint] = useState<Hint | null>(null);
   const [busy, setBusy] = useState(false);
@@ -76,6 +77,10 @@ export function MoveHint({ g, sessionId }: { g: GameState; sessionId: string }) 
             <p class="setting-hint">Hints use your hand and public plays. They compare the baseline player’s outcomes without the separate partner check.</p>
           </details>
         </>}
+        {hint && <SaveHint g={g} sessionId={sessionId} disabled={busy} evidence={{ kind: 'move',
+          requested_worlds: hint.requestedWorlds, choice: tile, forced: hint.forced, estimate: hint.estimate,
+          explanation: hintExplanation(hint), context: hintTrickEffect(g, tile) }}
+          onSaved={id => { close(); onQuestion(id); }} />}
       </>}
       {busy && <p role="status">Walt is comparing your options…</p>}
       {error && <p role="alert" class="native-warning">Walt couldn’t finish a new comparison. {tile !== null ? 'The previous hint is still shown.' : 'You can retry or keep playing.'}</p>}

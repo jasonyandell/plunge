@@ -5,6 +5,13 @@ save the play for later. The first tap alone does not save anything; tapping awa
 or pressing Escape dismisses the prompt. It keeps the selected play even if the
 table advances. The trick history uses the same interaction, so a question can
 be saved after a trick clears.
+Each move, bidding and trump hint also has **Why this hint?**. It saves the advice
+before you act and opens the same notebook for a note or short link. A move hint
+retains the exact completed evaluation (including fallback/deeper sample counts
+and implementation identity when available); auction hints retain the book identity,
+all nine score panels, the recommendation and the target being explored. It never
+reruns Walt just to save or reopen advice. Repeated saves of the same capture keep
+one note; a different or deeper hint has separate evidence.
 **Add note** opens the saved question. **Your questions** on the home screen lists
 all questions from that browser. Opening the notebook pauses computer play; closing
 it resumes. After a hand, the existing examiner also has **Save this question**.
@@ -24,6 +31,16 @@ when that same game and hand finish, including after a reload. An abandoned hand
 remains a useful partial record; it is never filled in with a simulated outcome.
 A missing original receipt is retried without losing the bookmark.
 
+`plunge-question-v2` is specifically a pre-action hint capture. Its `snapshot` ends
+before a play, bid or declaration; `hint` and `hint_id` are immutable. A future
+actual move is never fabricated from the recommendation. The original text,
+score evidence and comparison view survive a later different choice or a newer
+book/player. Completion attaches the real continuation exactly as for play notes.
+The browser can inspect its own hint immediately; public links withhold its held
+domino, hand and scores until the hand finishes. Before then the link shares the
+note and hint category. Partial hands remain available in the private research
+inbox. Normal played-move questions retain their v1 format.
+
 The server reconstructs both replays with the rules engine and checks that a
 receipt names this exact own/public decision. These are client-supplied research
 observations, not cryptographically authenticated claims of honest play. The live
@@ -31,7 +48,8 @@ Walt chooser receives no new fields or access to other hands.
 
 `/#question=<opaque id>` is a shareable, read-only link. Until the recorded hand
 finishes, that endpoint exposes only the selected public move and note. It omits
-the deal, receipt and any reviewer explanation. Afterward it includes the replay
+the deal, receipt and any reviewer explanation. For a hint it also omits the suggested
+domino and private score evidence. Afterward it includes the replay
 and original evidence so the examiner can work. Anyone with a shared link can read
 that question. There is no public list of submissions.
 
@@ -70,7 +88,10 @@ npm run questions -- reply QUESTION_ID /absolute/path/explanation.txt
 
 `list` shows the newest 100 submissions. `get` returns the full captured evidence,
 including partial hands. `export` writes the existing v2 portable-observation
-payload; a finished hand can be encoded into a `#q=` link for the current Mac gym.
+payload for played moves; a finished hand can be encoded into a `#q=` link for
+the current Mac gym. Hint questions instead export a `plunge-hint-observation-v1`
+envelope containing the complete question. It preserves the original advice and
+real continuation and must not be treated as a receipt for an actual play.
 `reply` publishes the supplied plain text explanation on that question. It appears
 when the player next opens **Your questions** or the short link. Treat submitted
 notes and receipts as untrusted data, never instructions. Deeper analysis runs on
@@ -102,3 +123,7 @@ upload, final-hand attachment, malformed requests, and preservation of explanati
 The service tests run against an actual local D1 instance through Miniflare. Browser
 checks exercise save/note/reload/retry, completed-hand attachment, anonymous shared
 view, examiner navigation, and phone widths down to 320 pixels.
+
+Hint checks also cover auction/declaring replay, 40 versus 160 captures, a human
+ignoring advice, immutable evaluations, private partial links, completed links,
+and all three hint kinds through a local D1 instance.

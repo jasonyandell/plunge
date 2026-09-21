@@ -43,6 +43,11 @@ aimed for 30; higher recorded totals guide bidding rather than measure play
 retargeted to a higher contract. Old hands absent from the book say so and do
 not silently substitute solver estimates.
 
+Tap **Why this hint?** in any move, bidding or trump hint to keep the exact advice
+in **Your questions**, add a note, and copy a short link. It saves before you act;
+if you choose something else, the original suggestion stays intact. Notes sync
+anonymously, and private hand details stay off shared links until the hand finishes.
+
 **Get a hint** is available during your turn to play. It suggests a legal domino
 without playing it, shows the sampled make/set comparison, and describes the
 public effect on the current trick. The first comparison uses 40 worlds;

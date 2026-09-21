@@ -1,21 +1,27 @@
 /** Durable question evidence. A replay is evidence for the examiner, never AI input. */
 import { legalPlays, type GameState } from '../engine';
 import { decodeReplay } from '../engine/replay-code';
-import { tileOfId } from '../ai/walt/requests';
+import { tileOfId, idOfTile } from '../ai/walt/requests';
 import { explainRequestOf } from '../ai/review-request';
 import type { NativeReceipt } from '../ai/native';
+import { validHint, type HintEvidence } from './hint-evidence';
 
-export interface Question {
-  schema: 'plunge-question-v1'; id: string; created: string;
+interface QuestionBase {
+  id: string; created: string;
   game_id: string; hand_number: number; ply: number; seed: number;
   snapshot: string; replay: string; note: string; alternative: number | null;
   receipt_id: string | null; receipt: NativeReceipt | null; build: string;
 }
+export type Question = QuestionBase & (
+  { schema: 'plunge-question-v1'; hint?: never; hint_id?: never }
+  | { schema: 'plunge-question-v2'; hint: HintEvidence; hint_id: string }
+);
 export interface Answer { body: string; updated: string }
 export interface RemoteQuestion { question: Question; revision: number; answer: Answer | null }
 export interface LocalQuestion extends RemoteQuestion { syncedRevision: number; target: string }
 export interface PublicQuestion {
-  id: string; created: string; note: string; ply: number; seat: number; domino: string;
+  id: string; created: string; note: string; ply: number; seat: number; domino: string | null;
+  kind: 'play' | 'move' | 'bid' | 'trump';
   complete: boolean; answer: Answer | null; question: Question | null;
 }
 export const QUESTION_ID = /^[a-f0-9]{32}$/;
@@ -31,7 +37,7 @@ export function examinerGame(g: GameState): GameState {
 }
 export function validQuestion(value: unknown): Question {
   const q = value as Question;
-  if (!q || q.schema !== 'plunge-question-v1' || typeof q.id !== 'string' || !QUESTION_ID.test(q.id)
+  if (!q || !['plunge-question-v1','plunge-question-v2'].includes(q.schema) || typeof q.id !== 'string' || !QUESTION_ID.test(q.id)
     || typeof q.created !== 'string' || !Number.isFinite(Date.parse(q.created))
     || typeof q.game_id !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(q.game_id)
     || !Number.isInteger(q.hand_number) || q.hand_number < 1 || q.hand_number > 100_000
@@ -45,7 +51,16 @@ export function validQuestion(value: unknown): Question {
     throw new Error('Invalid question.');
   }
   const snapshot = decodeReplay(q.snapshot), game = decodeReplay(q.replay);
-  if (!snapshot || !game || !allPlays(snapshot)[q.ply]) throw new Error('The saved play cannot be replayed.');
+  if (!snapshot || !game) throw new Error('The saved position cannot be replayed.');
+  if (q.schema === 'plunge-question-v2') {
+    if (q.ply !== allPlays(snapshot).length || q.alternative !== null || q.receipt_id !== null || q.receipt !== null
+      || typeof q.hint_id !== 'string' || !/^[a-f0-9]{64}$/.test(q.hint_id)) throw new Error('Invalid hint capture.');
+    const hint = validHint(q.hint, snapshot, q.seed);
+    return { schema: q.schema, id: q.id, created: q.created, game_id: q.game_id, hand_number: q.hand_number,
+      ply: q.ply, seed: q.seed, snapshot: q.snapshot, replay: q.replay, note: q.note, alternative: null,
+      receipt_id: null, receipt: null, build: q.build, hint, hint_id: q.hint_id };
+  }
+  if (q.hint !== undefined || q.hint_id !== undefined || !allPlays(snapshot)[q.ply]) throw new Error('The saved play cannot be replayed.');
   const built = explainRequestOf(examinerGame(snapshot), Math.floor(q.ply / 4), q.ply % 4);
   if (!built) throw new Error('This play cannot be examined.');
   const before = new Set(snapshot.dealt[built.seat]);
@@ -82,15 +97,26 @@ export function validQuestion(value: unknown): Question {
     receipt_id: q.receipt_id, receipt: q.receipt, build: q.build };
 }
 export function validUpdate(old: Question, next: Question): boolean {
-  return ['id','created','game_id','hand_number','ply','seed','snapshot','receipt_id','build'].every(
+  return ['schema','id','created','game_id','hand_number','ply','seed','snapshot','receipt_id','build','hint','hint_id'].every(
     k => JSON.stringify(old[k as keyof Question]) === JSON.stringify(next[k as keyof Question]))
     && next.replay.startsWith(old.replay)
     && (old.receipt === null || JSON.stringify(old.receipt) === JSON.stringify(next.receipt));
 }
+/** Owner-only hint view; the UI renders only their own hand before completion. */
+export function ownerQuestion(q: Question, answer: Answer | null): PublicQuestion {
+  const shown = publicQuestion(q, answer);
+  return q.schema === 'plunge-question-v2' ? { ...shown, question: q,
+    domino: q.hint.kind === 'move' ? idOfTile(q.hint.choice) : null } : shown;
+}
 export function publicQuestion(q: Question, answer: Answer | null): PublicQuestion {
   const g = decodeReplay(q.replay)!;
-  const p = allPlays(g)[q.ply]!;
   const complete = finished(g);
-  return { id: q.id, created: q.created, note: q.note, ply: q.ply, seat: p.seat, domino: p.domino,
+  if (q.schema === 'plunge-question-v2') {
+    return { id: q.id, created: q.created, note: q.note, ply: q.ply, seat: 0, kind: q.hint.kind,
+      domino: complete && q.hint.kind === 'move' ? idOfTile(q.hint.choice) : null,
+      complete, answer: complete ? answer : null, question: complete ? q : null };
+  }
+  const p = allPlays(g)[q.ply]!;
+  return { id: q.id, created: q.created, note: q.note, ply: q.ply, seat: p.seat, domino: p.domino, kind: 'play',
     complete, answer: complete ? answer : null, question: complete ? q : null };
 }

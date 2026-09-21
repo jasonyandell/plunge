@@ -1,6 +1,8 @@
 import { encodeReplay } from '../engine/replay-code';
 import type { GameState } from '../engine';
 import { api, nativeSeed, type NativeReceipt } from '../ai/native';
+import type { HintEvidence } from './hint-evidence';
+import { digest } from '../ai/phone/records';
 import { BUILD_ID } from '../ui/update';
 import { allPlays, finished, validQuestion, type LocalQuestion, type PublicQuestion, type RemoteQuestion } from './model';
 import { acceptRemote, changeQuestion, insertQuestion, listQuestions, ownerToken, randomHex } from './storage';
@@ -36,6 +38,20 @@ export async function saveQuestion(g: GameState, ply: number, sessionId: string,
   // The bookmark is durable before loading its separate original receipt.
   // Missing receipts are retried too; the durable bookmark can upload immediately.
   void syncQuestions();
+  return saved;
+}
+/** Capture the advice that was displayed, before the player takes any action. */
+export async function saveHintQuestion(g: GameState, sessionId: string, evidence: HintEvidence): Promise<LocalQuestion> {
+  const replay = encodeReplay(g), hint = structuredClone(evidence);
+  if (!replay) throw new Error('That hint could not be saved.');
+  const seed = hint.kind === 'move' ? hint.estimate?.identity.request.seed ?? nativeSeed(sessionId,g.handNumber)
+    : nativeSeed(sessionId,g.handNumber);
+  const question = validQuestion({ schema: 'plunge-question-v2', id: randomHex(16), created: new Date().toISOString(),
+    game_id: sessionId, hand_number: g.handNumber, ply: allPlays(g).length, seed, snapshot: replay, replay,
+    note: '', alternative: null, receipt_id: null, receipt: null, build: BUILD_ID,
+    hint, hint_id: await digest(hint) });
+  const saved = await insertQuestion(question);
+  changed(); void syncQuestions();
   return saved;
 }
 export async function editNote(id: string, note: string): Promise<void> {

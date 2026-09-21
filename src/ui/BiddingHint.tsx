@@ -3,6 +3,8 @@ import { highBid, type GameState } from '../engine';
 import { BID_BOOK, bestPanel, qualifies, type PlayedPanel } from '../ai/bid-book';
 import { getBiddingHint, type BiddingHint as Advice } from '../ai/bidding-hint';
 import { bidLabel, PIP_SUIT_NAMES, SEAT_NAMES } from './store';
+import type { BookHintEvidence } from '../questions/hint-evidence';
+import { SaveHint } from './SaveHint';
 import './hint.css';
 
 type BookAdvice = Extract<Advice, { kind: 'book' }>;
@@ -41,21 +43,26 @@ function RecordedScore({ panel, target }: { panel: PlayedPanel; target: number }
   </>;
 }
 
-function BookDetails({ hint, g }: { hint: BookAdvice; g: GameState }) {
-  const [target, setTarget] = useState(hint.target);
+export function BookDetails({ hint, g, captured, capture }: {
+  hint: BookAdvice; g: GameState; captured?: BookHintEvidence;
+  capture?: { sessionId: string; onSaved: (id: string) => void };
+}) {
+  const [target, setTarget] = useState(captured?.explored_target ?? hint.target);
+  const [comparisonOpen, setComparisonOpen] = useState(captured?.comparison_open ?? false);
+  const heading = captured?.heading ?? recommendation(hint), explanation = captured?.explanation ?? reason(hint, g);
   const selected = bestPanel(hint.panels, target);
   const rows = [...hint.panels].sort((a, b) => b.tails[target - 30]! / b.games - a.tails[target - 30]! / a.games);
   const best = (p: PlayedPanel) => p.tails[target - 30]! * selected.games === selected.tails[target - 30]! * p.games;
   const next = hint.reason === 'bid' && hint.target < 42 ? bestPanel(hint.panels, hint.target + 1) : null;
   return <>
-    <h3 class="bid-hint-suggestion">{recommendation(hint)}</h3>
-    <p>{reason(hint, g)}</p>
+    <h3 class="bid-hint-suggestion">{heading}</h3>
+    <p>{explanation}</p>
     {hint.reason === 'partner' && <p class="setting-hint">You can still explore your own hand’s recorded results below.</p>}
     <RecordedScore panel={hint.panel} target={hint.target} />
     {next && <p class="setting-hint">At {hint.target + 1} points, the best recorded rate drops to {scoreRate(next, hint.target + 1)} ({next.tails[hint.target + 1 - 30]} of {next.games} games).</p>}
     {hint.target === 42 && <p class="setting-hint">42 points means all seven tricks. These results don’t measure whether risking extra marks is worthwhile.</p>}
     <p class="setting-hint">These games aimed for 30; higher totals are a guide to bidding, not a measured chance of making a higher contract.</p>
-    <details class="disclosure bid-hint-comparison">
+    <details class="disclosure bid-hint-comparison" open={comparisonOpen} onToggle={e => setComparisonOpen(e.currentTarget.open)}>
       <summary>Compare trumps</summary>
       <label class="bid-hint-target">Explore a target
         <select value={target} onChange={e => setTarget(Number(e.currentTarget.value))}>
@@ -75,11 +82,16 @@ function BookDetails({ hint, g }: { hint: BookAdvice; g: GameState }) {
       <p class="setting-hint">A higher recorded rate isn’t a guarantee. Sample counts vary; “unsettled” means more samples may change which side of {cutoff}% a score falls on.</p>
       <p class="setting-hint">These are completed Walt games with your seven dominoes and different partner and opponent hands. No one’s actual hidden hand is used. The results don’t infer hidden hands from this auction’s bids.</p>
     </details>
+    {capture && <SaveHint g={g} sessionId={capture.sessionId} onSaved={capture.onSaved} evidence={{
+      kind: g.phase === 'bidding' ? 'bid' : 'trump', book_id: BID_BOOK.source_book, profile: BID_BOOK.profile,
+      policy_bid: BID_BOOK.policy_bid, threshold: [...BID_BOOK.threshold], advice: hint, explored_target: target,
+      comparison_open: comparisonOpen, heading, explanation,
+    }} />}
   </>;
 }
 
-/** A read-only modal: no dispatch, evaluation worker, or network request. */
-export function BiddingHint({ g }: { g: GameState }) {
+/** Advice never bids or runs a solver; optional feedback uses the question notebook. */
+export function BiddingHint({ g, sessionId, onQuestion }: { g: GameState; sessionId: string; onQuestion: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null), button = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (open) dialog.current?.showModal(); else dialog.current?.close(); }, [open]);
@@ -92,7 +104,7 @@ export function BiddingHint({ g }: { g: GameState }) {
     <dialog ref={dialog} class="hint-dialog" aria-labelledby="bid-hint-title" onCancel={e => { e.preventDefault(); close(); }}>
       <header class="hint-header"><h2 id="bid-hint-title">{g.phase === 'declaring' ? 'Choosing trump' : 'A bidding hint'}</h2>
         <button type="button" class="hint-close" aria-label="Close hint" onClick={close}>×</button></header>
-      {hint?.kind === 'book' && <BookDetails hint={hint} g={g} />}
+      {hint?.kind === 'book' && <BookDetails hint={hint} g={g} capture={{ sessionId, onSaved: id => { close(); onQuestion(id); } }} />}
       {hint?.kind === 'unavailable' && <p>{hint.reason === 'missing-hand'
         ? 'Walt doesn’t have recorded games for this hand. Bidding hints are available for hands in the current deal book; you can still choose your own bid and trump.'
         : 'The recorded games cover ordinary 42 with you as the bidder. They don’t cover this contract or rule set.'}</p>}

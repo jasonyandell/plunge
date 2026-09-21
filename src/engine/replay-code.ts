@@ -61,11 +61,11 @@ export function encodeReplay(g: GameState): string | null {
       tokens += bidToken(sb.bid);
       sim = applyAction(sim, { type: 'bid', bid: sb.bid });
     }
-    if (sim.phase === 'declaring') {
-      if (!g.declaration) return null;
+    if (sim.phase === 'declaring' && g.declaration) {
       tokens += `D${declToken(g.declaration)}`;
       sim = applyAction(sim, { type: 'declare', decl: g.declaration });
     }
+    if (sim.phase === 'declaring' && g.phase !== 'declaring') return null;
     for (const t of g.tricks) {
       for (const p of t.plays) {
         if (sim.phase !== 'playing') return null;
