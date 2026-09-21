@@ -16,3 +16,18 @@
 .hint-dialog .exp-row { display: grid; grid-template-columns: 46px 60px 1fr; font-size: 13px; }
 .hint-dialog .exp-rows { max-height: none; overflow: visible; }
 .hint-dialog button:focus-visible { outline-color: var(--teal-ink); }
+
+/* Book-backed auction advice uses the same quiet dialog as move hints. */
+.bid-hint-button { display: block; margin: 0 auto 12px; color: var(--teal-ink); border-color: #286f6555; background: #286f650b; }
+.bid-hint-suggestion { margin: 16px 0 8px; font-size: 20px; color: var(--teal-ink); }
+.bid-hint-evidence { padding: 12px; border-radius: 12px; background: #286f650c; }
+.bid-hint-target { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; font-size: 14px; }
+.bid-hint-target select { min-height: 44px; max-width: 60%; border: 1px solid #a98c6266; border-radius: 8px; background: #fff9ed; color: var(--brown-9); padding: 6px; font: inherit; }
+.bid-hint-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.bid-hint-table caption { text-align: left; padding: 8px 0; font-weight: 600; }
+.bid-hint-table th, .bid-hint-table td { padding: 8px 5px; border-bottom: 1px solid #a98c6233; text-align: right; }
+.bid-hint-table th:first-child { text-align: left; }
+.bid-hint-table tbody th { font-weight: 500; }
+.bid-hint-table .bid-hint-best { background: #286f6512; }
+.bid-hint-tag { display: block; margin-top: 2px; font-size: 11px; color: #6e5638; }
+.bid-hint-comparison summary { min-height: 44px; display: list-item; align-content: center; }

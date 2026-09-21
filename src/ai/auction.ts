@@ -54,13 +54,21 @@ export function checkedSurvey(req: AuctionRequest,s: AuctionSurvey): AuctionSurv
   return s;
 }
 
+/** Shared by the player and hints: keep a partner's standing bid when passing is legal. */
+export function partnerAuctionPass(g: GameState): Action | undefined {
+  if (g.phase !== 'bidding' || g.turn === null) return undefined;
+  const high = highBid(g.bids);
+  return high && teamOf(high.seat) === teamOf(g.turn)
+    ? legalActions(g).find(a => a.type === 'bid' && a.bid.kind === 'pass') : undefined;
+}
+
 export async function auctionMove(g: GameState, seat: Seat, gameId: string, previous?: AuctionEvidence, signal?: AbortSignal, evaluate?: AuctionEvaluator): Promise<AuctionDecision> {
   if (signal?.aborted) throw new DOMException('Stopped','AbortError');
   if (g.turn!==seat) throw new Error('Not this bidder’s turn.');
   const key=auctionKey(g,gameId), actions=legalActions(g);
   const pass=actions.find(a=>a.type==='bid'&&a.bid.kind==='pass');
-  const high=highBid(g.bids);
-  if (g.phase==='bidding' && pass && high && teamOf(high.seat)===teamOf(seat)) return {key,action:pass,survey:null};
+  const partnerPass=partnerAuctionPass(g);
+  if (partnerPass) return {key,action:partnerPass,survey:null};
   const request=auctionRequest(g,gameId);
   const fromBook=bookAuction(g,request);
   if (fromBook) return {key,...fromBook};

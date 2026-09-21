@@ -19,8 +19,8 @@ All 305,440 receipt hashes and 8,552,320 moves passed the independent auditor;
 every original 42,008-game receipt is unchanged. Sampling depths are 8 (1,575
 panels), 40 (2,189), 160 (541), 320 (19), and 640 (176). There are 75 capped-unsettled
 panels. The empirical rule qualifies 80 declaration panels belonging to 61 hands
-across 52 deals. The full catalogue is dealt, including weak hands and ordinary
-all-pass reshakes. We have not changed the risk cutoff to manufacture more bids.
+across 52 deals. The full catalogue is dealt, including weak hands. Plunge now forces the last bidder to take at least 30
+after three passes. We have not changed the risk cutoff to manufacture more bids.
 
 ## Evidence and limits
 
@@ -35,7 +35,7 @@ L1-only setting or the particular other hands in a catalogue deal. Screening and
 adaptive allocation also prevent interpreting 80% as a certified reliability bound.
 Each stored auction records its distinct empirical schema, source book, source
 profile, selected target, declaration, sample counts and allocation uncertainty.
-The phone's playing WASM is unchanged.
+Auction hints use this same book without changing the playing policy.
 
 Fresh games and each next hand use the catalogue. A saved old hand finishes as
 it stood; if its hand is not in the book, its auction retains the existing live
@@ -59,3 +59,14 @@ The original game engine, live-auction fallback and all replay mechanics remain
 available. Book-backed seats are excluded from speculative auction work; they do
 not start bidding workers. An entire normal auction keeps only the existing short
 presentation pauses, with no declaration solver work on the device.
+
+## Human bidding hints
+
+The optional auction hints reuse `bookAuction` and the player's shared
+`partnerAuctionPass` rule. They never dispatch actions or run a solver. Trump
+hints price the actual won contract, even if the human bid exceeds the book's
+usual cutoff. Targets 30–42 are inspectable without altering the recommendation
+or making an illegal bid. The UI reports raw achieved counts and sample sizes,
+labels unresolved threshold estimates, and explains the bid-30 measurement
+boundary. Missing old hands and unsupported contracts/rules get no fabricated
+empirical recommendation. No new cache or saved-match format is needed.

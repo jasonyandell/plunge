@@ -34,6 +34,15 @@ This applies to new hands and resumed auctions; hands already in play keep
 their recorded rules. Question links preserve the house rule (`v1f`), while
 older casual/tournament links keep their original rules.
 
+**Help me bid** and **Help me choose trump** offer instant, optional advice from
+the same recorded-game book and bidding rule as Walt. They distinguish a weak
+hand, passing over a partner, and a forced bid. Expand **Compare trumps** to
+explore targets 30–42 across all nine declarations, with achieved counts, sample
+sizes and unsettled estimates. Nothing is bid or declared for you. These games
+aimed for 30; higher recorded totals guide bidding rather than measure play
+retargeted to a higher contract. Old hands absent from the book say so and do
+not silently substitute solver estimates.
+
 **Get a hint** is available during your turn to play. It suggests a legal domino
 without playing it, shows the sampled make/set comparison, and describes the
 public effect on the current trick. The first comparison uses 40 worlds;
