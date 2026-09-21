@@ -15,12 +15,14 @@ export function isNative(value: string): value is NativeDifficulty {
 export const nativeLabel = (d: NativeDifficulty): string => d === 'native-l1' ? 'L1' : 'L1 + partner check';
 
 export interface NativeRequest {
+  contract?: 'nello';
   decl: number; bid: number; bidder: number; seat: number; hand: number[]; plays: number[]; seed: number;
 }
 export interface NativeEvaluation {
   options: [number, string, string][]; outer_worlds: number;
 }
 export interface NativeDecision {
+  contract?: 'nello'; inactive?: number;
   choice: number; legal: number[]; route: string; leader: number; points: number[]; elapsed_us: number;
   interruption?: string; player_version?: string; mode?: string; review?: string; n?: number; budget_ms?: number;
   phases?: { name: string; status: string; worlds?: number }[];
@@ -55,12 +57,12 @@ export function nativeSeed(gameId: string, handNumber: number): number {
 }
 export function requestOf(g: GameState, seat: Seat, gameId: string): NativeRequest {
   const req = playRequestOf(observe(g, seat), { n: 40, n0: 8 });
-  if (!req || req.bid < 30 || req.bid > 42) throw new Error('Walt needs a straight 42 contract.');
-  return { decl: req.decl, bid: req.bid, bidder: req.bidder, seat: req.seat,
+  if (!req) throw new Error('Walt does not support this contract.');
+  return { ...(req.contract ? {contract:req.contract} : {}), decl: req.decl, bid: req.bid, bidder: req.bidder, seat: req.seat,
     hand: [...req.hand], plays: [...req.plays], seed: nativeSeed(gameId, g.handNumber) };
 }
 export function requestKey(req: NativeRequest): string {
-  return JSON.stringify([req.decl, req.bid, req.bidder, req.seat, req.hand, req.plays, req.seed]);
+  return JSON.stringify([req.decl, req.bid, req.bidder, req.seat, req.hand, req.plays, req.seed, ...(req.contract ? [req.contract] : [])]);
 }
 
 export async function api<T>(path: string, body?: unknown, milliseconds = 18000, signal?: AbortSignal): Promise<T> {
@@ -92,6 +94,9 @@ export function checkedAction(g: GameState, request: NativeRequest, receipt: Nat
     throw new Error('The decision receipt does not match this position.');
   }
   const r = receipt.response;
+  if (request.contract === 'nello' && (r.contract !== 'nello' || r.inactive !== g.sittingOut)) {
+    throw new Error('The player returned a different contract.');
+  }
   if (r.leader !== g.leader || JSON.stringify(r.points) !== JSON.stringify(g.points)) {
     throw new Error('The native player and table disagree about this position.');
   }

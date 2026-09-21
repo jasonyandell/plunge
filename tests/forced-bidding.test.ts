@@ -29,7 +29,7 @@ describe('Plunge forced last bid', () => {
       expect(g.declarer).toBe(shaker);
       g = finish(g);
       const code = encodeReplay(g)!;
-      expect(code.startsWith('v1f')).toBe(true);
+      expect(code.startsWith('v1l')).toBe(true);
       const replay = decodeReplay(code)!;
       expect(replay.config).toEqual(g.config);
       expect(replay.forcedBid).toBe(true);

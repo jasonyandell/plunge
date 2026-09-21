@@ -1,3 +1,4 @@
+import { playLocation } from '../engine/play-index';
 /** Anonymous question notebook. The live game pauses while this dialog is open. */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { decodeReplay } from '../engine/replay-code';
@@ -51,7 +52,7 @@ export function Questions({ initialId, onClose, dispatch }: {
   const current=owned ? ownerQuestion(owned.question,owned.answer) : shared;
   const q=current?.question;
   const game=q && current?.complete ? decodeReplay(q.replay) : null;
-  const sel=q?.schema === 'plunge-question-v1' ? {trick:Math.floor(q.ply/4),play:q.ply%4} : null;
+  const sel=q?.schema === 'plunge-question-v1' && game ? playLocation(game,q.ply) : null;
   const position=game && sel && q ? reviewPosition(game,sel,q.seed) : null;
   const choose=(next:string|null)=>{setId(next);setNotice('');};
   const copy=async()=>{
@@ -89,7 +90,7 @@ export function Questions({ initialId, onClose, dispatch }: {
       </> : current ? <>
         <div class="question-move"><QuestionIcon question={current} />
           <div><h3>{questionTitle(current)}</h3>
-            <p>{current.kind === 'bid' ? 'Before your bid' : current.kind === 'trump' ? 'Before choosing trump' : `Trick ${Math.floor(current.ply/4)+1} · ${current.kind === 'move' ? 'before ' : ''}play ${current.ply%4+1} of the trick`}</p></div></div>
+            <p>{questionPosition(current)}</p></div></div>
         {owned && <p class="question-status" role="status">{owned.revision>owned.syncedRevision ? 'Saved on this device. Sending when connected.' : 'Saved here and sent anonymously for review.'}</p>}
         {editing ? <label class="native-label">What caught your eye?
           <textarea autoFocus maxLength={4000} value={note} onInput={e=>setNote(e.currentTarget.value)} />
@@ -139,4 +140,11 @@ function questionTitle(q: PublicQuestion): string {
 function QuestionIcon({ question: q }: { question: PublicQuestion }) {
   return q.domino ? <Domino id={q.domino} orientation="h" />
     : <span class="question-hint-icon" aria-hidden="true">{q.kind === 'bid' ? 'Bid' : q.kind === 'trump' ? 'Trump' : 'Hint'}</span>;
+}
+
+function questionPosition(q: PublicQuestion): string {
+  if(q.kind === 'bid') return 'Before your bid';
+  if(q.kind === 'trump') return 'Before choosing trump';
+  const before=q.kind === 'move' ? 'before ' : '';
+  return q.location ? `Trick ${q.location.trick+1} · ${before}play ${q.location.play+1} of the trick` : `Play ${q.ply+1}`;
 }

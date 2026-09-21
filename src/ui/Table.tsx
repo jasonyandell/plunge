@@ -1,3 +1,5 @@
+import { explainScope } from '../ai/review-request';
+import { playIndex } from '../engine/play-index';
 /**
  * The table screen. Renders purely from GameState — no duplicated game state.
  *
@@ -121,7 +123,7 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
             winner={trickWinner}
             gathering={showingLast}
             thinking={thinking}
-            onQuestion={scenario ? undefined : (i, target) => selectQuestion((showingLast ? g.tricks.length - 1 : g.tricks.length) * 4 + i, target)}
+            onQuestion={scenario ? undefined : (i, target) => selectQuestion(playIndex(g,showingLast ? g.tricks.length - 1 : g.tricks.length,i), target)}
           />
           <OpponentSide g={g} seat={3} thinking={thinking} />
         </div>
@@ -133,7 +135,7 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
                 ? g.currentTrick.length === 0 ? 'Your turn to lead' : 'Your turn to play'
                 : 'Your hand'}</span>
             </p>
-            {humanTurn && !showingLast && !scenario && g.sittingOut === null && isNative(app.settings.difficulty) &&
+            {humanTurn && !showingLast && !scenario && explainScope(g) && isNative(app.settings.difficulty) &&
               <MoveHint key={`${app.sessionId}:${g.handNumber}:${g.tricks.length}:${g.currentTrick.length}`} g={g} sessionId={app.sessionId} onQuestion={onQuestion} />}
           </div>
           {humanSitsOut ? (
@@ -282,7 +284,7 @@ function InfoBar({
           </button>
         )}
       </div>
-      {open && n > 0 && <>{onQuestion && <p class="question-history-hint">Curious about a move? Tap its domino.</p>}<TrickHistory g={g} actionLabel="Why this move?" onTapPlay={onQuestion ? (t, p, target) => onQuestion(t * 4 + p, target) : undefined} /></>}
+      {open && n > 0 && <>{onQuestion && <p class="question-history-hint">Curious about a move? Tap its domino.</p>}<TrickHistory g={g} actionLabel="Why this move?" onTapPlay={onQuestion ? (t, p, target) => onQuestion(playIndex(g,t,p), target) : undefined} /></>}
     </div>
   );
 }

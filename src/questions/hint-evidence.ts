@@ -36,11 +36,12 @@ export function validHint(value: unknown, g: GameState, seed: number): HintEvide
       if (!e || !built || e.schema !== 'plunge-estimate-v1' || !hash(e.id)
         || typeof e.created !== 'string' || !Number.isFinite(Date.parse(e.created))
         || e.identity?.player?.n !== h.requested_worlds || !e.response) throw new Error('Invalid saved hint scores.');
-      const expected = { decl: built.decl, bid: built.bid, bidder: built.bidder, seat: built.seat, hand: built.hand, plays: built.plays, seed };
-      for (const key of ['decl','bid','bidder','seat','hand','plays','seed'] as const) {
+      const expected = { ...(built.contract ? {contract:built.contract} : {}), decl: built.decl, bid: built.bid, bidder: built.bidder, seat: built.seat, hand: built.hand, plays: built.plays, seed };
+      for (const key of ['contract','decl','bid','bidder','seat','hand','plays','seed'] as const) {
         if (!same(e.identity.request?.[key], expected[key])) throw new Error('Hint scores belong to another decision.');
       }
       const r = e.response;
+      if (built.contract && (r.contract !== built.contract || r.inactive !== g.sittingOut)) throw new Error('Hint contract disagrees with the table.');
       if (r.choice !== h.choice || r.leader !== g.leader || !same(r.points, g.points)
         || !Array.isArray(r.phases) || r.phases.length > 100
         || !r.phases.every(p => p && typeof p.name === 'string' && typeof p.status === 'string')

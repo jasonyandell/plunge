@@ -24,6 +24,7 @@ export async function getHint(g: GameState, sessionId: string, worlds: 40 | 160,
   if (estimate.schema !== 'plunge-estimate-v1' || requestKey(estimate.identity.request) !== requestKey(request)
     || estimate.identity.player.n !== worlds) throw new Error('The hint does not match this position.');
   const response = estimate.response;
+  if (request.contract && (response.contract !== request.contract || response.inactive !== g.sittingOut)) throw new Error('The hint returned a different contract.');
   if (!legal.includes(response.choice) || response.leader !== g.leader
     || JSON.stringify(response.points) !== JSON.stringify(g.points)) throw new Error('The hint disagrees with the table.');
   const stats = decisionStats(response, request, legal);
@@ -42,6 +43,7 @@ export function hintExplanation(hint: Hint): string {
     : `${chosen.successes} of ${stats.worlds} sampled deals`;
   const team = stats.objective === 'make' ? 'Your team made' : 'Your team set';
   const tied = stats.options.filter(a => a.best).length;
-  return `${team} the ${hint.request.bid} bid in ${result} when the simulation started with this play. `
+  const contract = hint.request.contract === 'nello' ? 'Nel-O contract' : `${hint.request.bid} bid`;
+  return `${team} the ${contract} in ${result} when the simulation started with this play. `
     + (tied > 1 ? `${tied} plays tied for the highest estimate.` : 'It had the highest estimate in this comparison.');
 }

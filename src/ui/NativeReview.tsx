@@ -1,3 +1,4 @@
+import { playLocation, playIndex } from '../engine/play-index';
 /** Finished-hand examiner UI. No data from this view enters a live chooser. */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { type GameState } from '../engine';
@@ -19,7 +20,7 @@ const pips = (tile: number): string => requestTile(tile).split('').join('–');
 export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQuestion }: {
   g: GameState; onBack: () => void; sessionId: string; receipts: Record<string,string>; initialFlag: FlagRecord | null; onQuestion: (id: string) => void;
 }) {
-  const [sel, setSel] = useState<Selection | null>(initialFlag ? { trick: Math.floor(initialFlag.ply / 4), play: initialFlag.ply % 4 } : null);
+  const [sel, setSel] = useState<Selection | null>(initialFlag ? playLocation(g, initialFlag.ply) : null);
   const [receipt, setReceipt] = useState<NativeReceipt | null>(initialFlag?.original_receipt ?? null);
   const [receiptLoading, setReceiptLoading] = useState(false);
   const [flag, setFlag] = useState<FlagRecord | null>(initialFlag);
@@ -33,7 +34,7 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQu
   const generation = useRef(0);
   const question = useRef<HTMLElement>(null);
   useEffect(() => () => { generation.current++; }, []);
-  const ply = sel === null ? null : sel.trick * 4 + sel.play;
+  const ply = sel === null ? null : playIndex(g,sel.trick,sel.play);
   const rid = ply === null ? undefined : (initialFlag?.ply === ply ? initialFlag.receipt_id : receipts[`${g.handNumber}:${ply}`]);
 
   useEffect(() => {
