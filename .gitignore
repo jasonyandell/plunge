@@ -3,6 +3,7 @@ dist/
 .DS_Store
 *.local
 .wrangler/
+wrangler.preview.generated.json
 scratch/
 
 # Local Python release-tool caches
