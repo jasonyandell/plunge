@@ -41,3 +41,13 @@ configuration with no production bindings or routes. Worker/asset settings in
   GitHub Actions quotas; the workflow does not change the account plan.
 
 Local deployment-tool checks: `node --test scripts/test-preview.mjs`.
+
+## Activation checks (2026-09-21)
+
+PR #5 exercised the initial deployment from a feature branch. Run
+`35558307501` published its HTTPS deployment link after all checks passed.
+A question written to its notebook was read back successfully and returned 404
+at the production origin. A manual production run from the feature branch
+(`35558353493`) skipped its deploy job as intended. The local application suite
+passed all 227 tests; the seven deployment tests, importer tests, build,
+Actionlint, and Wrangler dry run also passed.
