@@ -1,0 +1,18 @@
+.hand-heading { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.hand-heading .hand-caption { margin: 0; }
+.hint-button { min-height: 44px; padding: 6px 10px; border: 1px solid #80b5a880; border-radius: 12px; background: #14352a80; color: #b5e5d7; font-size: 13px; cursor: pointer; }
+.hint-dialog { width: min(440px, calc(100vw - 24px)); max-height: 85dvh; margin: auto; padding: 20px; border: 1px solid #fff4dd; border-radius: 22px; background: var(--cream); color: var(--brown-9); box-shadow: 0 18px 60px #140c0780; text-align: left; overflow: auto; }
+.hint-dialog::backdrop { background: #140c0790; }
+.hint-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.hint-header h2 { margin: 0; font-family: var(--display, serif); font-size: 25px; font-weight: 500; }
+.hint-close { min-width: 44px; min-height: 44px; border: 0; background: transparent; color: var(--brown-9); font-size: 28px; cursor: pointer; }
+.hint-position { font-size: 13px; color: #725a40; }
+.hint-dialog p { line-height: 1.5; }
+.hint-pick { display: flex; align-items: center; gap: 14px; margin: 18px 0; }
+.hint-pick .dom { width: 84px; flex-shrink: 0; }
+.hint-fact { padding: 10px 12px; border-left: 3px solid var(--teal); background: #286f6508; font-size: 14px; }
+.hint-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+.hint-actions .big-btn { flex: 1; min-width: 125px; margin: 0; padding: 12px; font-size: 14px; }
+.hint-dialog .exp-row { display: grid; grid-template-columns: 46px 60px 1fr; font-size: 13px; }
+.hint-dialog .exp-rows { max-height: none; overflow: visible; }
+.hint-dialog button:focus-visible { outline-color: var(--teal-ink); }

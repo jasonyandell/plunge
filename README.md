@@ -34,6 +34,13 @@ This applies to new hands and resumed auctions; hands already in play keep
 their recorded rules. Question links preserve the house rule (`v1f`), while
 older casual/tournament links keep their original rules.
 
+**Get a hint** is available during your turn to play. It suggests a legal domino
+without playing it, shows the sampled make/set comparison, and describes the
+public effect on the current trick. The first comparison uses 40 worlds;
+**Think deeper** can request 160. Closing the hint cancels pending work. Hints
+use only your hand and public history, with no separate partner review, and
+never label an unscored emergency fallback as a measured recommendation.
+
 ## What's inside
 
 - **Walt** is one shared Rust player, native on the Mac and WebAssembly on the

@@ -20,6 +20,8 @@ import {
 import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet } from './sheets';
 import { TrickHistory } from './TrickHistory';
 import { NativeReview } from './NativeReview';
+import { MoveHint } from './MoveHint';
+import { isNative } from '../ai/native';
 import './table.css';
 import './questions.css';
 import { saveQuestion } from '../questions/client';
@@ -124,12 +126,16 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
           <OpponentSide g={g} seat={3} thinking={thinking} />
         </div>
         <div class="hand-area">
-          <p class={`hand-caption${humanTurn && !showingLast ? ' your-turn' : ''}`} role="status">
-            <strong class="you-label">You</strong>
-            <span>{humanTurn && !showingLast
-              ? g.currentTrick.length === 0 ? 'Your turn to lead' : 'Your turn to play'
-              : 'Your hand'}</span>
-          </p>
+          <div class="hand-heading">
+            <p class={`hand-caption${humanTurn && !showingLast ? ' your-turn' : ''}`} role="status">
+              <strong class="you-label">You</strong>
+              <span>{humanTurn && !showingLast
+                ? g.currentTrick.length === 0 ? 'Your turn to lead' : 'Your turn to play'
+                : 'Your hand'}</span>
+            </p>
+            {humanTurn && !showingLast && !scenario && g.sittingOut === null && isNative(app.settings.difficulty) &&
+              <MoveHint key={`${app.sessionId}:${g.handNumber}:${g.tricks.length}:${g.currentTrick.length}`} g={g} sessionId={app.sessionId} />}
+          </div>
           {humanSitsOut ? (
             <div class="hand sit-out">
               {humanHand.map((id) => (

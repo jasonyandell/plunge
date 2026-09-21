@@ -2,27 +2,10 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { type GameState } from '../engine';
 import { api, requestKey, requestTile, type NativeReceipt, type NativeEstimate } from '../ai/native';
-import { decisionStats, type MoveStats, type reviewPosition, type ReviewSelection } from '../ai/native-analysis';
+import { decisionStats, type reviewPosition, type ReviewSelection } from '../ai/native-analysis';
 import { Domino } from './Domino';
+import { MoveScores } from './MoveScores';
 import { ledChip, SEAT_NAMES, trumpChip } from './store';
-
-function Scores({ stats, played }: { stats: MoveStats; played: number }) {
-  return <>
-    <p class="estimate-label">Estimated chance to <strong>{stats.objective} the bid</strong></p>
-    <div class="exp-rows">{stats.options.map((a) => <div class={`exp-row${a.tile === played ? ' exp-played' : ''}`} key={a.tile}>
-      <Domino id={requestTile(a.tile)} orientation="h" className="exp-dom" />
-      <span class="native-score"><strong>{(a.chance*100).toFixed(1)}%</strong>
-        {a.successes !== null && <small>{a.successes} / {stats.worlds}</small>}</span>
-      <span>{[a.tile === played ? 'Played' : '', a.best ? 'Highest estimate' : ''].filter(Boolean).join(' · ')}</span>
-    </div>)}</div>
-    <details class="disclosure sample-details">
-      <summary>Sample details</summary>
-      <p>{stats.worlds} sampled worlds: possible deals based on this player’s own hand and the public plays.
-        {stats.fallback ? ' A smaller fallback comparison was used.' : ''}
-        {' '}The fractions show successful outcomes out of the deals compared.</p>
-    </details>
-  </>;
-}
 
 export function NativeStats({ g, sel, position, receipt, loading }: {
   g: GameState; sel: ReviewSelection; position: NonNullable<ReturnType<typeof reviewPosition>>;
@@ -68,7 +51,7 @@ export function NativeStats({ g, sel, position, receipt, loading }: {
       {led && ` Must follow ${led}.`} There was no choice to compare.</p> : <>
       {(receipt || !estimate) && <h4>{receipt ? 'What Walt saw when it played' : 'Ask Walt about this play'}</h4>}
       {loading ? <p role="status">Loading the original scores…</p>
-        : original ? <Scores stats={original} played={played} />
+        : original ? <MoveScores stats={original} selected={played} selectionLabel="Played" />
         : !estimate && <p class="setting-hint">{receipt ? 'No completed option scores were saved for this decision.'
           : 'No original Walt estimate for this play. Ask Walt to compare the options from this player’s view.'}</p>}
       {receipt?.response.interruption && <p class="setting-hint">{receipt.response.interruption}</p>}
@@ -76,7 +59,7 @@ export function NativeStats({ g, sel, position, receipt, loading }: {
       {original && <p class="setting-hint">Walt’s estimate from this player’s view. Small differences can come down to the sample.</p>}
       {estimate && <div class="native-fresh" ref={freshPanel}>
         <h4>A fresh look from Walt</h4>
-        {fresh ? <Scores stats={fresh} played={played} /> : <p>No complete comparison finished within the time limit. You can retry.</p>}
+        {fresh ? <MoveScores stats={fresh} selected={played} selectionLabel="Played" /> : <p>No complete comparison finished within the time limit. You can retry.</p>}
         {fresh?.fallback && <p>The larger comparison did not finish; these are the smaller completed sample’s scores. You can retry.</p>}
         <p class="setting-hint">A new estimate from the same player’s view.
           {' '}{original ? 'The original scores stay above.' : 'Small differences can come down to the sample.'}</p>
