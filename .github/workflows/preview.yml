@@ -1,0 +1,173 @@
+name: PR preview
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number (open deploys; closed cleans up)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# Serialize deploy/cleanup together. Never cancel a resource mutation halfway.
+concurrency:
+  group: preview-pr-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    outputs:
+      pr: ${{ steps.pr.outputs.pr }}
+      sha: ${{ steps.pr.outputs.sha }}
+      state: ${{ steps.pr.outputs.state }}
+    steps:
+      - uses: actions/github-script@v7
+        id: pr
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr }}
+        with:
+          script: |
+            const number = process.env.PR_NUMBER;
+            if (!/^[1-9][0-9]{0,8}$/.test(number)) throw new Error('Invalid PR number');
+            const {data: pr} = await github.rest.pulls.get({...context.repo, pull_number: Number(number)});
+            if (pr.head.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
+              core.notice('Fork PRs run CI without deployment credentials.');
+              return;
+            }
+            core.setOutput('pr', number);
+            core.setOutput('sha', pr.head.sha);
+            core.setOutput('state', pr.state);
+
+  deploy:
+    needs: resolve
+    if: needs.resolve.outputs.state == 'open'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
+      deployments: write
+    defaults:
+      run:
+        working-directory: app
+    env:
+      PR_NUMBER: ${{ needs.resolve.outputs.pr }}
+      PREVIEW_SHA: ${{ needs.resolve.outputs.sha }}
+    steps:
+      # Keep deployment tooling available even for a PR predating this workflow.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: preview-tools
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          path: app
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - run: node --test ../preview-tools/scripts/test-preview.mjs
+      - run: python3 scripts/test-update-walt.py
+      - run: npm test
+      - name: Build the selected commit
+        run: |
+          GITHUB_SHA="$PREVIEW_SHA" npm run build
+          node ../preview-tools/scripts/preview.mjs stamp "$PR_NUMBER" "$PREVIEW_SHA"
+      - name: Check that the PR is still open at this commit
+        id: current
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {data: pr} = await github.rest.pulls.get({...context.repo, pull_number: Number(process.env.PR_NUMBER)});
+            core.setOutput('yes', pr.state === 'open' && pr.head.sha === process.env.PREVIEW_SHA);
+      - name: Prepare isolated resources
+        if: steps.current.outputs.yes == 'true'
+        id: preview
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node ../preview-tools/scripts/preview.mjs prepare "$PR_NUMBER"
+      - name: Migrate and deploy this preview
+        if: steps.current.outputs.yes == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler d1 migrations apply QUESTIONS --remote --config wrangler.preview.generated.json
+          npx wrangler deploy --config wrangler.preview.generated.json
+      - name: Verify deployed app and question database
+        if: steps.current.outputs.yes == 'true'
+        env:
+          PREVIEW_URL: ${{ steps.preview.outputs.url }}
+        run: node ../preview-tools/scripts/preview.mjs smoke "$PREVIEW_URL" "$PREVIEW_SHA"
+      - name: Publish the preview link in GitHub
+        if: steps.current.outputs.yes == 'true'
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.preview.outputs.url }}
+        with:
+          script: |
+            const environment = `preview-pr-${process.env.PR_NUMBER}`;
+            const {data: deployment} = await github.rest.repos.createDeployment({
+              ...context.repo, ref: process.env.PREVIEW_SHA, environment,
+              auto_merge: false, required_contexts: [], production_environment: false, transient_environment: true,
+              description: `PR #${process.env.PR_NUMBER} preview`,
+            });
+            await github.rest.repos.createDeploymentStatus({
+              ...context.repo, deployment_id: deployment.id, state: 'success',
+              environment_url: process.env.PREVIEW_URL,
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              auto_inactive: true,
+            });
+            await core.summary.addHeading(`Preview PR #${process.env.PR_NUMBER}`)
+              .addLink('Open the preview', process.env.PREVIEW_URL)
+              .addRaw(`\n\nCommit: ${process.env.PREVIEW_SHA}\n\nQuestions are isolated and removed when this PR closes.\n`).write();
+
+  cleanup:
+    needs: resolve
+    if: needs.resolve.outputs.state == 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      deployments: write
+    env:
+      PR_NUMBER: ${{ needs.resolve.outputs.pr }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Remove this PR's Worker and database
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/preview.mjs cleanup "$PR_NUMBER"
+      - name: Retire the preview link
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployments = await github.paginate(github.rest.repos.listDeployments, {
+              ...context.repo, environment: `preview-pr-${process.env.PR_NUMBER}`, per_page: 100,
+            });
+            for (const deployment of deployments) {
+              await github.rest.repos.createDeploymentStatus({
+                ...context.repo, deployment_id: deployment.id, state: 'inactive',
+                description: 'PR closed; preview resources removed.',
+              });
+            }
+            await core.summary.addRaw(`Preview PR #${process.env.PR_NUMBER} removed.\n`).write();

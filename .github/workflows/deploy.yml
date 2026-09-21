@@ -3,14 +3,19 @@ on:
   push: { branches: [main] }
   workflow_dispatch:
 permissions: { contents: read }
+concurrency:
+  group: production
+  cancel-in-progress: false
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
+      - run: node --test scripts/test-preview.mjs
       - run: python3 scripts/test-update-walt.py
       - run: npm run typecheck
       - run: npm test
