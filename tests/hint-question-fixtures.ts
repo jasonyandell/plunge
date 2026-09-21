@@ -27,9 +27,9 @@ export function moveEvidence(g = moveFixture(), worlds: 40 | 160 = 40): MoveHint
     estimate: legal.length === 1 ? null : {
       schema: 'plunge-estimate-v1', id: (worlds === 40 ? 'd' : 'e').repeat(64), created: '2026-09-21T00:00:00Z',
       identity: { request, player: { n: worlds }, implementation: { test: true } },
-      response: { choice, legal, leader: g.leader!, points: [...g.points], route: 'baseline', elapsed_us: 100,
+      response: { ...(request.contract ? {contract:request.contract,inactive:g.sittingOut!} : {}), choice, legal, leader: g.leader!, points: [...g.points], route: 'baseline', elapsed_us: 100,
         phases: [{ name: 'baseline', status: 'completed' }], evaluation: { outer_worlds: worlds,
-          options: legal.map(t => [t, t === choice ? '3' : '1', '4']) } },
+          options: legal.map(t => [t, (t === choice) === (request.seat%2 === request.bidder%2) ? '3' : '1', '4']) } },
     } };
 }
 export function bookEvidence(g = auctionFixture()): HintEvidence {

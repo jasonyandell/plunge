@@ -42,7 +42,7 @@ export function NativeStats({ g, sel, position, receipt, loading }: {
   };
   return <section class="native-stats" aria-label="Move statistics">
     <p class="native-position">{trumpChip(g)} · {led ? `led: ${led}` : 'choosing the lead'}
-      {' · '}{request.seat % 2 === request.bidder % 2 ? `playing to make ${request.bid}` : `playing to set ${request.bid}`}</p>
+      {' · '}playing to {request.seat % 2 === request.bidder % 2 ? 'make' : 'set'} {request.contract === 'nello' ? 'Nel-O' : request.bid}</p>
     <p class="setting-hint">{request.seat === 0 ? 'Your' : `${SEAT_NAMES[request.seat]}’s`} hand before this play. Legal choices are outlined.</p>
     <div class="native-held">{remaining.map((tile) => <span key={tile} class={legal.includes(tile) ? 'native-legal' : ''}>
       <Domino id={requestTile(tile)} orientation="h" className="exp-dom" />

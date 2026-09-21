@@ -69,7 +69,7 @@ export function validQuestion(value: unknown): Question {
   if (!built) throw new Error('This play cannot be examined.');
   const before = new Set(snapshot.dealt[built.seat]);
   for (const p of allPlays(snapshot).slice(0,q.ply)) before.delete(p.domino);
-  const lead = q.ply % 4 ? allPlays(snapshot)[Math.floor(q.ply/4)*4]!.domino : null;
+  const lead = loc.play ? allPlays(snapshot)[playIndex(snapshot,loc.trick,0)]!.domino : null;
   const legal = legalPlays([...before],lead,snapshot.rules!).map(tileOfId);
   if (q.alternative !== null && (!Number.isInteger(q.alternative) || !legal.includes(q.alternative))) {
     throw new Error('Invalid alternative.');

@@ -8,6 +8,7 @@ export interface MoveStats {
 
 /** Never silently substitute an incomplete primary comparison for its fallback. */
 export function decisionStats(response: NativeDecision, request: NativeRequest, legal: number[]): MoveStats | null {
+  if (response.contract !== request.contract || (request.contract === 'nello' && response.inactive !== (request.bidder+2)%4)) return null;
   const fallback = response.route === 'l1-fallback';
   if (!fallback && !['baseline', 'baseline-reviewed'].includes(response.route)) return null;
   const phase = fallback ? 'fallback-l1' : 'baseline';

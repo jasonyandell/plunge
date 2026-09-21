@@ -5,10 +5,12 @@ import { decodeReplay, encodeReplay } from '../src/engine/replay-code';
 import { playIndex, playLocation } from '../src/engine/play-index';
 import { checkedAction, requestOf, requestKey, type NativeReceipt } from '../src/ai/native';
 import { reviewPosition } from '../src/ai/native-analysis';
-import { waltDeclarationOf, idOfTile } from '../src/ai/walt/requests';
+import { waltDeclarationOf, idOfTile, tileOfId } from '../src/ai/walt/requests';
 import { initialApp, toSaved } from '../src/ui/store';
 import { decodeObservation } from '../src/ui/observation-link';
 import { validQuestion, publicQuestion, type Question } from '../src/questions/model';
+import { hintQuestion, moveEvidence } from './hint-question-fixtures';
+import { hintTrickEffect } from '../src/ui/MoveHint';
 
 const pass = {type:'bid', bid:{kind:'pass'}} as const;
 
@@ -26,6 +28,19 @@ describe('human-called own-suit Nel-O with Walt defense', () => {
       for(let ply=0;ply<f.plays.length/2;ply++) {
         const seat=f.plays[2*ply]! as Seat, tile=f.plays[2*ply+1]!;
         expect(g.turn).toBe(seat);
+        const alternatives=legalActions(g).filter(a=>a.type==='play').map(a=>tileOfId(a.domino));
+        if(seat===0) {
+          const hint=moveEvidence(g), question=hintQuestion(g,hint);
+          expect(publicQuestion(question,null).location).toEqual({trick:g.tricks.length,play:g.currentTrick.length});
+          if(g.currentTrick.length===2) expect(hintTrickEffect(g,tile)).not.toContain('still to play');
+          if(hint.estimate) {
+            const bad=structuredClone(question);
+            if(bad.schema==='plunge-question-v2' && bad.hint.kind==='move' && bad.hint.estimate) {
+              delete bad.hint.estimate.identity.request.contract;
+              expect(()=>validQuestion(bad)).toThrow(/another decision/);
+            }
+          }
+        }
         const req=requestOf(g,seat,'nello-test');
         expect(Object.keys(req).sort()).toEqual(['bid','bidder','contract','decl','hand','plays','seat','seed']);
         expect(req).toMatchObject({contract:'nello',decl:8,bid:1,seat,bidder:f.declarer,plays:f.plays.slice(0,ply*2)});
@@ -52,6 +67,7 @@ describe('human-called own-suit Nel-O with Walt defense', () => {
         const q:Question={schema:'plunge-question-v1',id:'b'.repeat(32),created:'2026-09-20',game_id:'nello-test',hand_number:1,
           ply,seed:req.seed,snapshot:code,replay:code,note:'Why this play?',alternative:null,receipt_id:receipt.id,receipt,build:'test'};
         expect(validQuestion(q)).toEqual(q);
+        for(const alternative of alternatives) expect(validQuestion({...q,alternative}).alternative).toBe(alternative);
         expect(publicQuestion(q,null).location).toEqual(loc);
         expect(()=>validQuestion({...q,receipt:{...receipt,identity:{...receipt.identity,request:{...req,contract:undefined}}}})).toThrow(/different decision/);
       }

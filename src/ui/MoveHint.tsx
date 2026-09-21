@@ -14,8 +14,10 @@ export function hintTrickEffect(g: GameState, tile: number): string {
   const domino = requestTile(tile), plays = [...g.currentTrick, { seat: 0 as const, domino }];
   const winner = plays[trickWinnerIndex(plays, g.rules)]!.seat;
   const who = winner === 0 ? 'you' : SEAT_NAMES[winner];
-  const fact = plays.length === 4 ? `With this play, ${who} ${winner === 0 ? 'win' : 'wins'} this trick.`
-    : `With this play, ${who} ${winner === 0 ? 'are' : 'is'} winning for now; ${4 - plays.length} still to play.`;
+  const size = g.sittingOut === null ? 4 : 3;
+  const fact = plays.length === size ? `With this play, ${who} ${winner === 0 ? 'win' : 'wins'} this trick.`
+    : `With this play, ${who} ${winner === 0 ? 'are' : 'is'} winning for now; ${size - plays.length} still to play.`;
+  if (g.contract?.kind === 'nello') return fact + (plays.length === size && winner === g.declarer ? ' That sets your Nel-O.' : '');
   const count = countValue(fromId(domino));
   return fact + (count ? ` It adds ${count} count points to the trick.` : '');
 }
