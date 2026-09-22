@@ -21,7 +21,7 @@
 /* The page can scroll on short phones or at large text sizes. The hand never shrinks. */
 .comfort-enabled .table-screen { height: auto; min-height: 100%; padding-bottom: env(safe-area-inset-bottom, 0px); }
 .comfort-enabled :where(button:not(.dom):not(.played-domino), summary) { min-height: 52px; }
-.comfort-enabled button:disabled { opacity: .48; cursor: default; }
+.comfort-enabled button:disabled:not(.played-domino) { opacity: .48; cursor: default; }
 .comfort-enabled .status { flex-wrap: wrap; }
 .comfort-enabled .status-mid { min-width: 0; }
 .comfort-enabled .status-tallies { margin-left: auto; }
