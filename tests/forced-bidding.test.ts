@@ -71,7 +71,7 @@ describe('Plunge forced last bid', () => {
     const completed=finish(old), code=encodeReplay(completed)!;
     expect(code.startsWith('v1t')).toBe(true);
     expect(decodeReplay(code)!.config.allPass).toBe('reshake');
-    const app={...restored,game:completed};
+    const app={...restored,screen:'table' as const,game:completed};
     const next=reducer(app,{type:'human',action:{type:'next-hand'}});
     expect(next.game!.config).toEqual(PLUNGE_CONFIG);
     expect(next.game!.marks).toEqual(completed.marks);

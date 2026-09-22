@@ -11,11 +11,12 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { CompletedTrick, GameState, PlayRecord, Seat } from '../engine';
 import { legalDominoes } from '../engine';
+import { ComfortHand } from './ComfortHand';
 import { Domino } from './Domino';
 import { Tally } from './Tally';
 import type { AppEvent, AppState } from './store';
 import {
-  HUMAN_SEAT, SEAT_NAMES, bidLabel, contractLabel, declLabel, ledChip, trumpChip,
+  HUMAN_SEAT, SEAT_NAMES, holdCompletedTrick, bidLabel, contractLabel, declLabel, ledChip, trumpChip,
 } from './store';
 import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet } from './sheets';
 import { TrickHistory } from './TrickHistory';
@@ -44,9 +45,10 @@ interface TableProps {
   /** Seat whose slow AI think is in flight (walt solving) — shows a note. */
   thinking?: Seat | null;
   onQuestion: (id: string) => void;
+  onComfort: () => void;
 }
 
-export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps) {
+export function Table({ app, dispatch, thinking = null, onQuestion, onComfort }: TableProps) {
   const [question, setQuestion] = useState<QuestionSelection | null>(null);
   const g = app.scenarioGame ?? app.game;
   useEffect(() => setQuestion(null), [app.sessionId, g?.handNumber, app.scenarioGame]);
@@ -95,13 +97,15 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
   const trickWinner: Seat | null = showingLast ? lastTrick.winner : null;
 
   const legal = new Set(g.phase === 'playing' && g.turn === HUMAN_SEAT ? legalDominoes(g) : []);
-  const humanTurn = g.phase === 'playing' && g.turn === HUMAN_SEAT;
+  const humanTurn = g.phase === 'playing' && g.turn === HUMAN_SEAT && !showingLast && !scenario;
+  const comfort = app.settings.comfort.enabled;
+  const holding = showingLast && holdCompletedTrick(app);
   const humanHand = g.hands[HUMAN_SEAT] ?? [];
   const humanSitsOut = g.sittingOut === HUMAN_SEAT;
 
   return (
-    <div class="table-screen">
-      <StatusStrip g={g} dispatch={dispatch} />
+    <div class={`table-screen${g.phase === 'bidding' || g.phase === 'declaring' ? ' auction' : ''}${holding ? ' holding-trick' : ''}`}>
+      <StatusStrip g={g} dispatch={dispatch} onComfort={onComfort} />
       {g.phase === 'playing' && (
         <InfoBar
           g={g}
@@ -112,7 +116,11 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
         />
       )}
       <div class="felt">
-        <OpponentTop g={g} thinking={thinking} />
+        {comfort && (g.phase === 'bidding' || g.phase === 'declaring') ? <div class="comfort-auction-seats">
+          {([1, 2, 3] as const).map(seat => <div key={seat} class={g.turn === seat ? 'active' : ''}>
+            <span>{SEAT_NAMES[seat]}{seat === 2 ? ' · partner' : ''}</span>{bidBubble(g, seat)}
+          </div>)}
+        </div> : <OpponentTop g={g} thinking={thinking} />}
         <div class="middle">
           <OpponentSide g={g} seat={1} thinking={thinking} />
           <TrickArea
@@ -143,6 +151,8 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
               ))}
               <p class="sit-note">You're sitting this one out — Nel-O.</p>
             </div>
+          ) : comfort ? (
+            <ComfortHand key={`${app.sessionId}:${g.handNumber}`} g={g} canPlay={humanTurn} completed={holding ? lastTrick : null} dispatch={dispatch} />
           ) : (
             <div class="hand" aria-label="Your hand">
               {humanHand.map((id) => (
@@ -151,7 +161,7 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
                   id={id}
                   orientation="v"
                   state={humanTurn ? (legal.has(id) ? 'legal' : 'illegal') : 'idle'}
-                  onTap={() => dispatch({ type: 'human', action: { type: 'play', domino: id } })}
+                  onTap={() => dispatch({ type: 'human', action: { type: 'play', domino: id }, expectedGame: g })}
                 />
               ))}
             </div>
@@ -162,8 +172,8 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
       {saved && <div class="question-toast" role="status"><span>{saved.text}</span>{saved.id && <button class="text-btn" onClick={() => { onQuestion(saved.id); setSaved(null); }}>Add note</button>}</div>}
       {question && <MoveQuestionPrompt key={`${question.sessionId}:${question.game.handNumber}:${question.ply}`}
         target={question.target} label={question.label} onSave={() => bookmark(question)} onClose={() => setQuestion(null)} />}
-      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet g={g} dispatch={dispatch} sessionId={app.sessionId} onQuestion={onQuestion} />}
-      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet g={g} dispatch={dispatch} sessionId={app.sessionId} onQuestion={onQuestion} />}
+      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet key={`${app.sessionId}:${g.handNumber}`} comfort={comfort} g={g} dispatch={dispatch} sessionId={app.sessionId} onQuestion={onQuestion} />}
+      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet key={`${app.sessionId}:${g.handNumber}`} comfort={comfort} g={g} dispatch={dispatch} sessionId={app.sessionId} onQuestion={onQuestion} />}
       {g.phase === 'hand-over' && !review && (
         <HandOverSheet
           g={g}
@@ -192,7 +202,7 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
 
 // ---------------------------------------------------------------------------
 
-function StatusStrip({ g, dispatch }: { g: GameState; dispatch: (e: AppEvent) => void }) {
+function StatusStrip({ g, dispatch, onComfort }: { g: GameState; dispatch: (e: AppEvent) => void; onComfort: () => void }) {
   return (
     <header class="status">
       <button
@@ -212,6 +222,7 @@ function StatusStrip({ g, dispatch }: { g: GameState; dispatch: (e: AppEvent) =>
           </div>
         )}
       </div>
+      <button type="button" class="comfort-table-button" onClick={onComfort} aria-label="Comfort controls">Controls</button>
       <div class="status-tallies">
         <Tally marks={g.marks[0] ?? 0} label="Us" />
         <Tally marks={g.marks[1] ?? 0} label="Them" />

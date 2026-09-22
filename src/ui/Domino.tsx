@@ -67,11 +67,12 @@ export interface DominoProps {
   orientation?: 'v' | 'h' | undefined;
   /** legal: lifted + tappable; illegal: dimmed + inert; idle: plain. */
   state?: 'idle' | 'legal' | 'illegal' | undefined;
+  selected?: boolean | undefined;
   onTap?: (() => void) | undefined;
   className?: string | undefined;
 }
 
-export function Domino({ id, faceDown, orientation = 'v', state = 'idle', onTap, className }: DominoProps) {
+export function Domino({ id, faceDown, orientation = 'v', state = 'idle', onTap, className, selected }: DominoProps) {
   const horiz = orientation === 'h';
   const w = horiz ? 200 : 100;
   const h = horiz ? 100 : 200;
@@ -112,7 +113,7 @@ export function Domino({ id, faceDown, orientation = 'v', state = 'idle', onTap,
 
   if (onTap && state === 'legal') {
     return (
-      <button type="button" class={cls} aria-label={id ? dominoAriaLabel(id) : 'domino'} onClick={onTap}>
+      <button type="button" class={cls} aria-pressed={selected} aria-label={id ? dominoAriaLabel(id) : 'domino'} onClick={onTap}>
         {face}
       </button>
     );

@@ -9,6 +9,7 @@
  *   - pauses briefly after a completed trick so the table can show it.
  */
 
+import { comfortSettings, DEFAULT_COMFORT, type ComfortSettings } from './comfort';
 import type { Difficulty } from '../ai';
 import { chooseAction } from '../ai/table';
 import { catalogueDeal } from '../ai/catalogue';
@@ -51,9 +52,10 @@ export interface Settings {
   readonly difficulty: Difficulty;
   readonly preset: Preset;
   readonly thinkDeeper: boolean;
+  readonly comfort: ComfortSettings;
 }
 
-export const DEFAULT_SETTINGS: Settings = { difficulty: 'native-partner', preset: 'tournament', thinkDeeper: false };
+export const DEFAULT_SETTINGS: Settings = { difficulty: 'native-partner', preset: 'tournament', thinkDeeper: false, comfort: DEFAULT_COMFORT };
 
 /** Rotate the bidder with the shaker; use real engine auction transitions. */
 export function practice30(game: GameState): GameState {
@@ -97,9 +99,10 @@ export type AppEvent =
   | { readonly type: 'set-difficulty'; readonly difficulty: Difficulty }
   | { readonly type: 'set-preset'; readonly preset: Preset }
   | { readonly type: 'set-think-deeper'; readonly enabled: boolean }
+  | { readonly type: 'set-comfort'; readonly settings: ComfortSettings }
   | { readonly type: 'new-game'; readonly seed: string; readonly sessionId?: string }
   | { readonly type: 'resume' }
-  | { readonly type: 'human'; readonly action: Action }
+  | { readonly type: 'human'; readonly action: Action; readonly expectedGame?: GameState }
   /** Step exactly one AI action (if one is pending). `choose` is injectable for tests. */
   | { readonly type: 'ai'; readonly choose?: ChooseFn | undefined }
   | { readonly type: 'trick-shown' }
@@ -108,17 +111,20 @@ export type AppEvent =
   | { readonly type: 'native-ai'; readonly receipt: NativeReceipt }
   | { readonly type: 'auction-ai'; readonly decision: AuctionDecision };
 
-export function initialApp(saved?: SavedState | null): AppState {
+export function initialApp(saved?: SavedState | null, search = ''): AppState {
   if (saved && !isNative(saved.settings.difficulty)) saved = null;
   return {
     screen: 'home',
-    settings: { ...DEFAULT_SETTINGS, ...saved?.settings },
+    settings: { ...DEFAULT_SETTINGS, ...saved?.settings, comfort: {
+      ...comfortSettings(saved?.settings.comfort),
+      ...(new URLSearchParams(search).get('comfort') === '1' ? { enabled: true } : {}),
+    } },
     seed: saved?.seed ?? 'plunge',
     // Apply the house rule to a resumed auction; preserve already-played hands.
     game: saved?.game?.phase === 'bidding'
       ? { ...saved.game, config: PLUNGE_CONFIG } : saved?.game ?? null,
     aiMoves: saved?.aiMoves ?? 0,
-    showTrick: false,
+    showTrick: saved?.showTrick === true && saved.game?.phase === 'playing' && saved.game.tricks.length > 0,
     scenarioGame: null,
     scenarioFlag: null,
     sessionId: saved?.sessionId ?? 'legacy',
@@ -163,6 +169,8 @@ export function reducer(s: AppState, e: AppEvent): AppState {
       return { ...s, settings: { ...s.settings, preset: e.preset } };
     case 'set-think-deeper':
       return { ...s, settings: { ...s.settings, thinkDeeper: e.enabled } };
+    case 'set-comfort':
+      return { ...s, settings: { ...s.settings, comfort: comfortSettings(e.settings) } };
     case 'new-game':
       return {
         ...s,
@@ -186,7 +194,9 @@ export function reducer(s: AppState, e: AppEvent): AppState {
     case 'trick-shown':
       return { ...s, showTrick: false };
     case 'human': {
-      if (!s.game || s.scenarioGame) return s; // shared hands are view-only
+      if (!s.game || s.scenarioGame || s.screen !== 'table' || s.showTrick) return s;
+      if (e.expectedGame && e.expectedGame !== s.game) return s;
+      if (e.action.type !== 'next-hand' && s.game.turn !== HUMAN_SEAT) return s;
       let game: GameState;
       try {
         game = applyAction(s.game, e.action);
@@ -247,12 +257,17 @@ export function aiDelayMs(s: AppState): number {
 /** How long a completed trick stays on display (interruptible by human taps). */
 export const TRICK_SHOW_MS = 850;
 
+export function holdCompletedTrick(s: AppState): boolean {
+  return s.settings.comfort.enabled && s.settings.comfort.pauseAfterTrick;
+}
+
 // ---------------------------------------------------------------------------
 // Persistence (storage-agnostic so tests can pass a fake)
 // ---------------------------------------------------------------------------
 
 export interface SavedState {
   readonly v: 1;
+  readonly showTrick?: boolean;
   readonly settings: Settings;
   readonly seed: string;
   readonly game: GameState | null;
@@ -271,7 +286,7 @@ export interface StorageLike {
 export const STORAGE_KEY = 'plunge:save:v1';
 
 export function toSaved(s: AppState): SavedState {
-  return { v: 1, settings: s.settings, seed: s.seed, game: s.game, aiMoves: s.aiMoves,
+  return { v: 1, showTrick: s.showTrick, settings: s.settings, seed: s.seed, game: s.game, aiMoves: s.aiMoves,
     sessionId: s.sessionId, nativeReceipts: s.nativeReceipts, auctionSurveys: s.auctionSurveys };
 }
 
@@ -305,7 +320,7 @@ export function loadApp(storage: StorageLike): SavedState | null {
       if (!Array.isArray(g.hands) || g.hands.length !== 4) return null;
       if (!Array.isArray(g.marks) || g.marks.length !== 2) return null;
     }
-    return { ...p, settings: { ...p.settings, thinkDeeper: p.settings.thinkDeeper ?? false } };
+    return { ...p, settings: { ...p.settings, thinkDeeper: p.settings.thinkDeeper ?? false, comfort: comfortSettings(p.settings.comfort) } };
   } catch {
     return null;
   }
