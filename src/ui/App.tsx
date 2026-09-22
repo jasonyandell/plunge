@@ -23,7 +23,9 @@ import { anticipatedAuctions, auctionMove } from '../ai/auction';
 import { AuctionPreparation } from '../ai/auction-preparation';
 import './app.css';
 import { Questions } from './Questions';
+import { Stats } from './Stats';
 import { attachGame, syncQuestions } from '../questions/client';
+import { recordFinishedHand } from '../stats/log';
 
 export function App() {
   const [app, dispatch] = useReducer(reducer, undefined, () =>
@@ -45,6 +47,12 @@ export function App() {
     attach();
     window.addEventListener('plunge-questions-changed', attach);
     return () => window.removeEventListener('plunge-questions-changed', attach);
+  }, [app.game, app.sessionId]);
+
+  // Append each finished hand to the on-device stats log (idempotent by
+  // game + hand number, so re-renders and reloads never double-count).
+  useEffect(() => {
+    if (app.game) void recordFinishedHand(app.game, app.sessionId, app.settings.difficulty).catch(() => {});
   }, [app.game, app.sessionId]);
 
   const preparation = useRef<AuctionPreparation>();
@@ -205,6 +213,8 @@ export function App() {
         return <HowTo dispatch={dispatch} />;
       case 'about':
         return <About dispatch={dispatch} />;
+      case 'stats':
+        return <Stats dispatch={dispatch} />;
       case 'table':
         return app.game || app.scenarioGame ? (
           <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} />

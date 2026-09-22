@@ -1,0 +1,115 @@
+/* Your stats: dark walnut doc screen, teal for "us"/made marks, direct labels
+   on every colored mark (identity never rides on color alone). */
+
+.stats .doc-body { max-width: 620px; }
+
+.stat-sample {
+  margin: 6px 0 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(224, 168, 79, 0.14);
+  border: 1px solid rgba(224, 168, 79, 0.45);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.stat-tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 10px 0 6px;
+}
+
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 242, 216, 0.06);
+  border: 1px solid rgba(233, 192, 122, 0.18);
+}
+
+.stat-num {
+  font-family: var(--display, serif);
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ivory);
+}
+
+.stat-label { font-size: 13px; font-weight: 650; color: var(--butterscotch); }
+.stat-sub { font-size: 12px; color: rgba(244, 234, 212, 0.65); }
+
+.stat-group { margin: 12px 0; }
+.stat-group-title { margin: 0 0 6px; font-size: 13px; font-weight: 650; color: rgba(244, 234, 212, 0.8); }
+
+.stat-meter {
+  display: grid;
+  grid-template-columns: 92px 1fr 58px;
+  align-items: center;
+  gap: 10px;
+  min-height: 26px;
+  font-size: 13px;
+}
+
+.stat-meter-label { color: var(--cream); }
+
+.stat-meter-track {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 242, 216, 0.12);
+  overflow: hidden;
+}
+
+.stat-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--teal-bright);
+}
+
+.stat-meter-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: rgba(244, 234, 212, 0.75);
+}
+
+.stat-lines { margin: 10px 0; padding-left: 18px; }
+.stat-lines li { margin: 6px 0; }
+.stat-lines strong { color: var(--ivory); font-variant-numeric: tabular-nums; }
+
+.stat-progress { color: var(--teal-bright); font-size: 14px; }
+
+.stat-disagreements { list-style: none; margin: 0; padding: 0; }
+.stat-disagreements li { margin: 6px 0; }
+
+.stat-disagreement {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid rgba(233, 192, 122, 0.2);
+  border-radius: 10px;
+  background: rgba(255, 242, 216, 0.05);
+  color: var(--cream);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stat-disagreement-text { flex: 1; }
+.stat-dom { display: inline-flex; }
+.stat-dom .dom { width: 22px; }
+
+.stat-gap {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  color: var(--butterscotch);
+  white-space: nowrap;
+}
+
+.stat-footnote { margin-top: 20px; }
