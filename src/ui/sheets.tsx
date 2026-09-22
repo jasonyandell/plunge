@@ -128,7 +128,7 @@ export function BidSheet({ g, dispatch, sessionId, onQuestion, comfort = false }
         </button>
       )}
       {comfort && <div class="comfort-confirm">
-        <p role="status">{selected ? `Selected: ${bidLabel(selected)}. You can still change it.` : 'Choose a bid or pass, then confirm.'}</p>
+        <p role="status">{selected ? `Selected: ${bidLabel(selected)}. You can still change it.` : canPass ? 'Choose a bid or pass, then confirm.' : 'Choose a bid, then confirm.'}</p>
         <button type="button" class="big-btn" disabled={!selected} onClick={() => { if (selected) commit(selected); }}>
           {selected ? selected.kind === 'pass' ? 'Confirm pass' : `Confirm bid ${bidLabel(selected)}` : 'Confirm your bid'}
         </button>
