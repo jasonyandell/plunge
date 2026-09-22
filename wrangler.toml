@@ -1,4 +1,4 @@
-name = "walt"
+name = "plunge"
 compatibility_date = "2026-05-14"
 main = "worker/index.ts"
 
