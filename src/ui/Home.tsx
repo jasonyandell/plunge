@@ -11,12 +11,13 @@ import './home.css';
 interface HomeProps {
   app: AppState;
   dispatch: (e: AppEvent) => void;
+  onComfort: () => void;
   onQuestions?: () => void;
 }
 
 const DIFFS: readonly Difficulty[] = ['native-partner', 'native-l1'];
 
-export function Home({ app, dispatch, onQuestions }: HomeProps) {
+export function Home({ app, dispatch, onQuestions, onComfort }: HomeProps) {
   const resumable = app.game !== null && app.game.phase !== 'game-over';
   return (
     <div class="home">
@@ -40,6 +41,11 @@ export function Home({ app, dispatch, onQuestions }: HomeProps) {
           onClick={() => dispatch({ type: 'new-game', seed: Date.now().toString(36), sessionId: crypto.randomUUID() })}
         >
           Deal me in
+        </button>
+
+        <button type="button" class="comfort-home" onClick={onComfort}>
+          <strong>Comfort controls · {app.settings.comfort.enabled ? 'On' : 'Off'}</strong>
+          <span>Bigger tiles. Forgiving taps. Your pace.</span>
         </button>
 
         <div class="link-row">

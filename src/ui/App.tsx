@@ -9,7 +9,7 @@
 import { useEffect, useReducer, useRef, useState } from 'preact/hooks';
 import type { Seat } from '../engine';
 import {
-  HUMAN_SEAT, TRICK_SHOW_MS, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
+  HUMAN_SEAT, TRICK_SHOW_MS, holdCompletedTrick, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
 } from './store';
 import {
   BUILD_ID, UPDATE_POLL_MS, fetchRemoteVersion, updateAvailable,
@@ -22,13 +22,26 @@ import { api, isNative, nativeMove, NATIVE_TABLE, type FlagRecord } from '../ai/
 import { anticipatedAuctions, auctionMove } from '../ai/auction';
 import { AuctionPreparation } from '../ai/auction-preparation';
 import './app.css';
+import { ComfortControls } from './ComfortControls';
+import { RepeatTapGuard } from './comfort';
+import './comfort.css';
 import { Questions } from './Questions';
 import { attachGame, syncQuestions } from '../questions/client';
 
 export function App() {
   const [app, dispatch] = useReducer(reducer, undefined, () =>
-    initialApp(typeof localStorage !== 'undefined' ? loadApp(localStorage) : null),
+    initialApp(typeof localStorage !== 'undefined' ? loadApp(localStorage) : null, location.search),
   );
+
+  const [comfortOpen, setComfortOpen] = useState(false);
+  const tapGuard = useRef(new RepeatTapGuard());
+  useEffect(() => {
+    const url = new URL(location.href);
+    if (url.searchParams.get('comfort') === '1') {
+      url.searchParams.delete('comfort');
+      history.replaceState(null, '', url.pathname + url.search + url.hash);
+    }
+  }, []);
 
   const [questions, setQuestions] = useState<{ id: string | null } | null>(null);
   const openQuestion = (id: string) => setQuestions({ id });
@@ -68,7 +81,7 @@ export function App() {
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     setNativeError(null);
-    if (questions) return;
+    if (questions || comfortOpen) return;
     const seat = pendingAiSeat(app);
     if (seat !== null) {
       let alive = true;
@@ -104,18 +117,18 @@ export function App() {
         setThinking(null);
       };
     }
-    if (app.showTrick) {
+    if (app.showTrick && !holdCompletedTrick(app)) {
       const t = setTimeout(() => dispatch({ type: 'trick-shown' }), TRICK_SHOW_MS);
       return () => clearTimeout(t);
     }
     return undefined;
-  }, [app, retry, questions]);
+  }, [app, retry, questions, comfortOpen]);
 
   // Persist settings + in-progress game. (A shared hand opened from a link
   // is never part of the save — the player's own game stays underneath.)
   useEffect(() => {
     if (typeof localStorage !== 'undefined') saveApp(localStorage, app);
-  }, [app.game, app.settings, app.seed, app.aiMoves, app.nativeReceipts, app.auctionSurveys, app.sessionId]);
+  }, [app.game, app.settings, app.seed, app.aiMoves, app.nativeReceipts, app.auctionSurveys, app.sessionId, app.showTrick]);
 
   // A share link (#r=...) opens that hand in view-only review. The hash is
   // consumed on load so reloads and future navigation stay clean.
@@ -200,23 +213,31 @@ export function App() {
   const screen = (() => {
     switch (app.screen) {
       case 'home':
-        return <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} />;
+        return <Home app={app} dispatch={dispatch} onComfort={() => setComfortOpen(true)} onQuestions={() => setQuestions({ id: null })} />;
       case 'how':
         return <HowTo dispatch={dispatch} />;
       case 'about':
         return <About dispatch={dispatch} />;
       case 'table':
         return app.game || app.scenarioGame ? (
-          <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} />
+          <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} onComfort={() => setComfortOpen(true)} />
         ) : (
-          <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} />
+          <Home app={app} dispatch={dispatch} onComfort={() => setComfortOpen(true)} onQuestions={() => setQuestions({ id: null })} />
         );
     }
   })();
 
   return (
-    <>
+    <div class={`app-shell${app.settings.comfort.enabled ? ' comfort-enabled' : ''}${app.settings.comfort.enabled && app.settings.comfort.reduceMotion ? ' comfort-still' : ''}`}
+      onClickCapture={e => {
+        if (!(e.target instanceof Element) || !e.target.closest('button, summary, input, select, a')) return;
+        if (!tapGuard.current.accept(e.timeStamp, e.detail, app.settings.comfort.enabled ? app.settings.comfort.repeatTapMs : 0)) {
+          e.preventDefault(); e.stopPropagation();
+        }
+      }}>
       {screen}
+      {comfortOpen && <ComfortControls settings={app.settings.comfort}
+        onChange={settings => dispatch({ type: 'set-comfort', settings })} onClose={() => setComfortOpen(false)} />}
       {questions && <Questions key={questions.id ?? "list"} initialId={questions.id} onClose={() => setQuestions(null)} dispatch={dispatch} />}
       {nativeError && (
         <div class="native-error" role="alert">
@@ -225,6 +246,6 @@ export function App() {
         </div>
       )}
       {updateBanner}
-    </>
+    </div>
   );
 }

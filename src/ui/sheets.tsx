@@ -20,7 +20,7 @@ interface SheetProps {
   dispatch: (e: AppEvent) => void;
 }
 
-interface AuctionSheetProps extends SheetProps { sessionId: string; onQuestion: (id: string) => void }
+interface AuctionSheetProps extends SheetProps { comfort?: boolean; sessionId: string; onQuestion: (id: string) => void }
 
 interface EndSheetProps extends SheetProps {
   /** Swap to the hand-review card (trick-by-trick history). */
@@ -33,7 +33,7 @@ interface EndSheetProps extends SheetProps {
 // Bidding
 // ---------------------------------------------------------------------------
 
-export function BidSheet({ g, dispatch, sessionId, onQuestion }: AuctionSheetProps) {
+export function BidSheet({ g, dispatch, sessionId, onQuestion, comfort = false }: AuctionSheetProps) {
   const bids = legalBids(g);
   const currentBid = highBid(g.bids);
   const canPass = bids.some((b) => b.kind === 'pass');
@@ -53,7 +53,11 @@ export function BidSheet({ g, dispatch, sessionId, onQuestion }: AuctionSheetPro
     (b): b is Bid & { kind: 'marks' } => b.kind === 'marks' && b.special !== undefined,
   );
 
-  const place = (bid: Bid) => dispatch({ type: 'human', action: { type: 'bid', bid } });
+  const [selected, setSelected] = useState<Bid | null>(null);
+  const commit = (bid: Bid) => dispatch({ type: 'human', action: { type: 'bid', bid }, expectedGame: g });
+  const place = (bid: Bid) => comfort ? setSelected(bid) : commit(bid);
+  const isSelected = (bid: Bid) => comfort ? JSON.stringify(selected) === JSON.stringify(bid) : undefined;
+  const changePoint = (value: number) => { setPt(value); if (comfort) setSelected({ kind: 'points', value }); };
 
   return (
     <div class="sheet bid-sheet" role="dialog" aria-label="Your bid">
@@ -67,23 +71,24 @@ export function BidSheet({ g, dispatch, sessionId, onQuestion }: AuctionSheetPro
             class="step-btn"
             aria-label="Lower bid"
             disabled={pt <= minPt}
-            onClick={() => setPt(pt - 1)}
+            onClick={() => changePoint(pt - 1)}
           >
             &minus;
           </button>
           <button
             type="button"
             class="bid-go"
+            aria-pressed={pt !== null ? isSelected({ kind: 'points', value: pt }) : undefined}
             onClick={() => place({ kind: 'points', value: pt })}
           >
-            Bid {pt}
+            {comfort ? 'Choose' : 'Bid'} {pt}
           </button>
           <button
             type="button"
             class="step-btn"
             aria-label="Raise bid"
             disabled={pt >= maxPt}
-            onClick={() => setPt(pt + 1)}
+            onClick={() => changePoint(pt + 1)}
           >
             +
           </button>
@@ -96,6 +101,7 @@ export function BidSheet({ g, dispatch, sessionId, onQuestion }: AuctionSheetPro
               key={`m${b.value}`}
               type="button"
               class="bid-chip"
+              aria-pressed={isSelected(b)}
               onClick={() => place(b)}
             >
               {b.value === 1 ? '1 mark (42)' : `${b.value} marks`}
@@ -105,7 +111,7 @@ export function BidSheet({ g, dispatch, sessionId, onQuestion }: AuctionSheetPro
       )}
       {specials.map((b) => (
         <div class="bid-special" key={`${b.special}${b.value}`}>
-          <button type="button" class="bid-chip special" onClick={() => place(b)}>
+          <button type="button" class="bid-chip special" aria-pressed={isSelected(b)} onClick={() => place(b)}>
             {bidLabel(b)}
           </button>
           <p class="hint">{specialHint(b)}</p>
@@ -115,11 +121,18 @@ export function BidSheet({ g, dispatch, sessionId, onQuestion }: AuctionSheetPro
         <button
           type="button"
           class="bid-pass"
+          aria-pressed={isSelected({ kind: 'pass' })}
           onClick={() => place({ kind: 'pass' })}
         >
           Pass
         </button>
       )}
+      {comfort && <div class="comfort-confirm">
+        <p role="status">{selected ? `Selected: ${bidLabel(selected)}. You can still change it.` : canPass ? 'Choose a bid or pass, then confirm.' : 'Choose a bid, then confirm.'}</p>
+        <button type="button" class="big-btn" disabled={!selected} onClick={() => { if (selected) commit(selected); }}>
+          {selected ? selected.kind === 'pass' ? 'Confirm pass' : `Confirm bid ${bidLabel(selected)}` : 'Confirm your bid'}
+        </button>
+      </div>}
     </div>
   );
 }
@@ -141,7 +154,7 @@ function specialHint(b: Bid & { kind: 'marks' }): string {
 // Declaring trump
 // ---------------------------------------------------------------------------
 
-export function DeclareSheet({ g, dispatch, sessionId, onQuestion }: AuctionSheetProps) {
+export function DeclareSheet({ g, dispatch, sessionId, onQuestion, comfort = false }: AuctionSheetProps) {
   const decls = legalDeclarations(g);
   const forPartner =
     g.contract !== null &&
@@ -151,8 +164,9 @@ export function DeclareSheet({ g, dispatch, sessionId, onQuestion }: AuctionShee
   const title = forPartner
     ? `${SEAT_NAMES[g.declarer ?? 0]} ${g.contract?.kind === 'plunge' ? 'plunged' : 'splashed'} — you call trump`
     : 'You won the bid. Call trump.';
-  const declare = (decl: Declaration) =>
-    dispatch({ type: 'human', action: { type: 'declare', decl } });
+  const [selected, setSelected] = useState<Declaration | null>(null);
+  const commit = (decl: Declaration) => dispatch({ type: 'human', action: { type: 'declare', decl }, expectedGame: g });
+  const declare = (decl: Declaration) => comfort ? setSelected(decl) : commit(decl);
   return (
     <div class="sheet declare-sheet" role="dialog" aria-label="Declare trump">
       <h2 class="sheet-title">{title}</h2>
@@ -164,12 +178,19 @@ export function DeclareSheet({ g, dispatch, sessionId, onQuestion }: AuctionShee
             key={JSON.stringify(d)}
             type="button"
             class={`decl-btn${d.type === 'nello' || d.type === 'sevens' ? ' special' : ''}`}
+            aria-pressed={comfort ? JSON.stringify(selected) === JSON.stringify(d) : undefined}
             onClick={() => declare(d)}
           >
             {declTitle(d)}
           </button>
         ))}
       </div>
+      {comfort && <div class="comfort-confirm">
+        <p role="status">{selected ? `Selected: ${declTitle(selected)}. You can still change it.` : 'Choose trump, then confirm.'}</p>
+        <button type="button" class="big-btn" disabled={!selected} onClick={() => { if (selected) commit(selected); }}>
+          {selected ? `Confirm ${declTitle(selected).toLowerCase()}` : 'Confirm trump'}
+        </button>
+      </div>}
     </div>
   );
 }
@@ -211,7 +232,7 @@ export function HandOverSheet({ g, dispatch, onReview, scenario }: EndSheetProps
           <button
             type="button"
             class="big-btn"
-            onClick={() => dispatch({ type: 'human', action: { type: 'next-hand' } })}
+            onClick={() => dispatch({ type: 'human', action: { type: 'next-hand' }, expectedGame: g })}
           >
             Shake the next hand
           </button>
