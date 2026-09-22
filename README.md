@@ -3,7 +3,7 @@
 A free, open source, mobile web **Texas 42** game — you and Gran against Earl and Ruby,
 best of luck to the both of you.
 
-**Play it: https://plunge.jasonyandell.workers.dev** — works in any phone browser,
+**Play it: https://plunge.texas42.workers.dev** — works in any phone browser,
 installable as an app, plays offline.
 
 The live table plays **straight 42** with regular bidding: 30–41, then marks.
