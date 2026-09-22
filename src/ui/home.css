@@ -54,7 +54,7 @@
   cursor: pointer;
 }
 .seg-btn.on { background: var(--teal); color: white; font-weight: 600; }
-.link-row { display: flex; justify-content: center; gap: 24px; margin-top: 8px; }
+.link-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 24px; margin-top: 8px; }
 .home .text-btn { color: var(--teal-ink); }
 .doc .text-btn { color: var(--teal-bright); }
 .home-settings { margin-top: 10px; }

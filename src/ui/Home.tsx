@@ -44,6 +44,9 @@ export function Home({ app, dispatch, onQuestions }: HomeProps) {
 
         <div class="link-row">
           {onQuestions && <button type="button" class="text-btn" onClick={onQuestions}>Your questions</button>}
+          <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'stats' })}>
+            Your stats
+          </button>
           <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'how' })}>
             How to play
           </button>
@@ -164,7 +167,7 @@ export function About({ dispatch }: { dispatch: (e: AppEvent) => void }) {
   );
 }
 
-function BackBar({ dispatch, title }: { dispatch: (e: AppEvent) => void; title: string }) {
+export function BackBar({ dispatch, title }: { dispatch: (e: AppEvent) => void; title: string }) {
   return (
     <header class="back-bar">
       <button
