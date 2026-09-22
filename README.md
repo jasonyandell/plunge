@@ -3,7 +3,7 @@
 A free, open source, mobile web **Texas 42** game — you and Gran against Earl and Ruby,
 best of luck to the both of you.
 
-**Play it: https://plunge.jasonyandell.workers.dev** — works in any phone browser,
+**Play it: https://plunge.texas42.workers.dev** — works in any phone browser,
 installable as an app, plays offline.
 
 The live table plays **straight 42** with regular bidding: 30–41, then marks.
@@ -91,6 +91,10 @@ never label an unscored emergency fallback as a measured recommendation.
   uses straight 42 and the shared Walt player.
 
 ## How it ships
+
+Every same-repository pull request, including drafts, gets a stable phone-accessible
+preview link and an isolated question database. Pushes update that preview; closing
+the PR cleans it up. Open **View deployment** on the PR. [Preview guide](docs-previews.md).
 
 Every push to `main` runs the full suite (engine invariants, AI legality + strength
 ladder, store tests) and only then deploys to Cloudflare Workers via GitHub Actions.
