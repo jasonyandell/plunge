@@ -83,3 +83,10 @@
 
 .comfort-enabled .hint-header { position: sticky; top: -18px; padding: 8px 0; background: var(--cream); z-index: 1; }
 .comfort-enabled .hint-actions { position: sticky; bottom: -18px; padding-bottom: 12px; background: var(--cream); border-top: 1px solid #a98c6240; }
+
+/* Leave room for the new Controls entry even with the original one-row hand. */
+.app-shell .status { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 4px 8px; }
+.app-shell .status .menu-btn { grid-column: 1; grid-row: 1 / 3; }
+.app-shell .status-mid { grid-column: 2; grid-row: 1; text-align: left; }
+.app-shell .comfort-table-button { grid-column: 3; grid-row: 1; }
+.app-shell .status-tallies { grid-column: 2 / 4; grid-row: 2; justify-self: end; }
