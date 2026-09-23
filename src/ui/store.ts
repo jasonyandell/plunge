@@ -68,7 +68,7 @@ export function configFor(preset: Preset): GameConfig {
   return preset === 'tournament' ? TOURNAMENT_CONFIG : CASUAL_CONFIG;
 }
 
-export type Screen = 'home' | 'table' | 'how' | 'about';
+export type Screen = 'home' | 'table' | 'how' | 'about' | 'stats';
 
 export interface AppState {
   readonly screen: Screen;

@@ -242,7 +242,7 @@ export function GameOverSheet({ g, dispatch, onReview }: EndSheetProps) {
         <button
           type="button"
           class="big-btn"
-          onClick={() => dispatch({ type: 'new-game', seed: Date.now().toString(36) })}
+          onClick={() => dispatch({ type: 'new-game', seed: Date.now().toString(36), sessionId: crypto.randomUUID() })}
         >
           Play again
         </button>
