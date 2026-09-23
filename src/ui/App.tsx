@@ -27,7 +27,7 @@ import { attachGame, syncQuestions } from '../questions/client';
 
 export function App() {
   const [app, dispatch] = useReducer(reducer, undefined, () =>
-    initialApp(typeof localStorage !== 'undefined' ? loadApp(localStorage) : null),
+    initialApp(typeof localStorage !== 'undefined' ? loadApp(localStorage) : null, location.search),
   );
 
   const [questions, setQuestions] = useState<{ id: string | null } | null>(null);
@@ -89,7 +89,7 @@ export function App() {
       } else t = setTimeout(() => {
         if (isNative(app.settings.difficulty) && app.game?.phase === 'playing') {
           setThinking(seat);
-          void nativeMove(app.game, seat, app.settings.difficulty, app.sessionId, controller.signal, app.settings.thinkDeeper).then(
+          void nativeMove(app.game, seat, app.settings.difficulty, app.sessionId, controller.signal, app.settings.thinkDeeper, app.settings.nelloCounterexamples).then(
             (receipt) => { if (alive) dispatch({ type: 'native-ai', receipt }); },
             (error: unknown) => { if (alive) setNativeError(String(error)); },
           ).finally(() => { if (alive) setThinking(null); });

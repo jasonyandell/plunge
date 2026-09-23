@@ -42,6 +42,7 @@ export function Home({ app, dispatch, onQuestions }: HomeProps) {
           Deal me in
         </button>
 
+        {app.settings.nelloCounterexamples && !NATIVE_TABLE && <p class="setting-hint">Nel-O counterexample experiment is on. Change it in Advanced settings.</p>}
         <div class="link-row">
           {onQuestions && <button type="button" class="text-btn" onClick={onQuestions}>Your questions</button>}
           <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'how' })}>
@@ -84,6 +85,21 @@ export function Home({ app, dispatch, onQuestions }: HomeProps) {
               {app.settings.difficulty === 'native-partner' && ' Uses deeper analysis in place of the regular partner check.'}
             </p>
           </div>
+          {!NATIVE_TABLE && <div class="setting">
+            <button type="button" role="switch" class="thinking-switch"
+              aria-checked={app.settings.nelloCounterexamples} aria-describedby="counterexample-hint"
+              onClick={() => {
+                const enabled = !app.settings.nelloCounterexamples;
+                const url = new URL(location.href);
+                url.searchParams.set('nello', enabled ? 'counterexamples' : 'ordinary');
+                history.replaceState(null, '', url);
+                dispatch({ type: 'set-nello-counterexamples', enabled });
+              }}>
+              <span>Nel-O counterexamples</span>
+              <span class="switch-track" aria-hidden="true"><span /></span>
+            </button>
+            <p id="counterexample-hint" class="setting-hint">Experimental defense: look for deals that escape the plan, then try again with those deals included. May take longer; stronger play isn’t established.</p>
+          </div>}
           <p class="setting-hint native-intro">
             {NATIVE_TABLE ? 'Walt runs on your Mac.' : 'Walt runs right on your device.'}
             {' '}It uses only its own hand and the public plays. After a hand,

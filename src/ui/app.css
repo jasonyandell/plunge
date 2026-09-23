@@ -184,3 +184,7 @@ button:focus-visible {
 .native-held > span { border-radius: 10px; }
 .native-held > .native-legal { background: #286f6510; }
 .observation-tools { padding-bottom: 4px; }
+
+.counterexample-scores { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.counterexample-scores th, .counterexample-scores td { text-align: left; padding: .45rem .2rem; }
+.counterexample-scores .exp-dom { max-width: 4rem; }

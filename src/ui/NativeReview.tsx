@@ -130,7 +130,7 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQu
           <p>Original decision: {matchedReceipt.response.n === 160
             ? 'Deeper L1 comparison · requested 160 worlds'
             : matchedReceipt.identity.player.name === 'l1-default' ? 'L1' : 'L1 + partner check'} · {(matchedReceipt.response.elapsed_us / 1e6).toFixed(2)} s</p>
-          <p>{review?.status === 'changed' ? `The check changed ${pips(review.baseline)} to ${pips(review.choice)}.`
+          <p>{matchedReceipt.response.counterexample_result?.status === 'completed' ? 'The Nel-O counterexample pass selected the move; its stress scores are shown above.' : review?.status === 'changed' ? `The check changed ${pips(review.baseline)} to ${pips(review.choice)}.`
             : review?.status === 'retained' ? 'The check kept L1’s move.'
             : review?.status === 'inactive' ? 'The partnership check did not trigger.'
             : review ? 'The check was unresolved; L1’s move was kept.' : matchedReceipt.response.route === 'forced' ? 'Only one legal move.' : 'The baseline player chose this move.'}</p>

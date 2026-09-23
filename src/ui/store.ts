@@ -51,9 +51,10 @@ export interface Settings {
   readonly difficulty: Difficulty;
   readonly preset: Preset;
   readonly thinkDeeper: boolean;
+  readonly nelloCounterexamples: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { difficulty: 'native-partner', preset: 'tournament', thinkDeeper: false };
+export const DEFAULT_SETTINGS: Settings = { difficulty: 'native-partner', preset: 'tournament', thinkDeeper: false, nelloCounterexamples: false };
 
 /** Rotate the bidder with the shaker; use real engine auction transitions. */
 export function practice30(game: GameState): GameState {
@@ -97,6 +98,7 @@ export type AppEvent =
   | { readonly type: 'set-difficulty'; readonly difficulty: Difficulty }
   | { readonly type: 'set-preset'; readonly preset: Preset }
   | { readonly type: 'set-think-deeper'; readonly enabled: boolean }
+  | { readonly type: 'set-nello-counterexamples'; readonly enabled: boolean }
   | { readonly type: 'new-game'; readonly seed: string; readonly sessionId?: string }
   | { readonly type: 'resume' }
   | { readonly type: 'human'; readonly action: Action }
@@ -108,11 +110,13 @@ export type AppEvent =
   | { readonly type: 'native-ai'; readonly receipt: NativeReceipt }
   | { readonly type: 'auction-ai'; readonly decision: AuctionDecision };
 
-export function initialApp(saved?: SavedState | null): AppState {
+export function initialApp(saved?: SavedState | null, search = ''): AppState {
   if (saved && !isNative(saved.settings.difficulty)) saved = null;
+  const experiment = new URLSearchParams(search).get('nello');
   return {
     screen: 'home',
-    settings: { ...DEFAULT_SETTINGS, ...saved?.settings },
+    settings: { ...DEFAULT_SETTINGS, ...saved?.settings,
+      ...(experiment === 'counterexamples' ? { nelloCounterexamples: true } : experiment === 'ordinary' ? { nelloCounterexamples: false } : {}) },
     seed: saved?.seed ?? 'plunge',
     // Apply the house rule to a resumed auction; preserve already-played hands.
     game: saved?.game?.phase === 'bidding'
@@ -161,6 +165,8 @@ export function reducer(s: AppState, e: AppEvent): AppState {
         preset: isNative(e.difficulty) ? 'tournament' : s.settings.preset } };
     case 'set-preset':
       return { ...s, settings: { ...s.settings, preset: e.preset } };
+    case 'set-nello-counterexamples':
+      return { ...s, settings: { ...s.settings, nelloCounterexamples: e.enabled } };
     case 'set-think-deeper':
       return { ...s, settings: { ...s.settings, thinkDeeper: e.enabled } };
     case 'new-game':
@@ -294,6 +300,7 @@ export function loadApp(storage: StorageLike): SavedState | null {
     if (p === null || typeof p !== 'object' || p.v !== 1) return null;
     if (!DIFFICULTIES.includes(p.settings?.difficulty)) return null;
     if (!PRESETS.includes(p.settings?.preset)) return null;
+    if (p.settings.nelloCounterexamples !== undefined && typeof p.settings.nelloCounterexamples !== 'boolean') return null;
     if (p.settings.thinkDeeper !== undefined && typeof p.settings.thinkDeeper !== 'boolean') return null;
     if (typeof p.seed !== 'string' || typeof p.aiMoves !== 'number') return null;
     if (p.sessionId !== undefined && (typeof p.sessionId !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(p.sessionId))) return null;
@@ -305,7 +312,7 @@ export function loadApp(storage: StorageLike): SavedState | null {
       if (!Array.isArray(g.hands) || g.hands.length !== 4) return null;
       if (!Array.isArray(g.marks) || g.marks.length !== 2) return null;
     }
-    return { ...p, settings: { ...p.settings, thinkDeeper: p.settings.thinkDeeper ?? false } };
+    return { ...p, settings: { ...p.settings, thinkDeeper: p.settings.thinkDeeper ?? false, nelloCounterexamples: p.settings.nelloCounterexamples ?? false } };
   } catch {
     return null;
   }

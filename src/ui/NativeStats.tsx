@@ -1,9 +1,10 @@
 /** Original playing evidence stays visible when a fresh estimate is requested. */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { type GameState } from '../engine';
-import { api, requestKey, requestTile, type NativeReceipt, type NativeEstimate } from '../ai/native';
+import { api, requestKey, requestTile, isNelloDefender, NATIVE_TABLE, type NativeReceipt, type NativeEstimate } from '../ai/native';
 import { decisionStats, type reviewPosition, type ReviewSelection } from '../ai/native-analysis';
 import { Domino } from './Domino';
+import { CounterexampleScores } from './CounterexampleScores';
 import { MoveScores } from './MoveScores';
 import { ledChip, SEAT_NAMES, trumpChip } from './store';
 
@@ -28,12 +29,12 @@ export function NativeStats({ g, sel, position, receipt, loading }: {
   const fresh = estimate ? decisionStats(estimate.response, request, legal) : null;
   const forced = legal.length === 1;
   const led = ledChip(g, g.tricks[sel.trick]!.plays.slice(0, sel.play));
-  const inspect = async (worlds: 40 | 160): Promise<void> => {
+  const inspect = async (worlds: 40 | 160, counterexamples = false): Promise<void> => {
     if (busy) return;
     setBusy(true); setError('');
     controller.current = new AbortController();
     try {
-      const value = await api<NativeEstimate>('estimates', { request, worlds }, worlds === 160 ? 24000 : 18000, controller.current.signal);
+      const value = await api<NativeEstimate>('estimates', { request, worlds, ...(counterexamples ? { nello_counterexamples: true } : {}) }, worlds === 160 ? 24000 : 18000, controller.current.signal);
       if (value.schema !== 'plunge-estimate-v1' || requestKey(value.identity.request) !== requestKey(request)
         || value.identity.player.n !== worlds) throw new Error('The estimate does not match this position.');
       if (alive.current) setEstimate(value);
@@ -56,10 +57,12 @@ export function NativeStats({ g, sel, position, receipt, loading }: {
           : 'No original Walt estimate for this play. Ask Walt to compare the options from this player’s view.'}</p>}
       {receipt?.response.interruption && <p class="setting-hint">{receipt.response.interruption}</p>}
       {receipt?.response.review_result?.status === 'changed' && <p class="setting-hint">These were Walt’s first estimates. A separate partner check changed its choice.</p>}
+      {receipt && <CounterexampleScores response={receipt.response} request={request} legal={legal} />}
       {original && <p class="setting-hint">Walt’s estimate from this player’s view. Small differences can come down to the sample.</p>}
       {estimate && <div class="native-fresh" ref={freshPanel}>
         <h4>A fresh look from Walt</h4>
         {fresh ? <MoveScores stats={fresh} selected={played} selectionLabel="Played" /> : <p>No complete comparison finished within the time limit. You can retry.</p>}
+        <CounterexampleScores response={estimate.response} request={request} legal={legal} />
         {fresh?.fallback && <p>The larger comparison did not finish; these are the smaller completed sample’s scores. You can retry.</p>}
         <p class="setting-hint">A new estimate from the same player’s view.
           {' '}{original ? 'The original scores stay above.' : 'Small differences can come down to the sample.'}</p>
@@ -71,6 +74,8 @@ export function NativeStats({ g, sel, position, receipt, loading }: {
       <div class="native-inspect-controls">
         {!original && <button class="big-btn secondary" disabled={busy || loading} onClick={() => void inspect(40)}>Ask Walt</button>}
         <button class="big-btn secondary" disabled={busy || loading} onClick={() => void inspect(160)}>Think deeper</button>
+        {!NATIVE_TABLE && isNelloDefender(request) && <button class="big-btn secondary" disabled={busy || loading}
+          onClick={() => void inspect(fresh?.worlds === 160 ? 160 : 40, true)}>Try counterexamples</button>}
       </div>
       {!busy && <p class="setting-hint">Think deeper compares more possible deals. It can take up to 20 seconds.</p>}
       {busy && <p role="status">Walt is comparing the options… usually a few seconds, up to 20 seconds.</p>}

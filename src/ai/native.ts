@@ -21,7 +21,14 @@ export interface NativeRequest {
 export interface NativeEvaluation {
   options: [number, string, string][]; outer_worlds: number;
 }
+export interface CounterexampleReview {
+  schema: 'nello-counterexamples-v1'; status: string; stop: string;
+  baseline: number; choice: number; ordinary_worlds: number; witnesses: number; rounds: number;
+  score_kind: 'witness-mixture'; options: [number, string, string][];
+}
 export interface NativeDecision {
+  counterexample_result?: CounterexampleReview;
+
   contract?: 'nello'; inactive?: number;
   choice: number; legal: number[]; route: string; leader: number; points: number[]; elapsed_us: number;
   interruption?: string; player_version?: string; mode?: string; review?: string; n?: number; budget_ms?: number;
@@ -38,7 +45,7 @@ export interface NativeReceipt {
 }
 export interface NativeEstimate {
   schema: 'plunge-estimate-v1'; id: string; created: string;
-  identity: { request: NativeRequest; player: { n: number }; implementation?: unknown };
+  identity: { request: NativeRequest; player: { n: number; nello_counterexamples?: boolean }; implementation?: unknown };
   response: NativeDecision;
 }
 export interface FlagRecord {
@@ -69,11 +76,12 @@ export async function api<T>(path: string, body?: unknown, milliseconds = 18000,
   if (!NATIVE_TABLE) {
     if (path.startsWith('receipts/') && body === undefined) return await getReceipt(path.slice(9)) as T;
     if (path === 'estimates') {
-      const { request, worlds } = body as { request: NativeRequest; worlds: 40 | 160 };
+      const { request, worlds, nello_counterexamples } = body as { request: NativeRequest; worlds: 40 | 160; nello_counterexamples?: boolean };
       const response = await runPlayer({ request, worlds, partner: false,
+        ...(nello_counterexamples && isNelloDefender(request) ? { nello_counterexamples: true } : {}),
         ...(worlds === 160 ? { budget_ms: 20000 } : {}) }, signal);
       return { schema: 'plunge-estimate-v1', id: await digest({ request, worlds, response }),
-        created: new Date().toISOString(), identity: { request, player: { n: worlds }, implementation: { ...manifest, app: BUILD_ID } }, response } as T;
+        created: new Date().toISOString(), identity: { request, player: { n: worlds, ...(nello_counterexamples ? { nello_counterexamples: true } : {}) }, implementation: { ...manifest, app: BUILD_ID } }, response } as T;
     }
     throw new Error('This operation needs the Mac gym. Copy an observation link to bring the hand back.');
   }
@@ -113,16 +121,21 @@ export function requestTile(tile: number): string {
   return `${hi}${tile - hi * (hi + 1) / 2}`;
 }
 
-export function livePlayerCall(request: NativeRequest, difficulty: NativeDifficulty, thinkDeeper = false) {
-  return thinkDeeper || (request.seat === request.bidder && request.plays.length === 0)
-    ? { request, worlds: 160, partner: false, budget_ms: 20000 }
-    : { request, worlds: 40, partner: difficulty === 'native-partner' };
+export function isNelloDefender(request: NativeRequest): boolean {
+  return request.contract === 'nello' && request.seat % 2 !== request.bidder % 2;
 }
 
-export async function nativeMove(g: GameState, seat: Seat, difficulty: NativeDifficulty, gameId: string, signal?: AbortSignal, thinkDeeper = false): Promise<NativeReceipt> {
+export function livePlayerCall(request: NativeRequest, difficulty: NativeDifficulty, thinkDeeper = false, counterexamples = false) {
+  const call = thinkDeeper || (request.seat === request.bidder && request.plays.length === 0)
+    ? { request, worlds: 160, partner: false, budget_ms: 20000 }
+    : { request, worlds: 40, partner: difficulty === 'native-partner' };
+  return counterexamples && isNelloDefender(request) ? { ...call, nello_counterexamples: true } : call;
+}
+
+export async function nativeMove(g: GameState, seat: Seat, difficulty: NativeDifficulty, gameId: string, signal?: AbortSignal, thinkDeeper = false, counterexamples = false): Promise<NativeReceipt> {
   const request = requestOf(g, seat, gameId);
   const player = difficulty === 'native-l1' ? 'l1-default' : 'l1-partner-rollout';
-  const call = livePlayerCall(request, difficulty, thinkDeeper);
+  const call = livePlayerCall(request, difficulty, thinkDeeper, counterexamples && !NATIVE_TABLE);
   const deeper = call.worlds === 160;
   let receipt: NativeReceipt;
   if (NATIVE_TABLE) {
