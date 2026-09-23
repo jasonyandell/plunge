@@ -40,6 +40,16 @@ describe('<Domino>', () => {
     expect(String(props(v)['class'])).toContain('dom-illegal');
   });
 
+  it('plain interactive tiles support taps without revealing legality', () => {
+    const onTap = () => {};
+    const v = Domino({ id: '64', state: 'idle', interactive: true, onTap }) as VNode;
+    expect(v.type).toBe('button');
+    expect(props(v)['onClick']).toBe(onTap);
+    expect(String(props(v)['class'])).toContain('dom-idle');
+    expect(String(props(v)['class'])).not.toMatch(/dom-(legal|illegal)/);
+    expect(Domino({ id: '64', state: 'idle', onTap })!.type).toBe('div');
+  });
+
   it('face-down tiles hide their identity', () => {
     const v = Domino({ faceDown: true }) as VNode;
     expect(props(v)['aria-label']).toBe('face-down domino');

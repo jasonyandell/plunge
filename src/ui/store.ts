@@ -51,9 +51,10 @@ export interface Settings {
   readonly difficulty: Difficulty;
   readonly preset: Preset;
   readonly thinkDeeper: boolean;
+  readonly showHints: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { difficulty: 'native-partner', preset: 'tournament', thinkDeeper: false };
+export const DEFAULT_SETTINGS: Settings = { difficulty: 'native-partner', preset: 'tournament', thinkDeeper: false, showHints: true };
 
 /** Rotate the bidder with the shaker; use real engine auction transitions. */
 export function practice30(game: GameState): GameState {
@@ -97,6 +98,7 @@ export type AppEvent =
   | { readonly type: 'set-difficulty'; readonly difficulty: Difficulty }
   | { readonly type: 'set-preset'; readonly preset: Preset }
   | { readonly type: 'set-think-deeper'; readonly enabled: boolean }
+  | { readonly type: 'set-show-hints'; readonly enabled: boolean }
   | { readonly type: 'new-game'; readonly seed: string; readonly sessionId?: string }
   | { readonly type: 'resume' }
   | { readonly type: 'human'; readonly action: Action }
@@ -118,7 +120,7 @@ export function initialApp(saved?: SavedState | null): AppState {
     game: saved?.game?.phase === 'bidding'
       ? { ...saved.game, config: PLUNGE_CONFIG } : saved?.game ?? null,
     aiMoves: saved?.aiMoves ?? 0,
-    showTrick: false,
+    showTrick: saved?.showTrick ?? false,
     scenarioGame: null,
     scenarioFlag: null,
     sessionId: saved?.sessionId ?? 'legacy',
@@ -127,9 +129,9 @@ export function initialApp(saved?: SavedState | null): AppState {
   };
 }
 
-/** Did `next` complete a trick mid-hand (worth pausing to look at)? */
+/** Did `next` complete a trick, including one that ends the hand or match? */
 export function trickJustCompleted(prev: GameState, next: GameState): boolean {
-  return next.tricks.length > prev.tricks.length && next.phase === 'playing';
+  return next.tricks.length > prev.tricks.length;
 }
 
 /**
@@ -163,6 +165,8 @@ export function reducer(s: AppState, e: AppEvent): AppState {
       return { ...s, settings: { ...s.settings, preset: e.preset } };
     case 'set-think-deeper':
       return { ...s, settings: { ...s.settings, thinkDeeper: e.enabled } };
+    case 'set-show-hints':
+      return { ...s, settings: { ...s.settings, showHints: e.enabled } };
     case 'new-game':
       return {
         ...s,
@@ -182,11 +186,11 @@ export function reducer(s: AppState, e: AppEvent): AppState {
     case 'resume':
       return s.game ? { ...s, screen: 'table', scenarioGame: null, scenarioFlag: null } : s;
     case 'view-scenario':
-      return { ...s, screen: 'table', showTrick: false, scenarioGame: e.game, scenarioFlag: e.flag ?? null };
+      return { ...s, screen: 'table', scenarioGame: e.game, scenarioFlag: e.flag ?? null };
     case 'trick-shown':
       return { ...s, showTrick: false };
     case 'human': {
-      if (!s.game || s.scenarioGame) return s; // shared hands are view-only
+      if (!s.game || s.scenarioGame || s.showTrick) return s; // no input during review or the completed-trick pause
       let game: GameState;
       try {
         game = applyAction(s.game, e.action);
@@ -244,8 +248,9 @@ export function aiDelayMs(s: AppState): number {
   return base + (s.aiMoves % 4) * 80; // 550..790 / 700..940 capped below
 }
 
-/** How long a completed trick stays on display (interruptible by human taps). */
-export const TRICK_SHOW_MS = 850;
+/** Hold all dominoes still for two seconds, then gather them to the winner. */
+export const TRICK_HOLD_MS = 2000;
+export const TRICK_SHOW_MS = TRICK_HOLD_MS + 300;
 
 // ---------------------------------------------------------------------------
 // Persistence (storage-agnostic so tests can pass a fake)
@@ -253,6 +258,7 @@ export const TRICK_SHOW_MS = 850;
 
 export interface SavedState {
   readonly v: 1;
+  readonly showTrick?: boolean;
   readonly settings: Settings;
   readonly seed: string;
   readonly game: GameState | null;
@@ -271,7 +277,7 @@ export interface StorageLike {
 export const STORAGE_KEY = 'plunge:save:v1';
 
 export function toSaved(s: AppState): SavedState {
-  return { v: 1, settings: s.settings, seed: s.seed, game: s.game, aiMoves: s.aiMoves,
+  return { v: 1, showTrick: s.showTrick, settings: s.settings, seed: s.seed, game: s.game, aiMoves: s.aiMoves,
     sessionId: s.sessionId, nativeReceipts: s.nativeReceipts, auctionSurveys: s.auctionSurveys };
 }
 
@@ -295,6 +301,8 @@ export function loadApp(storage: StorageLike): SavedState | null {
     if (!DIFFICULTIES.includes(p.settings?.difficulty)) return null;
     if (!PRESETS.includes(p.settings?.preset)) return null;
     if (p.settings.thinkDeeper !== undefined && typeof p.settings.thinkDeeper !== 'boolean') return null;
+    if (p.settings.showHints !== undefined && typeof p.settings.showHints !== 'boolean') return null;
+    if (p.showTrick !== undefined && typeof p.showTrick !== 'boolean') return null;
     if (typeof p.seed !== 'string' || typeof p.aiMoves !== 'number') return null;
     if (p.sessionId !== undefined && (typeof p.sessionId !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(p.sessionId))) return null;
     if (p.nativeReceipts !== undefined && (typeof p.nativeReceipts !== 'object' || p.nativeReceipts === null
@@ -305,7 +313,7 @@ export function loadApp(storage: StorageLike): SavedState | null {
       if (!Array.isArray(g.hands) || g.hands.length !== 4) return null;
       if (!Array.isArray(g.marks) || g.marks.length !== 2) return null;
     }
-    return { ...p, settings: { ...p.settings, thinkDeeper: p.settings.thinkDeeper ?? false } };
+    return { ...p, settings: { ...p.settings, thinkDeeper: p.settings.thinkDeeper ?? false, showHints: p.settings.showHints ?? true } };
   } catch {
     return null;
   }

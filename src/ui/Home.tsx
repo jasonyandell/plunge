@@ -17,7 +17,7 @@ interface HomeProps {
 const DIFFS: readonly Difficulty[] = ['native-partner', 'native-l1'];
 
 export function Home({ app, dispatch, onQuestions }: HomeProps) {
-  const resumable = app.game !== null && app.game.phase !== 'game-over';
+  const resumable = app.game !== null && (app.game.phase !== 'game-over' || app.showTrick);
   return (
     <div class="home">
       <div class="home-card">
@@ -50,6 +50,18 @@ export function Home({ app, dispatch, onQuestions }: HomeProps) {
           <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'about' })}>
             About
           </button>
+        </div>
+
+        <div class="setting">
+          <button type="button" role="switch" class="thinking-switch"
+            aria-checked={app.settings.showHints} aria-describedby="show-hints-description"
+            onClick={() => dispatch({ type: 'set-show-hints', enabled: !app.settings.showHints })}>
+            <span>Show hints</span>
+            <span class="switch-track" aria-hidden="true"><span /></span>
+          </button>
+          <p id="show-hints-description" class="setting-hint">
+            Bidding, trump and move advice, plus legal-domino highlighting. Saved on this device.
+          </p>
         </div>
 
         <details class="disclosure home-settings">

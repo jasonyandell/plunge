@@ -15,7 +15,7 @@ import { Domino } from './Domino';
 import { Tally } from './Tally';
 import type { AppEvent, AppState } from './store';
 import {
-  HUMAN_SEAT, SEAT_NAMES, bidLabel, contractLabel, declLabel, ledChip, trumpChip,
+  HUMAN_SEAT, SEAT_NAMES, TRICK_HOLD_MS, bidLabel, contractLabel, declLabel, ledChip, trumpChip,
 } from './store';
 import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet } from './sheets';
 import { TrickHistory } from './TrickHistory';
@@ -56,6 +56,8 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
     const timer = setTimeout(() => setSaved(null), 7000);
     return () => clearTimeout(timer);
   }, [saved]);
+  const [playError, setPlayError] = useState<string | null>(null);
+  useEffect(() => setPlayError(null), [g, app.settings.showHints]);
   const [histOpen, setHistOpen] = useState(false);
   // A shared hand from a link is shown instead of the player's own game,
   // view-only, and opens straight into review.
@@ -90,19 +92,19 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
 
   const lastTrick: CompletedTrick | null =
     g.tricks.length > 0 ? (g.tricks[g.tricks.length - 1] ?? null) : null;
-  const showingLast = app.showTrick && lastTrick !== null;
+  const showingLast = !scenario && app.showTrick && lastTrick !== null;
   const trickPlays: readonly PlayRecord[] = showingLast ? lastTrick.plays : g.currentTrick;
   const trickWinner: Seat | null = showingLast ? lastTrick.winner : null;
 
   const legal = new Set(g.phase === 'playing' && g.turn === HUMAN_SEAT ? legalDominoes(g) : []);
-  const humanTurn = g.phase === 'playing' && g.turn === HUMAN_SEAT;
+  const humanTurn = !scenario && !showingLast && g.phase === 'playing' && g.turn === HUMAN_SEAT;
   const humanHand = g.hands[HUMAN_SEAT] ?? [];
   const humanSitsOut = g.sittingOut === HUMAN_SEAT;
 
   return (
-    <div class="table-screen">
+    <div class="table-screen" style={{ '--trick-hold-ms': `${TRICK_HOLD_MS}ms` }}>
       <StatusStrip g={g} dispatch={dispatch} />
-      {g.phase === 'playing' && (
+      {(g.phase === 'playing' || showingLast) && (
         <InfoBar
           g={g}
           plays={trickPlays}
@@ -133,7 +135,7 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
                 ? g.currentTrick.length === 0 ? 'Your turn to lead' : 'Your turn to play'
                 : 'Your hand'}</span>
             </p>
-            {humanTurn && !showingLast && !scenario && g.sittingOut === null && isNative(app.settings.difficulty) &&
+            {app.settings.showHints && humanTurn && !showingLast && !scenario && g.sittingOut === null && isNative(app.settings.difficulty) &&
               <MoveHint key={`${app.sessionId}:${g.handNumber}:${g.tricks.length}:${g.currentTrick.length}`} g={g} sessionId={app.sessionId} onQuestion={onQuestion} />}
           </div>
           {humanSitsOut ? (
@@ -150,21 +152,26 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
                   key={id}
                   id={id}
                   orientation="v"
-                  state={humanTurn ? (legal.has(id) ? 'legal' : 'illegal') : 'idle'}
-                  onTap={() => dispatch({ type: 'human', action: { type: 'play', domino: id } })}
+                  state={humanTurn && app.settings.showHints ? (legal.has(id) ? 'legal' : 'illegal') : 'idle'}
+                  interactive={humanTurn && !app.settings.showHints}
+                  onTap={() => {
+                    if (!legal.has(id)) { setPlayError('You must follow suit when you can.'); return; }
+                    dispatch({ type: 'human', action: { type: 'play', domino: id } });
+                  }}
                 />
               ))}
             </div>
           )}
+          {playError && <p class="play-error" role="status">{playError}</p>}
         </div>
       </div>
 
       {saved && <div class="question-toast" role="status"><span>{saved.text}</span>{saved.id && <button class="text-btn" onClick={() => { onQuestion(saved.id); setSaved(null); }}>Add note</button>}</div>}
       {question && <MoveQuestionPrompt key={`${question.sessionId}:${question.game.handNumber}:${question.ply}`}
         target={question.target} label={question.label} onSave={() => bookmark(question)} onClose={() => setQuestion(null)} />}
-      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet g={g} dispatch={dispatch} sessionId={app.sessionId} onQuestion={onQuestion} />}
-      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet g={g} dispatch={dispatch} sessionId={app.sessionId} onQuestion={onQuestion} />}
-      {g.phase === 'hand-over' && !review && (
+      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} onQuestion={onQuestion} />}
+      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} onQuestion={onQuestion} />}
+      {g.phase === 'hand-over' && !showingLast && !review && (
         <HandOverSheet
           g={g}
           dispatch={dispatch}
@@ -172,7 +179,7 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
           scenario={scenario}
         />
       )}
-      {g.phase === 'game-over' && !review && (
+      {g.phase === 'game-over' && !showingLast && !review && (
         <GameOverSheet
           g={g}
           dispatch={dispatch}
