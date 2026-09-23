@@ -139,6 +139,25 @@ describe('store: new game / settings', () => {
     }
   });
 
+
+  it('saves the hints switch across reloads and new games, migrating old saves to hints on', () => {
+    const storage = fakeStorage(), app = start('hints');
+    const off = reducer(app, { type: 'set-show-hints', enabled: false });
+    expect(off.game).toBe(app.game);
+    saveApp(storage, off);
+    const restored = initialApp(loadApp(storage));
+    expect(restored.settings.showHints).toBe(false);
+    expect(reducer(restored, { type: 'new-game', seed: 'another' }).settings.showHints).toBe(false);
+    expect(reducer(restored, { type: 'set-show-hints', enabled: true }).settings.showHints).toBe(true);
+    const saved = toSaved(off), { showHints: _, ...legacySettings } = saved.settings;
+    storage.setItem(STORAGE_KEY, JSON.stringify({ ...saved, settings: legacySettings }));
+    expect(initialApp(loadApp(storage)).settings.showHints).toBe(true);
+    for (const value of ['false', 0, null]) {
+      storage.setItem(STORAGE_KEY, JSON.stringify({ ...saved, settings: { ...saved.settings, showHints: value } }));
+      expect(loadApp(storage)).toBeNull();
+    }
+  });
+
   it('settings events update settings only', () => {
     let app = initialApp(null);
     app = reducer(app, { type: 'set-difficulty', difficulty: 'hard' });
@@ -252,11 +271,42 @@ describe('store: full hand flow', () => {
       expect(pendingAiSeat(app)).toBeNull();
       expect(reducer(app, { type: 'ai', choose: chooseAction })).toEqual(app);
       const handNumber = g.handNumber;
+      expect(app.showTrick).toBe(true);
+      expect(reducer(app, { type: 'human', action: { type: 'next-hand' } })).toBe(app);
+      app = reducer(app, { type: 'trick-shown' });
       app = reducer(app, { type: 'human', action: { type: 'next-hand' } });
       expect(app.game!.handNumber).toBe(handNumber + 1);
       expect(app.game!.phase).toBe('bidding');
       expect(app.game!.contract).toBeNull();
     }
+  });
+
+
+  it('holds every completed trick, including the match winner, and blocks taps until shown', () => {
+    let app = start('pause-match');
+    app = { ...app, game: { ...app.game!, marks: [6, 6] } };
+    for (let step = 0; step < 100; step++) {
+      if (app.showTrick) {
+        expect(pendingAiSeat(app)).toBeNull();
+        const action = legalActions(app.game!)[0];
+        if (action) expect(reducer(app, { type: 'human', action })).toBe(app);
+        const storage = fakeStorage();
+        saveApp(storage, reducer(app, { type: 'go', screen: 'home' }));
+        const resumed = reducer(initialApp(loadApp(storage)), { type: 'resume' });
+        expect(resumed.showTrick).toBe(true);
+        expect(resumed.game).toEqual(app.game);
+        if (app.game!.phase === 'game-over') {
+          expect(reducer(app, { type: 'trick-shown' }).showTrick).toBe(false);
+          return;
+        }
+        app = reducer(app, { type: 'trick-shown' });
+      } else {
+        app = pendingAiSeat(app) !== null
+          ? reducer(app, { type: 'ai', choose: chooseAction })
+          : reducer(app, { type: 'human', action: humanPolicy(app.game!) });
+      }
+    }
+    throw new Error('match never finished with its last trick visible');
   });
 
   it('illegal/stale human actions are ignored, not thrown', () => {

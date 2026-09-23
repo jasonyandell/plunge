@@ -420,10 +420,10 @@
 @keyframes gather-l { to { transform: translateX(-30%) scale(0.55); opacity: 0.15; } }
 @keyframes gather-r { to { transform: translateX(30%) scale(0.55); opacity: 0.15; } }
 
-.gather-bottom { animation: gather-b 260ms ease-in 480ms forwards; }
-.gather-top    { animation: gather-t 260ms ease-in 480ms forwards; }
-.gather-left   { animation: gather-l 260ms ease-in 480ms forwards; }
-.gather-right  { animation: gather-r 260ms ease-in 480ms forwards; }
+.gather-bottom { animation: gather-b 260ms ease-in var(--trick-hold-ms, 2000ms) forwards; }
+.gather-top    { animation: gather-t 260ms ease-in var(--trick-hold-ms, 2000ms) forwards; }
+.gather-left   { animation: gather-l 260ms ease-in var(--trick-hold-ms, 2000ms) forwards; }
+.gather-right  { animation: gather-r 260ms ease-in var(--trick-hold-ms, 2000ms) forwards; }
 
 /* ---------- your hand ---------- */
 /* 7 tiles × clamp(38px, (100vw − 36px)/7, 58px): 46px @360, 50px @390. */
@@ -498,3 +498,5 @@
   line-height: 18px;
 }
 .seat-top .seat-tag { color: #b8e3d7; }
+
+.play-error { margin: 8px 0 0; text-align: center; color: var(--cream); font-size: 14px; }

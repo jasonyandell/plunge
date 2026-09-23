@@ -22,6 +22,15 @@ seat **You**, and identifies Gran as your partner. The opening domino is marked
 with who led it. A named thinking indicator and gently animated pips follow
 actual computer decisions; the text remains visible with reduced motion enabled.
 
+**Show hints** on the home screen controls bidding, trump and move advice, plus
+legal-domino highlighting. It defaults to on and is saved on this device across
+new games and reloads. With hints off, every tile in your hand has the same play
+styling; an illegal attempt gives a follow-suit reminder without changing the game.
+
+Completed tricks stay visible for two seconds before gathering toward the winner,
+including tricks that end the hand or match. The result card waits until the trick
+has been shown, and taps cannot skip the pause.
+
 Tap a played domino, then **Why this move?** to save a question mid-hand. It saves on the
 phone first and uploads anonymously when connected. **Your questions** on the
 home screen holds notes, short links, and later explanations. Original evidence
