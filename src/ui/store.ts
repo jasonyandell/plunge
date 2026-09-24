@@ -100,6 +100,8 @@ export type AppEvent =
   | { readonly type: 'set-think-deeper'; readonly enabled: boolean }
   | { readonly type: 'set-show-hints'; readonly enabled: boolean }
   | { readonly type: 'new-game'; readonly seed: string; readonly sessionId?: string }
+  /** Start a prepared live game (scratch drop-in hands) in place of a fresh deal. */
+  | { readonly type: 'drop-in'; readonly game: GameState; readonly sessionId: string }
   | { readonly type: 'resume' }
   | { readonly type: 'human'; readonly action: Action }
   /** Step exactly one AI action (if one is pending). `choose` is injectable for tests. */
@@ -182,6 +184,19 @@ export function reducer(s: AppState, e: AppEvent): AppState {
         game: isNative(s.settings.difficulty)
           ? catalogueDeal(newGame(PLUNGE_CONFIG,e.seed),e.seed)
           : newGame(configFor(s.settings.preset),e.seed),
+      };
+    case 'drop-in':
+      return {
+        ...s,
+        screen: 'table',
+        aiMoves: 0,
+        showTrick: false,
+        scenarioGame: null,
+        scenarioFlag: null,
+        sessionId: e.sessionId,
+        nativeReceipts: {},
+        auctionSurveys: {},
+        game: e.game,
       };
     case 'resume':
       return s.game ? { ...s, screen: 'table', scenarioGame: null, scenarioFlag: null } : s;
