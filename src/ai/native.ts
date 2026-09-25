@@ -9,8 +9,8 @@ import { BUILD_ID } from '../ui/update';
 
 export const NATIVE_TABLE = import.meta.env.VITE_NATIVE_TABLE === '1';
 // The Mac research transport still exposes its existing 160-world profile.
-export const DEEP_WORLDS = NATIVE_TABLE ? 160 : 500;
-export type AnalysisWorlds = 40 | 160 | 500; // retain old saved estimates
+export const DEEP_WORLDS = NATIVE_TABLE ? 160 : 350;
+export type AnalysisWorlds = 40 | 160 | 350 | 500; // retain old saved estimates
 export type NativeDifficulty = 'native-l1' | 'native-partner';
 export function isNative(value: string): value is NativeDifficulty {
   return value === 'native-l1' || value === 'native-partner';

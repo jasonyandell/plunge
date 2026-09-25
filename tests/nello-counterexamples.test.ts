@@ -17,16 +17,16 @@ const response: NativeDecision = {contract:'nello',inactive:2,choice:16,legal,ro
 describe('Nel-O counterexample preview',()=>{
   it('always includes counterexamples for Nel-O defenders at both sample sizes',()=>{
     expect(livePlayerCall(request,'native-partner',false)).toEqual({request,worlds:40,partner:true,nello_counterexamples:true});
-    expect(livePlayerCall(request,'native-partner',true)).toMatchObject({worlds:500,partner:false,nello_counterexamples:true});
+    expect(livePlayerCall(request,'native-partner',true)).toMatchObject({worlds:350,partner:false,nello_counterexamples:true});
     expect(livePlayerCall(request,'native-l1')).toHaveProperty('nello_counterexamples',true);
     expect(livePlayerCall({...request,seat:0},'native-l1',false)).not.toHaveProperty('nello_counterexamples');
     const {contract:_,...straight}=request;
     expect(livePlayerCall(straight,'native-l1',false)).not.toHaveProperty('nello_counterexamples');
     for(const difficulty of ['native-l1','native-partner'] as const) {
-      expect(livePlayerCall(straight,difficulty,true)).toEqual({request:straight,worlds:500,partner:false,budget_ms:20000});
+      expect(livePlayerCall(straight,difficulty,true)).toEqual({request:straight,worlds:350,partner:false,budget_ms:20000});
       const opening={...straight,seat:straight.bidder,plays:[]};
       expect(livePlayerCall(opening,difficulty,false).worlds).toBe(160);
-      expect(livePlayerCall(opening,difficulty,true).worlds).toBe(500);
+      expect(livePlayerCall(opening,difficulty,true).worlds).toBe(350);
     }
   });
   it('keeps ordinary estimates and stress counts distinct, even after changing the lead',()=>{
@@ -62,7 +62,7 @@ describe('Nel-O counterexample preview',()=>{
   });
   it('uses the full defense for fresh rechecks without a separate opt-in', async()=>{
     vi.mocked(runPlayer).mockResolvedValue(response);
-    for (const worlds of [40,160,500] as const) {
+    for (const worlds of [40,160,350,500] as const) {
       const estimate=await api<{identity:{player:unknown}}>('estimates',{request,worlds});
       expect(runPlayer).toHaveBeenLastCalledWith({request,worlds,partner:false,nello_counterexamples:true,
         ...(worlds>40 ? {budget_ms:20000} : {})},undefined);
@@ -113,7 +113,7 @@ it('the imported browser player performs the pass and retains a completed round 
       checkpoint:(ptr:number,len:number)=>{
         const value=JSON.parse(decoder.decode(new Uint8Array(x.memory.buffer,ptr,len))) as NativeDecision;
         checkpoints.push(value);
-        if(reserveTest && value.evaluation?.outer_worlds===40 && !value.counterexample_result?.rounds) ticks=14000000n;
+        if(reserveTest && value.evaluation?.outer_worlds===40 && !value.counterexample_result?.rounds) ticks=16000000n;
         if(stopAfterRound && value.counterexample_result?.rounds===1) stop=true;
       }}});
     x=instance.exports as unknown as typeof x;
@@ -125,12 +125,12 @@ it('the imported browser player performs the pass and retains a completed round 
   const full=run(); expect(full.result.choice).toBe(16);
   expect(full.result.counterexample_result).toMatchObject({baseline:7,rounds:3,witnesses:12,status:'completed'});
   expect(full.result.evaluation?.outer_worlds).toBe(160);
-  const deep=run(false,false,500);
-  expect(deep.result.evaluation?.outer_worlds).toBe(500);
-  expect(deep.result.counterexample_result).toMatchObject({ordinary_worlds:500,status:'completed',rounds:3});
-  const reserved=run(false,true,500);
+  const deep=run(false,false,350);
+  expect(deep.result.evaluation?.outer_worlds).toBe(350);
+  expect(deep.result.counterexample_result).toMatchObject({ordinary_worlds:350,status:'completed',rounds:3});
+  const reserved=run(false,true,350);
   expect(reserved.result.evaluation?.outer_worlds).toBe(40);
-  expect(reserved.result.phases).toContainEqual(expect.objectContaining({worlds:500,status:'no-time'}));
+  expect(reserved.result.phases).toContainEqual(expect.objectContaining({worlds:350,status:'no-time'}));
   expect(reserved.result.counterexample_result).toMatchObject({ordinary_worlds:40,status:'completed',rounds:3});
   const stopped=run(true);const saved=stopped.checkpoints.find(c=>c.counterexample_result?.rounds===1)!;
   expect(stopped.result.counterexample_result).toMatchObject({rounds:1,witnesses:4,status:'completed',stop:'deadline'});

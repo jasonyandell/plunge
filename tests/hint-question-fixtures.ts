@@ -19,7 +19,7 @@ export function auctionFixture(declaring = false): GameState {
 export function moveFixture(): GameState {
   return applyAction(auctionFixture(true), { type: 'declare', decl: { type: 'pip', pip: 5 } });
 }
-export function moveEvidence(g = moveFixture(), worlds: 40 | 160 | 500 = 40): MoveHintEvidence {
+export function moveEvidence(g = moveFixture(), worlds: 40 | 160 | 350 | 500 = 40): MoveHintEvidence {
   const legal = legalDominoes(g).map(tileOfId), request = requestOf(g, 0, session);
   const choice = legal[worlds === 40 ? 0 : 1] ?? legal[0]!;
   return { kind: 'move', requested_worlds: worlds, choice, forced: legal.length === 1,

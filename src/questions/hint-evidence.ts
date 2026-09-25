@@ -26,7 +26,7 @@ export function validHint(value: unknown, g: GameState, seed: number): HintEvide
   const h = value as HintEvidence;
   if (!h || g.turn !== 0 || !text(h.explanation)) throw new Error('Invalid hint.');
   if (h.kind === 'move') {
-    if (g.phase !== 'playing' || ![40,160,500].includes(h.requested_worlds) || !text(h.context)) throw new Error('Invalid move hint.');
+    if (g.phase !== 'playing' || ![40,160,350,500].includes(h.requested_worlds) || !text(h.context)) throw new Error('Invalid move hint.');
     const legal = legalDominoes(g).map(tileOfId);
     if (!legal.includes(h.choice) || h.forced !== (legal.length === 1)) throw new Error('Hint names an illegal choice.');
     if (h.forced) {
