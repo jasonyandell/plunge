@@ -3,7 +3,7 @@
  */
 
 import type { Difficulty } from '../ai';
-import { NATIVE_TABLE, isNative, nativeLabel } from '../ai/native';
+import { DEEP_WORLDS, NATIVE_TABLE, isNative, nativeLabel } from '../ai/native';
 import { nelloAvailable, nelloPaused, type AppEvent, type AppState } from './store';
 import { Domino } from './Domino';
 import './home.css';
@@ -95,7 +95,7 @@ export function Home({ app, dispatch, onQuestions }: HomeProps) {
               <span class="switch-track" aria-hidden="true"><span /></span>
             </button>
             <p id="thinking-hint" class="setting-hint">
-              A larger sample for every computer move. May take longer. Bidding stays instant.
+              {DEEP_WORLDS} sampled deals for every computer move. May take longer. Bidding stays instant.
               {app.settings.difficulty === 'native-partner' && ' Uses deeper analysis in place of the regular partner check.'}
             </p>
           </div>

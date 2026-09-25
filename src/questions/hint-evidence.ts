@@ -3,12 +3,12 @@ import { legalActions, legalDominoes, type GameState } from '../engine';
 import { observe } from '../ai/observation';
 import { playRequestOf, tileOfId, waltContractBid } from '../ai/walt/requests';
 import { decisionStats } from '../ai/decision-stats';
-import type { NativeEstimate } from '../ai/native';
+import type { AnalysisWorlds, NativeEstimate } from '../ai/native';
 import type { BiddingHint } from '../ai/bidding-hint';
 
 export type BookAdvice = Extract<BiddingHint, { kind: 'book' }>;
 export interface MoveHintEvidence {
-  kind: 'move'; requested_worlds: 40 | 160; choice: number; forced: boolean;
+  kind: 'move'; requested_worlds: AnalysisWorlds; choice: number; forced: boolean;
   estimate: NativeEstimate | null; explanation: string; context: string;
 }
 export interface BookHintEvidence {
@@ -26,7 +26,7 @@ export function validHint(value: unknown, g: GameState, seed: number): HintEvide
   const h = value as HintEvidence;
   if (!h || g.turn !== 0 || !text(h.explanation)) throw new Error('Invalid hint.');
   if (h.kind === 'move') {
-    if (g.phase !== 'playing' || ![40,160].includes(h.requested_worlds) || !text(h.context)) throw new Error('Invalid move hint.');
+    if (g.phase !== 'playing' || ![40,160,500].includes(h.requested_worlds) || !text(h.context)) throw new Error('Invalid move hint.');
     const legal = legalDominoes(g).map(tileOfId);
     if (!legal.includes(h.choice) || h.forced !== (legal.length === 1)) throw new Error('Hint names an illegal choice.');
     if (h.forced) {

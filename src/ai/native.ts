@@ -8,6 +8,9 @@ import manifest from './phone/manifest.json';
 import { BUILD_ID } from '../ui/update';
 
 export const NATIVE_TABLE = import.meta.env.VITE_NATIVE_TABLE === '1';
+// The Mac research transport still exposes its existing 160-world profile.
+export const DEEP_WORLDS = NATIVE_TABLE ? 160 : 500;
+export type AnalysisWorlds = 40 | 160 | 500; // retain old saved estimates
 export type NativeDifficulty = 'native-l1' | 'native-partner';
 export function isNative(value: string): value is NativeDifficulty {
   return value === 'native-l1' || value === 'native-partner';
@@ -76,11 +79,11 @@ export async function api<T>(path: string, body?: unknown, milliseconds = 18000,
   if (!NATIVE_TABLE) {
     if (path.startsWith('receipts/') && body === undefined) return await getReceipt(path.slice(9)) as T;
     if (path === 'estimates') {
-      const { request, worlds } = body as { request: NativeRequest; worlds: 40 | 160 };
+      const { request, worlds } = body as { request: NativeRequest; worlds: AnalysisWorlds };
       const nello_counterexamples = isNelloDefender(request);
       const response = await runPlayer({ request, worlds, partner: false,
         ...(nello_counterexamples ? { nello_counterexamples: true } : {}),
-        ...(worlds === 160 ? { budget_ms: 20000 } : {}) }, signal);
+        ...(worlds > 40 ? { budget_ms: 20000 } : {}) }, signal);
       return { schema: 'plunge-estimate-v1', id: await digest({ request, worlds, response }),
         created: new Date().toISOString(), identity: { request, player: { n: worlds, ...(nello_counterexamples ? { nello_counterexamples: true } : {}) }, implementation: { ...manifest, app: BUILD_ID } }, response } as T;
     }
@@ -127,7 +130,9 @@ export function isNelloDefender(request: NativeRequest): boolean {
 }
 
 export function livePlayerCall(request: NativeRequest, difficulty: NativeDifficulty, thinkDeeper = false) {
-  const call = thinkDeeper || (request.seat === request.bidder && request.plays.length === 0)
+  const call = thinkDeeper
+    ? { request, worlds: DEEP_WORLDS, partner: false, budget_ms: 20000 }
+    : request.seat === request.bidder && request.plays.length === 0
     ? { request, worlds: 160, partner: false, budget_ms: 20000 }
     : { request, worlds: 40, partner: difficulty === 'native-partner' };
   return isNelloDefender(request) ? { ...call, nello_counterexamples: true } : call;
@@ -137,7 +142,7 @@ export async function nativeMove(g: GameState, seat: Seat, difficulty: NativeDif
   const request = requestOf(g, seat, gameId);
   const player = difficulty === 'native-l1' ? 'l1-default' : 'l1-partner-rollout';
   const call = livePlayerCall(request, difficulty, thinkDeeper);
-  const deeper = call.worlds === 160;
+  const deeper = call.worlds > 40;
   let receipt: NativeReceipt;
   if (NATIVE_TABLE) {
     receipt = await api<NativeReceipt>('decide', { request, player, game_id: gameId, hand_number: g.handNumber,

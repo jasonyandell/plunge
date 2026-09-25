@@ -1,10 +1,10 @@
 {
   "player": "walt-table-v2",
   "source_repository": "jasonyandell/texas-42",
-  "source_commit": "9d86c0a6a8134cf0d75740879d6252d84ecbb84d",
-  "source_sha256": "dc0605a962c27c074a37a654cdff480f529f36a95f2a44deb1a0e55e3290fd4d",
+  "source_commit": "f3465cb51473cd43b72b75bac06a621684418fd3",
+  "source_sha256": "d26b8e2aa02d91c94b74fe2fe3227dc5ad5eefbdef920d00445162ad420d062c",
   "source_hash_schema": "walt-player-source-v2",
-  "wasm_sha256": "cda33d5f8ed001abf55ab286c51b6ac515a54bda4fca073c56998bd158d68f25",
+  "wasm_sha256": "31286557d55add8c9173756fccadf7bcf514b9d991b5b26adf56f225b02c2c46",
   "rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
   "build": {
     "target": "wasm32-unknown-unknown",

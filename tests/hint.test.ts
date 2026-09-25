@@ -49,12 +49,12 @@ describe('own-view move hints',()=>{
     }));
   });
   it('explains setting the bid from the defender perspective and names ties honestly',async()=>{
-    const g=position(true),reply=estimate(g,160);vi.mocked(api).mockResolvedValue(reply);
-    const hint=await getHint(g,'hint-test',160);
+    const g=position(true),reply=estimate(g,500);vi.mocked(api).mockResolvedValue(reply);
+    const hint=await getHint(g,'hint-test',500);
     expect(hint.stats!.options[0]!.chance).toBe(1);
-    expect(hintExplanation(hint)).toContain('Your team set the 30 bid in 160 of 160 sampled deals');
+    expect(hintExplanation(hint)).toContain('Your team set the 30 bid in 500 of 500 sampled deals');
     reply.response.evaluation!.options=reply.response.evaluation!.options.map(([t])=>[t,'1','2']);
-    const tied=await getHint(g,'hint-test',160);
+    const tied=await getHint(g,'hint-test',500);
     expect(hintExplanation(tied)).toContain('plays tied for the highest estimate');
   });
   it('explains a forced move without starting a calculation',async()=>{

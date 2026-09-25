@@ -1,25 +1,25 @@
 /** On-demand advice: the same own/public boundary as live play, without a move. */
 import { legalDominoes, type GameState } from '../engine';
-import { api, requestKey, requestOf, type NativeEstimate, type NativeRequest } from './native';
+import { api, requestKey, requestOf, type NativeEstimate, type NativeRequest, type AnalysisWorlds } from './native';
 import { decisionStats, type MoveStats } from './native-analysis';
 import { tileOfId } from './walt/requests';
 
 export interface Hint {
   request: NativeRequest;
-  requestedWorlds: 40 | 160;
+  requestedWorlds: AnalysisWorlds;
   choice: number | null;
   forced: boolean;
   stats: MoveStats | null;
   estimate: NativeEstimate | null;
 }
 
-export async function getHint(g: GameState, sessionId: string, worlds: 40 | 160, signal?: AbortSignal): Promise<Hint> {
+export async function getHint(g: GameState, sessionId: string, worlds: AnalysisWorlds, signal?: AbortSignal): Promise<Hint> {
   if (signal?.aborted) throw new DOMException('Stopped', 'AbortError');
   if (g.phase !== 'playing' || g.turn !== 0) throw new Error('Hints are for your turn.');
   const request = requestOf(g, 0, sessionId);
   const legal = legalDominoes(g).map(tileOfId);
   if (legal.length === 1) return { request, requestedWorlds: worlds, choice: legal[0]!, forced: true, stats: null, estimate: null };
-  const estimate = await api<NativeEstimate>('estimates', { request, worlds }, worlds === 160 ? 24000 : 18000, signal);
+  const estimate = await api<NativeEstimate>('estimates', { request, worlds }, worlds > 40 ? 24000 : 18000, signal);
   if (signal?.aborted) throw new DOMException('Stopped', 'AbortError');
   if (estimate.schema !== 'plunge-estimate-v1' || requestKey(estimate.identity.request) !== requestKey(request)
     || estimate.identity.player.n !== worlds) throw new Error('The hint does not match this position.');

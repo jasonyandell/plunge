@@ -1,3 +1,4 @@
+import { DEEP_WORLDS, type AnalysisWorlds } from '../ai/native';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { countValue, fromId, trickWinnerIndex, type GameState } from '../engine';
 import { requestTile } from '../ai/native';
@@ -40,7 +41,7 @@ export function MoveHint({ g, sessionId, onQuestion }: { g: GameState; sessionId
     controller.current?.abort(); controller.current = null;
     setBusy(false); setOpen(false); button.current?.focus();
   };
-  const inspect = async (worlds: 40 | 160): Promise<void> => {
+  const inspect = async (worlds: AnalysisWorlds): Promise<void> => {
     if (controller.current) return;
     const active = new AbortController(); controller.current = active;
     setBusy(true); setError(false);
@@ -88,7 +89,7 @@ export function MoveHint({ g, sessionId, onQuestion }: { g: GameState; sessionId
       {error && <p role="alert" class="native-warning">Walt couldn’t finish a new comparison. {tile !== null ? 'The previous hint is still shown.' : 'You can retry or keep playing.'}</p>}
       <div class="hint-actions">
         {!busy && error && <button type="button" class="big-btn secondary" onClick={() => void inspect(40)}>Try again</button>}
-        {!busy && hint?.stats && hint.stats.worlds < 160 && <button type="button" class="big-btn secondary" onClick={() => void inspect(160)}>Think deeper</button>}
+        {!busy && hint?.stats && hint.stats.worlds < DEEP_WORLDS && <button type="button" class="big-btn secondary" onClick={() => void inspect(DEEP_WORLDS)}>Think deeper</button>}
         <button type="button" class="big-btn" onClick={close}>{busy ? 'Cancel hint' : 'Back to my hand'}</button>
       </div>
     </dialog>
