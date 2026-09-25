@@ -53,9 +53,10 @@ export interface Settings {
   readonly preset: Preset;
   readonly thinkDeeper: boolean;
   readonly nelloPreview: boolean;
+  readonly showHints: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { difficulty: 'native-partner', preset: 'tournament', thinkDeeper: false, nelloPreview: false };
+export const DEFAULT_SETTINGS: Settings = { difficulty: 'native-partner', preset: 'tournament', thinkDeeper: false, nelloPreview: false, showHints: true };
 
 /** Rotate the bidder with the shaker; use real engine auction transitions. */
 export function practice30(game: GameState): GameState {
@@ -120,6 +121,7 @@ export type AppEvent =
   | { readonly type: 'set-preset'; readonly preset: Preset }
   | { readonly type: 'set-think-deeper'; readonly enabled: boolean }
   | { readonly type: 'set-nello-preview'; readonly enabled: boolean }
+  | { readonly type: 'set-show-hints'; readonly enabled: boolean }
   | { readonly type: 'new-game'; readonly seed: string; readonly sessionId?: string }
   | { readonly type: 'resume' }
   | { readonly type: 'human'; readonly action: Action }
@@ -143,7 +145,7 @@ export function initialApp(saved?: SavedState | null, search = ''): AppState {
     seed: saved?.seed ?? 'plunge',
     game: configureAuction(saved?.game ?? null, settings),
     aiMoves: saved?.aiMoves ?? 0,
-    showTrick: false,
+    showTrick: saved?.showTrick ?? false,
     scenarioGame: null,
     scenarioFlag: null,
     sessionId: saved?.sessionId ?? 'legacy',
@@ -152,9 +154,9 @@ export function initialApp(saved?: SavedState | null, search = ''): AppState {
   };
 }
 
-/** Did `next` complete a trick mid-hand (worth pausing to look at)? */
+/** Did `next` complete a trick, including one that ends the hand or match? */
 export function trickJustCompleted(prev: GameState, next: GameState): boolean {
-  return next.tricks.length > prev.tricks.length && next.phase === 'playing';
+  return next.tricks.length > prev.tricks.length;
 }
 
 /**
@@ -198,6 +200,8 @@ export function reducer(s: AppState, e: AppEvent): AppState {
     }
     case 'set-think-deeper':
       return { ...s, settings: { ...s.settings, thinkDeeper: e.enabled } };
+    case 'set-show-hints':
+      return { ...s, settings: { ...s.settings, showHints: e.enabled } };
     case 'new-game':
       return {
         ...s,
@@ -217,11 +221,11 @@ export function reducer(s: AppState, e: AppEvent): AppState {
     case 'resume':
       return s.game && !nelloPaused(s) ? { ...s, screen: 'table', scenarioGame: null, scenarioFlag: null } : s;
     case 'view-scenario':
-      return { ...s, screen: 'table', showTrick: false, scenarioGame: e.game, scenarioFlag: e.flag ?? null };
+      return { ...s, screen: 'table', scenarioGame: e.game, scenarioFlag: e.flag ?? null };
     case 'trick-shown':
       return { ...s, showTrick: false };
     case 'human': {
-      if (!s.game || s.scenarioGame || nelloPaused(s)) return s; // shared hands are view-only
+      if (!s.game || s.scenarioGame || s.showTrick || nelloPaused(s)) return s; // no moves during review, the trick pause, or a disabled preview
       if (e.action.type === 'declare' && e.action.decl.type === 'nello' && !nelloAvailable(s.settings)) return s;
       let game: GameState;
       try {
@@ -283,8 +287,9 @@ export function aiDelayMs(s: AppState): number {
   return base + (s.aiMoves % 4) * 80; // 550..790 / 700..940 capped below
 }
 
-/** How long a completed trick stays on display (interruptible by human taps). */
-export const TRICK_SHOW_MS = 850;
+/** Hold all dominoes still for two seconds, then gather them to the winner. */
+export const TRICK_HOLD_MS = 2000;
+export const TRICK_SHOW_MS = TRICK_HOLD_MS + 300;
 
 // ---------------------------------------------------------------------------
 // Persistence (storage-agnostic so tests can pass a fake)
@@ -292,6 +297,7 @@ export const TRICK_SHOW_MS = 850;
 
 export interface SavedState {
   readonly v: 1;
+  readonly showTrick?: boolean;
   readonly settings: Settings;
   readonly seed: string;
   readonly game: GameState | null;
@@ -310,7 +316,7 @@ export interface StorageLike {
 export const STORAGE_KEY = 'plunge:save:v1';
 
 export function toSaved(s: AppState): SavedState {
-  return { v: 1, settings: s.settings, seed: s.seed, game: s.game, aiMoves: s.aiMoves,
+  return { v: 1, showTrick: s.showTrick, settings: s.settings, seed: s.seed, game: s.game, aiMoves: s.aiMoves,
     sessionId: s.sessionId, nativeReceipts: s.nativeReceipts, auctionSurveys: s.auctionSurveys };
 }
 
@@ -336,6 +342,8 @@ export function loadApp(storage: StorageLike): SavedState | null {
     if (p.settings.nelloCounterexamples !== undefined && typeof p.settings.nelloCounterexamples !== 'boolean') return null;
     if (p.settings.nelloPreview !== undefined && typeof p.settings.nelloPreview !== 'boolean') return null;
     if (p.settings.thinkDeeper !== undefined && typeof p.settings.thinkDeeper !== 'boolean') return null;
+    if (p.settings.showHints !== undefined && typeof p.settings.showHints !== 'boolean') return null;
+    if (p.showTrick !== undefined && typeof p.showTrick !== 'boolean') return null;
     if (typeof p.seed !== 'string' || typeof p.aiMoves !== 'number') return null;
     if (p.sessionId !== undefined && (typeof p.sessionId !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(p.sessionId))) return null;
     if (p.nativeReceipts !== undefined && (typeof p.nativeReceipts !== 'object' || p.nativeReceipts === null
@@ -347,7 +355,7 @@ export function loadApp(storage: StorageLike): SavedState | null {
       if (!Array.isArray(g.marks) || g.marks.length !== 2) return null;
     }
     const { nelloCounterexamples, ...settings } = p.settings;
-    return { ...p, settings: { ...settings, thinkDeeper: settings.thinkDeeper ?? false,
+    return { ...p, settings: { ...settings, thinkDeeper: settings.thinkDeeper ?? false, showHints: settings.showHints ?? true,
       nelloPreview: settings.nelloPreview ?? nelloCounterexamples ?? false } };
   } catch {
     return null;

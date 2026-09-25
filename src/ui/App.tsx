@@ -104,7 +104,7 @@ export function App() {
         setThinking(null);
       };
     }
-    if (app.showTrick) {
+    if (app.showTrick && app.screen === 'table' && !app.scenarioGame) {
       const t = setTimeout(() => dispatch({ type: 'trick-shown' }), TRICK_SHOW_MS);
       return () => clearTimeout(t);
     }
@@ -115,7 +115,7 @@ export function App() {
   // is never part of the save — the player's own game stays underneath.)
   useEffect(() => {
     if (typeof localStorage !== 'undefined') saveApp(localStorage, app);
-  }, [app.game, app.settings, app.seed, app.aiMoves, app.nativeReceipts, app.auctionSurveys, app.sessionId]);
+  }, [app.game, app.settings, app.showTrick, app.seed, app.aiMoves, app.nativeReceipts, app.auctionSurveys, app.sessionId]);
 
   // A share link (#r=...) opens that hand in view-only review. The hash is
   // consumed on load so reloads and future navigation stay clean.

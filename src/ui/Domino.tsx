@@ -67,11 +67,13 @@ export interface DominoProps {
   orientation?: 'v' | 'h' | undefined;
   /** legal: lifted + tappable; illegal: dimmed + inert; idle: plain. */
   state?: 'idle' | 'legal' | 'illegal' | undefined;
+  /** Plain tappable tiles when play guidance is disabled. */
+  interactive?: boolean | undefined;
   onTap?: (() => void) | undefined;
   className?: string | undefined;
 }
 
-export function Domino({ id, faceDown, orientation = 'v', state = 'idle', onTap, className }: DominoProps) {
+export function Domino({ id, faceDown, orientation = 'v', state = 'idle', interactive = false, onTap, className }: DominoProps) {
   const horiz = orientation === 'h';
   const w = horiz ? 200 : 100;
   const h = horiz ? 100 : 200;
@@ -110,7 +112,7 @@ export function Domino({ id, faceDown, orientation = 'v', state = 'idle', onTap,
     .filter(Boolean)
     .join(' ');
 
-  if (onTap && state === 'legal') {
+  if (onTap && (state === 'legal' || interactive)) {
     return (
       <button type="button" class={cls} aria-label={id ? dominoAriaLabel(id) : 'domino'} onClick={onTap}>
         {face}
