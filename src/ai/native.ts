@@ -76,9 +76,10 @@ export async function api<T>(path: string, body?: unknown, milliseconds = 18000,
   if (!NATIVE_TABLE) {
     if (path.startsWith('receipts/') && body === undefined) return await getReceipt(path.slice(9)) as T;
     if (path === 'estimates') {
-      const { request, worlds, nello_counterexamples } = body as { request: NativeRequest; worlds: 40 | 160; nello_counterexamples?: boolean };
+      const { request, worlds } = body as { request: NativeRequest; worlds: 40 | 160 };
+      const nello_counterexamples = isNelloDefender(request);
       const response = await runPlayer({ request, worlds, partner: false,
-        ...(nello_counterexamples && isNelloDefender(request) ? { nello_counterexamples: true } : {}),
+        ...(nello_counterexamples ? { nello_counterexamples: true } : {}),
         ...(worlds === 160 ? { budget_ms: 20000 } : {}) }, signal);
       return { schema: 'plunge-estimate-v1', id: await digest({ request, worlds, response }),
         created: new Date().toISOString(), identity: { request, player: { n: worlds, ...(nello_counterexamples ? { nello_counterexamples: true } : {}) }, implementation: { ...manifest, app: BUILD_ID } }, response } as T;
@@ -125,17 +126,17 @@ export function isNelloDefender(request: NativeRequest): boolean {
   return request.contract === 'nello' && request.seat % 2 !== request.bidder % 2;
 }
 
-export function livePlayerCall(request: NativeRequest, difficulty: NativeDifficulty, thinkDeeper = false, counterexamples = false) {
+export function livePlayerCall(request: NativeRequest, difficulty: NativeDifficulty, thinkDeeper = false) {
   const call = thinkDeeper || (request.seat === request.bidder && request.plays.length === 0)
     ? { request, worlds: 160, partner: false, budget_ms: 20000 }
     : { request, worlds: 40, partner: difficulty === 'native-partner' };
-  return counterexamples && isNelloDefender(request) ? { ...call, nello_counterexamples: true } : call;
+  return isNelloDefender(request) ? { ...call, nello_counterexamples: true } : call;
 }
 
-export async function nativeMove(g: GameState, seat: Seat, difficulty: NativeDifficulty, gameId: string, signal?: AbortSignal, thinkDeeper = false, counterexamples = false): Promise<NativeReceipt> {
+export async function nativeMove(g: GameState, seat: Seat, difficulty: NativeDifficulty, gameId: string, signal?: AbortSignal, thinkDeeper = false): Promise<NativeReceipt> {
   const request = requestOf(g, seat, gameId);
   const player = difficulty === 'native-l1' ? 'l1-default' : 'l1-partner-rollout';
-  const call = livePlayerCall(request, difficulty, thinkDeeper, counterexamples && !NATIVE_TABLE);
+  const call = livePlayerCall(request, difficulty, thinkDeeper);
   const deeper = call.worlds === 160;
   let receipt: NativeReceipt;
   if (NATIVE_TABLE) {

@@ -12,8 +12,8 @@ import { SavedHint } from './SavedHint';
 import { Domino } from './Domino';
 import './questions.css';
 
-export function Questions({ initialId, onClose, dispatch }: {
-  initialId: string | null; onClose: () => void; dispatch: (e: AppEvent) => void;
+export function Questions({ initialId, onClose, dispatch, nelloPreview }: {
+  nelloPreview: boolean; initialId: string | null; onClose: () => void; dispatch: (e: AppEvent) => void;
 }) {
   const [items,setItems]=useState<LocalQuestion[]>([]);
   const [id,setId]=useState(initialId);
@@ -110,7 +110,7 @@ export function Questions({ initialId, onClose, dispatch }: {
         {game && q && sel && position && <div class="native-review">
           <p class="question-contract">{game.declarer!==null && SEAT_NAMES[game.declarer]} bid {game.contract && contractLabel(game.contract)}
             {game.declaration && ` in ${declLabel(game.declaration)}`} · Us {game.points[0]} · Them {game.points[1]}.</p>
-          <NativeStats key={q.id} g={game} sel={sel} position={position} receipt={q.receipt} loading={false} />
+          <NativeStats key={q.id} g={game} sel={sel} position={position} receipt={q.receipt} loading={false} nelloPreview={nelloPreview} />
           <details class="disclosure"><summary>The play around it</summary><TrickHistory g={game} selected={sel} /></details>
           <button class="text-btn" onClick={()=>{
             dispatch({type:'view-scenario',game,flag:{portable:true,id:q.id,ply:q.ply,share_code:q.replay,

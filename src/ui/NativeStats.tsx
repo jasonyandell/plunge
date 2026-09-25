@@ -1,16 +1,16 @@
 /** Original playing evidence stays visible when a fresh estimate is requested. */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { type GameState } from '../engine';
-import { api, requestKey, requestTile, isNelloDefender, NATIVE_TABLE, type NativeReceipt, type NativeEstimate } from '../ai/native';
+import { api, requestKey, requestTile, type NativeReceipt, type NativeEstimate } from '../ai/native';
 import { decisionStats, type reviewPosition, type ReviewSelection } from '../ai/native-analysis';
 import { Domino } from './Domino';
 import { CounterexampleScores } from './CounterexampleScores';
 import { MoveScores } from './MoveScores';
 import { ledChip, SEAT_NAMES, trumpChip } from './store';
 
-export function NativeStats({ g, sel, position, receipt, loading }: {
+export function NativeStats({ g, sel, position, receipt, loading, nelloPreview }: {
   g: GameState; sel: ReviewSelection; position: NonNullable<ReturnType<typeof reviewPosition>>;
-  receipt: NativeReceipt | null; loading: boolean;
+  receipt: NativeReceipt | null; loading: boolean; nelloPreview: boolean;
 }) {
   const [estimate, setEstimate] = useState<NativeEstimate | null>(null);
   const [busy, setBusy] = useState(false);
@@ -29,12 +29,13 @@ export function NativeStats({ g, sel, position, receipt, loading }: {
   const fresh = estimate ? decisionStats(estimate.response, request, legal) : null;
   const forced = legal.length === 1;
   const led = ledChip(g, g.tricks[sel.trick]!.plays.slice(0, sel.play));
-  const inspect = async (worlds: 40 | 160, counterexamples = false): Promise<void> => {
-    if (busy) return;
+  const previewRequired = request.contract === 'nello' && !nelloPreview;
+  const inspect = async (worlds: 40 | 160): Promise<void> => {
+    if (busy || previewRequired) return;
     setBusy(true); setError('');
     controller.current = new AbortController();
     try {
-      const value = await api<NativeEstimate>('estimates', { request, worlds, ...(counterexamples ? { nello_counterexamples: true } : {}) }, worlds === 160 ? 24000 : 18000, controller.current.signal);
+      const value = await api<NativeEstimate>('estimates', { request, worlds }, worlds === 160 ? 24000 : 18000, controller.current.signal);
       if (value.schema !== 'plunge-estimate-v1' || requestKey(value.identity.request) !== requestKey(request)
         || value.identity.player.n !== worlds) throw new Error('The estimate does not match this position.');
       if (alive.current) setEstimate(value);
@@ -71,13 +72,12 @@ export function NativeStats({ g, sel, position, receipt, loading }: {
             {' '}The scores show the largest comparison that finished.</p>
         </details>
       </div>}
-      <div class="native-inspect-controls">
+      {!previewRequired && <div class="native-inspect-controls">
         {!original && <button class="big-btn secondary" disabled={busy || loading} onClick={() => void inspect(40)}>Ask Walt</button>}
         <button class="big-btn secondary" disabled={busy || loading} onClick={() => void inspect(160)}>Think deeper</button>
-        {!NATIVE_TABLE && isNelloDefender(request) && <button class="big-btn secondary" disabled={busy || loading}
-          onClick={() => void inspect(fresh?.worlds === 160 ? 160 : 40, true)}>Try counterexamples</button>}
-      </div>
-      {!busy && <p class="setting-hint">Think deeper compares more possible deals. It can take up to 20 seconds.</p>}
+      </div>}
+      {previewRequired && <p class="setting-hint">Enable Nel-O Preview in Advanced settings for a fresh analysis with Walt.</p>}
+      {!busy && !previewRequired && <p class="setting-hint">Think deeper compares more possible deals. It can take up to 20 seconds.</p>}
       {busy && <p role="status">Walt is comparing the options… usually a few seconds, up to 20 seconds.</p>}
       {error && <p class="native-warning" role="alert">{error}</p>}
     </>}

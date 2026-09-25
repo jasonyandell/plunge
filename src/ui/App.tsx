@@ -9,7 +9,7 @@
 import { useEffect, useReducer, useRef, useState } from 'preact/hooks';
 import type { Seat } from '../engine';
 import {
-  HUMAN_SEAT, TRICK_SHOW_MS, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
+  HUMAN_SEAT, TRICK_SHOW_MS, nelloAvailable, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
 } from './store';
 import {
   BUILD_ID, UPDATE_POLL_MS, fetchRemoteVersion, updateAvailable,
@@ -89,7 +89,7 @@ export function App() {
       } else t = setTimeout(() => {
         if (isNative(app.settings.difficulty) && app.game?.phase === 'playing') {
           setThinking(seat);
-          void nativeMove(app.game, seat, app.settings.difficulty, app.sessionId, controller.signal, app.settings.thinkDeeper, app.settings.nelloCounterexamples).then(
+          void nativeMove(app.game, seat, app.settings.difficulty, app.sessionId, controller.signal, app.settings.thinkDeeper).then(
             (receipt) => { if (alive) dispatch({ type: 'native-ai', receipt }); },
             (error: unknown) => { if (alive) setNativeError(String(error)); },
           ).finally(() => { if (alive) setThinking(null); });
@@ -217,7 +217,7 @@ export function App() {
   return (
     <>
       {screen}
-      {questions && <Questions key={questions.id ?? "list"} initialId={questions.id} onClose={() => setQuestions(null)} dispatch={dispatch} />}
+      {questions && <Questions nelloPreview={nelloAvailable(app.settings)} key={questions.id ?? "list"} initialId={questions.id} onClose={() => setQuestions(null)} dispatch={dispatch} />}
       {nativeError && (
         <div class="native-error" role="alert">
           <span>{nativeError}</span>

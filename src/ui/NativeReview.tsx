@@ -17,8 +17,8 @@ export { reviewLegal } from '../ai/native-analysis';
 type Selection = { trick: number; play: number };
 const pips = (tile: number): string => requestTile(tile).split('').join('–');
 
-export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQuestion }: {
-  g: GameState; onBack: () => void; sessionId: string; receipts: Record<string,string>; initialFlag: FlagRecord | null; onQuestion: (id: string) => void;
+export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQuestion, nelloPreview }: {
+  nelloPreview: boolean; g: GameState; onBack: () => void; sessionId: string; receipts: Record<string,string>; initialFlag: FlagRecord | null; onQuestion: (id: string) => void;
 }) {
   const [sel, setSel] = useState<Selection | null>(initialFlag ? playLocation(g, initialFlag.ply) : null);
   const [receipt, setReceipt] = useState<NativeReceipt | null>(initialFlag?.original_receipt ?? null);
@@ -125,7 +125,7 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQu
         <h3>{SEAT_NAMES[current.seat]} played {current.domino.split('').join('–')} · play {ply! + 1}</h3>
         {matchedReceipt?.storage === 'session' && <p>Device storage is unavailable. These scores last for this session; copy a link to keep them.</p>}
         {position && <NativeStats key={`${ply}:${requestKey(position.request)}`} g={g} sel={sel} position={position}
-          receipt={matchedReceipt} loading={receiptLoading} />}
+          receipt={matchedReceipt} loading={receiptLoading} nelloPreview={nelloPreview} />}
         {matchedReceipt ? <details class="disclosure native-receipt"><summary>Decision details</summary>
           <p>Original decision: {matchedReceipt.response.n === 160
             ? 'Deeper L1 comparison · requested 160 worlds'

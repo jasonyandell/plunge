@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { counterexampleStats, decisionStats } from '../src/ai/decision-stats';
-import { livePlayerCall, type NativeDecision, type NativeRequest } from '../src/ai/native';
-import { initialApp, loadApp, reducer, saveApp } from '../src/ui/store';
+import { api, livePlayerCall, type NativeDecision, type NativeRequest } from '../src/ai/native';
+import { initialApp, loadApp, pendingAiSeat, reducer, saveApp, toSaved, STORAGE_KEY } from '../src/ui/store';
+
+import { applyAction, legalActions, newGame, PLUNGE_CONFIG } from '../src/engine';
+import { runPlayer } from '../src/ai/phone/client';
+vi.mock('../src/ai/phone/client', () => ({ runPlayer: vi.fn() }));
 
 const request: NativeRequest = {contract:'nello',decl:8,bid:1,bidder:0,seat:3,hand:[4,7,12,14,16,25,27],plays:[],seed:1};
 const legal=[4,16];
@@ -11,13 +15,13 @@ const response: NativeDecision = {contract:'nello',inactive:2,choice:16,legal,ro
     ordinary_worlds:1,witnesses:4,rounds:1,score_kind:'witness-mixture',options:[[4,'2','5'],[16,'0','1']]}};
 
 describe('Nel-O counterexample preview',()=>{
-  it('opts in only the defender and keeps hidden state out of the call',()=>{
-    expect(livePlayerCall(request,'native-partner',false,true)).toEqual({request,worlds:40,partner:true,nello_counterexamples:true});
-    expect(livePlayerCall(request,'native-partner',true,true)).toMatchObject({worlds:160,partner:false,nello_counterexamples:true});
-    expect(livePlayerCall(request,'native-l1')).not.toHaveProperty('nello_counterexamples');
-    expect(livePlayerCall({...request,seat:0},'native-l1',false,true)).not.toHaveProperty('nello_counterexamples');
+  it('always includes counterexamples for Nel-O defenders at both sample sizes',()=>{
+    expect(livePlayerCall(request,'native-partner',false)).toEqual({request,worlds:40,partner:true,nello_counterexamples:true});
+    expect(livePlayerCall(request,'native-partner',true)).toMatchObject({worlds:160,partner:false,nello_counterexamples:true});
+    expect(livePlayerCall(request,'native-l1')).toHaveProperty('nello_counterexamples',true);
+    expect(livePlayerCall({...request,seat:0},'native-l1',false)).not.toHaveProperty('nello_counterexamples');
     const {contract:_,...straight}=request;
-    expect(livePlayerCall(straight,'native-l1',false,true)).not.toHaveProperty('nello_counterexamples');
+    expect(livePlayerCall(straight,'native-l1',false)).not.toHaveProperty('nello_counterexamples');
   });
   it('keeps ordinary estimates and stress counts distinct, even after changing the lead',()=>{
     const ordinary=decisionStats(response,request,legal)!;
@@ -29,14 +33,65 @@ describe('Nel-O counterexample preview',()=>{
       expect(counterexampleStats({...response,counterexample_result:{...response.counterexample_result!,...bad} as NonNullable<NativeDecision['counterexample_result']>},request,legal)).toBeNull();
     }
   });
-  it('supports saved settings, explicit comparison links and legacy saves',()=>{
+  it('persists the whole preview and accepts explicit on/off links',()=>{
     const values=new Map<string,string>(); const storage={removeItem:(k:string)=>{values.delete(k);},getItem:(k:string)=>values.get(k)??null,setItem:(k:string,v:string)=>{values.set(k,v);}};
-    const app=initialApp(null,'?nello=counterexamples'); expect(app.settings.nelloCounterexamples).toBe(true);
+    const app=initialApp(null,'?nello=preview'); expect(app.settings.nelloPreview).toBe(true);
     saveApp(storage,app); const saved=loadApp(storage)!;
-    expect(initialApp(saved).settings.nelloCounterexamples).toBe(true);
-    expect(initialApp(saved,'?nello=ordinary').settings.nelloCounterexamples).toBe(false);
-    expect(reducer(app,{type:'set-nello-counterexamples',enabled:false}).settings.nelloCounterexamples).toBe(false);
-    expect(initialApp().settings.nelloCounterexamples).toBe(false);
+    expect(initialApp(saved).settings.nelloPreview).toBe(true);
+    expect(initialApp(saved,'?nello=off').settings.nelloPreview).toBe(false);
+    expect(reducer(app,{type:'set-nello-preview',enabled:false}).settings.nelloPreview).toBe(false);
+    expect(initialApp().settings.nelloPreview).toBe(false);
+    const { nelloPreview: _, ...oldSettings } = saved.settings;
+    for (const previous of [undefined, false, true]) {
+      storage.setItem(STORAGE_KEY, JSON.stringify({...saved,settings:{...oldSettings,nelloCounterexamples:previous}}));
+      expect(loadApp(storage)?.settings.nelloPreview).toBe(previous ?? false);
+      expect(loadApp(storage)?.settings).not.toHaveProperty('nelloCounterexamples');
+    }
+    for (const invalid of ['true',1,null]) {
+      storage.setItem(STORAGE_KEY,JSON.stringify({...saved,settings:{...saved.settings,nelloPreview:invalid}}));
+      expect(loadApp(storage)).toBeNull();
+    }
+    expect(initialApp(null,'?nello=counterexamples').settings.nelloPreview).toBe(true);
+    expect(initialApp(saved,'?nello=ordinary').settings.nelloPreview).toBe(false);
+  });
+  it('uses the full defense for fresh rechecks without a separate opt-in', async()=>{
+    vi.mocked(runPlayer).mockResolvedValue(response);
+    for (const worlds of [40,160] as const) {
+      const estimate=await api<{identity:{player:unknown}}>('estimates',{request,worlds});
+      expect(runPlayer).toHaveBeenLastCalledWith({request,worlds,partner:false,nello_counterexamples:true,
+        ...(worlds===160 ? {budget_ms:20000} : {})},undefined);
+      expect(estimate.identity.player).toEqual({n:worlds,nello_counterexamples:true});
+    }
+  });
+  it('gates new and resumed auctions, stale declarations, and the next hand',()=>{
+    const declaration={type:'declare',decl:{type:'nello'}} as const;
+    let game=newGame(PLUNGE_CONFIG,'preview-gate');
+    game=applyAction(game,{type:'bid',bid:{kind:'marks',value:1}});
+    for(let i=0;i<3;i++) game=applyAction(game,{type:'bid',bid:{kind:'pass'}});
+    let app=initialApp(toSaved({...initialApp(),game}));
+    expect(legalActions(app.game!)).not.toContainEqual(declaration);
+    expect(reducer(app,{type:'human',action:declaration})).toBe(app);
+    expect(reducer(app,{type:'new-game',seed:'off'}).game?.config.nello).toBe('off');
+    app=reducer(app,{type:'set-nello-preview',enabled:true});
+    expect(legalActions(app.game!)).toContainEqual(declaration);
+    expect(reducer(app,{type:'new-game',seed:'on'}).game?.config.nello).toBe('open');
+    app=reducer(app,{type:'human',action:declaration});
+    const active=app.game!;
+    const off=reducer(app,{type:'set-nello-preview',enabled:false});
+    expect(off.game).toBe(active); expect(off.screen).toBe('home');
+    expect(reducer(off,{type:'resume'})).toBe(off);
+    expect(pendingAiSeat({...off,screen:'table'})).toBeNull();
+    expect(reducer(off,{type:'human',action:legalActions(active)[0]!})).toBe(off);
+    app=reducer(reducer(off,{type:'set-nello-preview',enabled:true}),{type:'resume'});
+    expect(app.screen).toBe('table'); expect(app.game).toBe(active);
+    game=active;
+    while(game.phase==='playing') game=applyAction(game,legalActions(game)[0]!);
+    for(const enabled of [false,true]) {
+      const ended=reducer({...app,game},{type:'set-nello-preview',enabled});
+      const next=reducer(ended,{type:'human',action:{type:'next-hand'}});
+      expect(next.game?.phase).toBe('bidding');
+      expect(next.game?.config.nello).toBe(enabled?'open':'off');
+    }
   });
 });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { writeFileSync } from 'node:fs';
-import { applyAction, legalActions, newDealtGame, newGame, PLUNGE_CONFIG, TOURNAMENT_CONFIG, type GameState, type Seat } from '../src/engine';
+import { applyAction, legalActions, newDealtGame, newGame, LEGACY_PLUNGE_CONFIG, PLUNGE_CONFIG, TOURNAMENT_CONFIG, type GameState, type Seat } from '../src/engine';
 import { encodeReplay, decodeReplay } from '../src/engine/replay-code';
 import { initialApp, reducer, toSaved } from '../src/ui/store';
 
@@ -58,7 +58,7 @@ describe('Plunge forced last bid', () => {
     expect(resumed.game!.bids).toEqual(old.bids);
     expect(resumed.game!.dealt).toEqual(old.dealt);
     expect(legalActions(resumed.game!)).not.toContainEqual(pass);
-    expect(resumed.game!.config).toEqual(PLUNGE_CONFIG);
+    expect(resumed.game!.config).toEqual(LEGACY_PLUNGE_CONFIG);
   });
 
   it('preserves old played-hand rules, then uses forced bidding on the next hand', () => {
@@ -73,7 +73,7 @@ describe('Plunge forced last bid', () => {
     expect(decodeReplay(code)!.config.allPass).toBe('reshake');
     const app={...restored,game:completed};
     const next=reducer(app,{type:'human',action:{type:'next-hand'}});
-    expect(next.game!.config).toEqual(PLUNGE_CONFIG);
+    expect(next.game!.config).toEqual(LEGACY_PLUNGE_CONFIG);
     expect(next.game!.marks).toEqual(completed.marks);
     expect(next.game!.handNumber).toBe(completed.handNumber+1);
   });
