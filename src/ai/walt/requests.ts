@@ -5,9 +5,9 @@
  * identical request at pre-warm time (async, in the worker) and at decision
  * time (sync cache lookup), and it all unit-tests without a solver.
  *
- * Scope (the walt contract): straight points-and-marks 42 only — pip trumps,
- * doubles, no-trump — and no sat-out-partner rule in play. Every builder
- * returns null when out of scope; the caller falls back to `hard`.
+ * Auctions retain the nine straight declarations. The shared table player
+ * also accepts human-called own-suit Nel-O, carrying its contract explicitly.
+ * Older worker callers reject that extension before invoking their artifact.
  */
 
 import {
@@ -77,12 +77,13 @@ export function waltDeclId(decl: Declaration | null): number | null {
     case 'no-trump':
       return 9;
     case 'nello':
+      return 8; // original algebra's doubles-suit; never an auction choice
     case 'sevens':
       return null;
   }
 }
 
-/** plunge Declaration for a walt decl id, or null for an unknown id. */
+/** Computer auction declaration: the original nine straight choices only. */
 export function waltDeclarationOf(id: number): Declaration | null {
   if (id >= 0 && id <= 6) return { type: 'pip', pip: id as 0 | 1 | 2 | 3 | 4 | 5 | 6 };
   if (id === 7) return { type: 'doubles' };
@@ -99,6 +100,7 @@ export function waltContractBid(contract: Contract | null): number | null {
   if (!contract) return null;
   if (contract.kind === 'points') return contract.value;
   if (contract.kind === 'marks') return 42;
+  if (contract.kind === 'nello') return contract.value;
   return null;
 }
 
@@ -137,13 +139,18 @@ export function playPairs(obs: Observation): number[] {
 }
 
 export function playRequestOf(obs: Observation, tuning: WaltTuning): PlayRequest | null {
-  if (obs.phase !== 'playing' || obs.sittingOut !== null) return null;
+  if (obs.phase !== 'playing') return null;
+  const nello = obs.contract?.kind === 'nello';
+  if (nello ? obs.declaration?.type !== 'nello' || obs.config.nelloDoubles !== 'own-suit'
+    || obs.declarer === null || obs.sittingOut !== (obs.declarer + 2) % 4 || obs.seat === obs.sittingOut
+    : obs.sittingOut !== null || obs.declaration?.type === 'nello') return null;
   const decl = waltDeclId(obs.declaration);
   const bid = waltContractBid(obs.contract);
   if (decl === null || bid === null || obs.declarer === null) return null;
   const hand = dealtHandTiles(obs);
   if (hand.length !== 7) return null;
   return {
+    ...(nello ? { contract: 'nello' as const } : {}),
     decl,
     bid,
     seat: obs.seat,

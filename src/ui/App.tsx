@@ -9,7 +9,7 @@
 import { useEffect, useReducer, useRef, useState } from 'preact/hooks';
 import type { Seat } from '../engine';
 import {
-  HUMAN_SEAT, TRICK_SHOW_MS, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
+  HUMAN_SEAT, TRICK_SHOW_MS, nelloAvailable, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
 } from './store';
 import {
   BUILD_ID, UPDATE_POLL_MS, fetchRemoteVersion, updateAvailable,
@@ -27,7 +27,7 @@ import { attachGame, syncQuestions } from '../questions/client';
 
 export function App() {
   const [app, dispatch] = useReducer(reducer, undefined, () =>
-    initialApp(typeof localStorage !== 'undefined' ? loadApp(localStorage) : null),
+    initialApp(typeof localStorage !== 'undefined' ? loadApp(localStorage) : null, location.search),
   );
 
   const [questions, setQuestions] = useState<{ id: string | null } | null>(null);
@@ -217,7 +217,7 @@ export function App() {
   return (
     <>
       {screen}
-      {questions && <Questions key={questions.id ?? "list"} initialId={questions.id} onClose={() => setQuestions(null)} dispatch={dispatch} />}
+      {questions && <Questions nelloPreview={nelloAvailable(app.settings)} key={questions.id ?? "list"} initialId={questions.id} onClose={() => setQuestions(null)} dispatch={dispatch} />}
       {nativeError && (
         <div class="native-error" role="alert">
           <span>{nativeError}</span>

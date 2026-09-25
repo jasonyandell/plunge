@@ -76,7 +76,7 @@ export async function explainMove(
   n: number = EXPLAIN_N,
 ): Promise<Explanation | null> {
   const built = explainRequestOf(g, trick, play, n);
-  if (!built) return null;
+  if (!built || built.req.contract) return null;
   const key = JSON.stringify(built.req);
   const hit = cache.get(key);
   if (hit) return hit;

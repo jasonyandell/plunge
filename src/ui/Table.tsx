@@ -1,3 +1,5 @@
+import { explainScope } from '../ai/review-request';
+import { playIndex } from '../engine/play-index';
 /**
  * The table screen. Renders purely from GameState — no duplicated game state.
  *
@@ -15,7 +17,7 @@ import { Domino } from './Domino';
 import { Tally } from './Tally';
 import type { AppEvent, AppState } from './store';
 import {
-  HUMAN_SEAT, SEAT_NAMES, TRICK_HOLD_MS, bidLabel, contractLabel, declLabel, ledChip, trumpChip,
+  HUMAN_SEAT, SEAT_NAMES, nelloAvailable, TRICK_HOLD_MS, bidLabel, contractLabel, declLabel, ledChip, trumpChip,
 } from './store';
 import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet } from './sheets';
 import { TrickHistory } from './TrickHistory';
@@ -123,7 +125,7 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
             winner={trickWinner}
             gathering={showingLast}
             thinking={thinking}
-            onQuestion={scenario ? undefined : (i, target) => selectQuestion((showingLast ? g.tricks.length - 1 : g.tricks.length) * 4 + i, target)}
+            onQuestion={scenario ? undefined : (i, target) => selectQuestion(playIndex(g,showingLast ? g.tricks.length - 1 : g.tricks.length,i), target)}
           />
           <OpponentSide g={g} seat={3} thinking={thinking} />
         </div>
@@ -135,7 +137,7 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
                 ? g.currentTrick.length === 0 ? 'Your turn to lead' : 'Your turn to play'
                 : 'Your hand'}</span>
             </p>
-            {app.settings.showHints && humanTurn && !showingLast && !scenario && g.sittingOut === null && isNative(app.settings.difficulty) &&
+            {app.settings.showHints && humanTurn && !showingLast && !scenario && explainScope(g) && isNative(app.settings.difficulty) &&
               <MoveHint key={`${app.sessionId}:${g.handNumber}:${g.tricks.length}:${g.currentTrick.length}`} g={g} sessionId={app.sessionId} onQuestion={onQuestion} />}
           </div>
           {humanSitsOut ? (
@@ -188,7 +190,7 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
       )}
       {(g.phase === 'hand-over' || g.phase === 'game-over') && review && (
           <NativeReview key={scenario ? (app.scenarioFlag?.id ?? g.dealt.flat().join('')) : `${app.sessionId}:${g.handNumber}`}
-            g={g} onBack={() => setReview(false)} sessionId={app.sessionId}
+            g={g} nelloPreview={nelloAvailable(app.settings)} onBack={() => setReview(false)} sessionId={app.sessionId}
             receipts={scenario ? {} : app.nativeReceipts} initialFlag={app.scenarioFlag} onQuestion={onQuestion} />
       )}
     </div>
@@ -289,7 +291,7 @@ function InfoBar({
           </button>
         )}
       </div>
-      {open && n > 0 && <>{onQuestion && <p class="question-history-hint">Curious about a move? Tap its domino.</p>}<TrickHistory g={g} actionLabel="Why this move?" onTapPlay={onQuestion ? (t, p, target) => onQuestion(t * 4 + p, target) : undefined} /></>}
+      {open && n > 0 && <>{onQuestion && <p class="question-history-hint">Curious about a move? Tap its domino.</p>}<TrickHistory g={g} actionLabel="Why this move?" onTapPlay={onQuestion ? (t, p, target) => onQuestion(playIndex(g,t,p), target) : undefined} /></>}
     </div>
   );
 }

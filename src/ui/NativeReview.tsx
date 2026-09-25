@@ -1,3 +1,4 @@
+import { playLocation, playIndex } from '../engine/play-index';
 /** Finished-hand examiner UI. No data from this view enters a live chooser. */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { type GameState } from '../engine';
@@ -16,10 +17,10 @@ export { reviewLegal } from '../ai/native-analysis';
 type Selection = { trick: number; play: number };
 const pips = (tile: number): string => requestTile(tile).split('').join('–');
 
-export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQuestion }: {
-  g: GameState; onBack: () => void; sessionId: string; receipts: Record<string,string>; initialFlag: FlagRecord | null; onQuestion: (id: string) => void;
+export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQuestion, nelloPreview }: {
+  nelloPreview: boolean; g: GameState; onBack: () => void; sessionId: string; receipts: Record<string,string>; initialFlag: FlagRecord | null; onQuestion: (id: string) => void;
 }) {
-  const [sel, setSel] = useState<Selection | null>(initialFlag ? { trick: Math.floor(initialFlag.ply / 4), play: initialFlag.ply % 4 } : null);
+  const [sel, setSel] = useState<Selection | null>(initialFlag ? playLocation(g, initialFlag.ply) : null);
   const [receipt, setReceipt] = useState<NativeReceipt | null>(initialFlag?.original_receipt ?? null);
   const [receiptLoading, setReceiptLoading] = useState(false);
   const [flag, setFlag] = useState<FlagRecord | null>(initialFlag);
@@ -33,7 +34,7 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQu
   const generation = useRef(0);
   const question = useRef<HTMLElement>(null);
   useEffect(() => () => { generation.current++; }, []);
-  const ply = sel === null ? null : sel.trick * 4 + sel.play;
+  const ply = sel === null ? null : playIndex(g,sel.trick,sel.play);
   const rid = ply === null ? undefined : (initialFlag?.ply === ply ? initialFlag.receipt_id : receipts[`${g.handNumber}:${ply}`]);
 
   useEffect(() => {
@@ -124,18 +125,18 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQu
         <h3>{SEAT_NAMES[current.seat]} played {current.domino.split('').join('–')} · play {ply! + 1}</h3>
         {matchedReceipt?.storage === 'session' && <p>Device storage is unavailable. These scores last for this session; copy a link to keep them.</p>}
         {position && <NativeStats key={`${ply}:${requestKey(position.request)}`} g={g} sel={sel} position={position}
-          receipt={matchedReceipt} loading={receiptLoading} />}
+          receipt={matchedReceipt} loading={receiptLoading} nelloPreview={nelloPreview} />}
         {matchedReceipt ? <details class="disclosure native-receipt"><summary>Decision details</summary>
-          <p>Original decision: {matchedReceipt.response.n === 160
-            ? 'Deeper L1 comparison · requested 160 worlds'
+          <p>Original decision: {(matchedReceipt.response.n ?? 0) > 40
+            ? `Deeper L1 comparison · requested ${matchedReceipt.response.n} worlds`
             : matchedReceipt.identity.player.name === 'l1-default' ? 'L1' : 'L1 + partner check'} · {(matchedReceipt.response.elapsed_us / 1e6).toFixed(2)} s</p>
-          <p>{review?.status === 'changed' ? `The check changed ${pips(review.baseline)} to ${pips(review.choice)}.`
+          <p>{matchedReceipt.response.counterexample_result?.status === 'completed' ? 'The Nel-O counterexample pass selected the move; its stress scores are shown above.' : review?.status === 'changed' ? `The check changed ${pips(review.baseline)} to ${pips(review.choice)}.`
             : review?.status === 'retained' ? 'The check kept L1’s move.'
             : review?.status === 'inactive' ? 'The partnership check did not trigger.'
             : review ? 'The check was unresolved; L1’s move was kept.' : matchedReceipt.response.route === 'forced' ? 'Only one legal move.' : 'The baseline player chose this move.'}</p>
           {review && (review.samples ?? 0) > 0 && <p>{review.samples} of {review.support} compatible hands compared
             {review.coverage === 'census' ? ' · full census' : ' · sampled guess'}.</p>}
-          {matchedReceipt.response.n === 160 && <p>This move requested 160 worlds; the scores show the largest comparison that finished.</p>}
+          {(matchedReceipt.response.n ?? 0) > 40 && <p>This move requested {matchedReceipt.response.n} worlds; the scores show the largest comparison that finished.</p>}
         </details> : null}
         <details class="disclosure observation-tools" open={Boolean(initialFlag)}>
         <summary>Save or share this move</summary>

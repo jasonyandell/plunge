@@ -12,7 +12,7 @@
 import type { Difficulty } from '../ai';
 import { chooseAction } from '../ai/table';
 import { catalogueDeal } from '../ai/catalogue';
-import { isNative, requestOf, requestKey, checkedAction, type NativeReceipt, type FlagRecord } from '../ai/native';
+import { NATIVE_TABLE, isNative, requestOf, requestKey, checkedAction, type NativeReceipt, type FlagRecord } from '../ai/native';
 import { auctionKey, type AuctionDecision, type AuctionEvidence } from '../ai/auction';
 import {
   type Action,
@@ -27,6 +27,7 @@ import {
   CASUAL_CONFIG,
   TOURNAMENT_CONFIG,
   PLUNGE_CONFIG,
+  LEGACY_PLUNGE_CONFIG,
   applyAction,
   fromId,
   ledSuitOf,
@@ -51,10 +52,11 @@ export interface Settings {
   readonly difficulty: Difficulty;
   readonly preset: Preset;
   readonly thinkDeeper: boolean;
+  readonly nelloPreview: boolean;
   readonly showHints: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { difficulty: 'native-partner', preset: 'tournament', thinkDeeper: false, showHints: true };
+export const DEFAULT_SETTINGS: Settings = { difficulty: 'native-partner', preset: 'tournament', thinkDeeper: false, nelloPreview: false, showHints: true };
 
 /** Rotate the bidder with the shaker; use real engine auction transitions. */
 export function practice30(game: GameState): GameState {
@@ -66,6 +68,26 @@ export function practice30(game: GameState): GameState {
 
 export function configFor(preset: Preset): GameConfig {
   return preset === 'tournament' ? TOURNAMENT_CONFIG : CASUAL_CONFIG;
+}
+
+/** The preview requires the browser player, which includes counterexample defense. */
+export function nelloAvailable(settings: Settings): boolean {
+  return settings.nelloPreview && isNative(settings.difficulty) && !NATIVE_TABLE;
+}
+
+function tableConfig(settings: Settings): GameConfig {
+  if (isNative(settings.difficulty)) return nelloAvailable(settings) ? PLUNGE_CONFIG : LEGACY_PLUNGE_CONFIG;
+  return { ...configFor(settings.preset), nello: 'off' };
+}
+
+/** Apply availability before declaration; never rewrite a contract already in play. */
+function configureAuction(game: GameState | null, settings: Settings): GameState | null {
+  return game && (game.phase === 'bidding' || game.phase === 'declaring')
+    ? { ...game, config: tableConfig(settings) } : game;
+}
+
+export function nelloPaused(s: AppState): boolean {
+  return s.game?.phase === 'playing' && s.game.contract?.kind === 'nello' && !nelloAvailable(s.settings);
 }
 
 export type Screen = 'home' | 'table' | 'how' | 'about';
@@ -98,6 +120,7 @@ export type AppEvent =
   | { readonly type: 'set-difficulty'; readonly difficulty: Difficulty }
   | { readonly type: 'set-preset'; readonly preset: Preset }
   | { readonly type: 'set-think-deeper'; readonly enabled: boolean }
+  | { readonly type: 'set-nello-preview'; readonly enabled: boolean }
   | { readonly type: 'set-show-hints'; readonly enabled: boolean }
   | { readonly type: 'new-game'; readonly seed: string; readonly sessionId?: string }
   | { readonly type: 'resume' }
@@ -110,15 +133,17 @@ export type AppEvent =
   | { readonly type: 'native-ai'; readonly receipt: NativeReceipt }
   | { readonly type: 'auction-ai'; readonly decision: AuctionDecision };
 
-export function initialApp(saved?: SavedState | null): AppState {
+export function initialApp(saved?: SavedState | null, search = ''): AppState {
   if (saved && !isNative(saved.settings.difficulty)) saved = null;
+  const experiment = new URLSearchParams(search).get('nello');
+  const settings = { ...DEFAULT_SETTINGS, ...saved?.settings,
+    ...(experiment === 'preview' || experiment === 'counterexamples' ? { nelloPreview: true }
+      : experiment === 'off' || experiment === 'ordinary' ? { nelloPreview: false } : {}) };
   return {
     screen: 'home',
-    settings: { ...DEFAULT_SETTINGS, ...saved?.settings },
+    settings,
     seed: saved?.seed ?? 'plunge',
-    // Apply the house rule to a resumed auction; preserve already-played hands.
-    game: saved?.game?.phase === 'bidding'
-      ? { ...saved.game, config: PLUNGE_CONFIG } : saved?.game ?? null,
+    game: configureAuction(saved?.game ?? null, settings),
     aiMoves: saved?.aiMoves ?? 0,
     showTrick: saved?.showTrick ?? false,
     scenarioGame: null,
@@ -141,7 +166,7 @@ export function trickJustCompleted(prev: GameState, next: GameState): boolean {
  */
 export function pendingAiSeat(s: AppState): Seat | null {
   const g = s.game;
-  if (!g || s.screen !== 'table' || s.showTrick || s.scenarioGame) return null;
+  if (!g || nelloPaused(s) || s.screen !== 'table' || s.showTrick || s.scenarioGame) return null;
   if (g.phase !== 'bidding' && g.phase !== 'declaring' && g.phase !== 'playing') return null;
   if (g.turn === null || g.turn === HUMAN_SEAT) return null;
   return g.turn;
@@ -158,11 +183,21 @@ export function reducer(s: AppState, e: AppEvent): AppState {
       // Leaving for home closes any shared-hand review.
       return { ...s, screen: e.screen, scenarioGame: e.screen === 'home' ? null : s.scenarioGame,
         scenarioFlag: e.screen === 'home' ? null : s.scenarioFlag };
-    case 'set-difficulty':
-      return { ...s, settings: { ...s.settings, difficulty: e.difficulty,
-        preset: isNative(e.difficulty) ? 'tournament' : s.settings.preset } };
-    case 'set-preset':
-      return { ...s, settings: { ...s.settings, preset: e.preset } };
+    case 'set-difficulty': {
+      const settings = { ...s.settings, difficulty: e.difficulty,
+        preset: isNative(e.difficulty) ? 'tournament' as const : s.settings.preset };
+      const next = { ...s, settings, game: configureAuction(s.game, settings) };
+      return nelloPaused(next) ? { ...next, screen: 'home' } : next;
+    }
+    case 'set-preset': {
+      const settings = { ...s.settings, preset: e.preset };
+      return { ...s, settings, game: configureAuction(s.game, settings) };
+    }
+    case 'set-nello-preview': {
+      const settings = { ...s.settings, nelloPreview: e.enabled };
+      const next = { ...s, settings, game: configureAuction(s.game, settings) };
+      return nelloPaused(next) ? { ...next, screen: 'home' } : next;
+    }
     case 'set-think-deeper':
       return { ...s, settings: { ...s.settings, thinkDeeper: e.enabled } };
     case 'set-show-hints':
@@ -180,21 +215,25 @@ export function reducer(s: AppState, e: AppEvent): AppState {
         nativeReceipts: {},
         auctionSurveys: {},
         game: isNative(s.settings.difficulty)
-          ? catalogueDeal(newGame(PLUNGE_CONFIG,e.seed),e.seed)
-          : newGame(configFor(s.settings.preset),e.seed),
+          ? catalogueDeal(newGame(tableConfig(s.settings),e.seed),e.seed)
+          : newGame(tableConfig(s.settings),e.seed),
       };
     case 'resume':
-      return s.game ? { ...s, screen: 'table', scenarioGame: null, scenarioFlag: null } : s;
+      return s.game && !nelloPaused(s) ? { ...s, screen: 'table', scenarioGame: null, scenarioFlag: null } : s;
     case 'view-scenario':
       return { ...s, screen: 'table', scenarioGame: e.game, scenarioFlag: e.flag ?? null };
     case 'trick-shown':
       return { ...s, showTrick: false };
     case 'human': {
-      if (!s.game || s.scenarioGame || s.showTrick) return s; // no input during review or the completed-trick pause
+      if (!s.game || s.scenarioGame || s.showTrick || nelloPaused(s)) return s; // no moves during review, the trick pause, or a disabled preview
+      if (e.action.type === 'declare' && e.action.decl.type === 'nello' && !nelloAvailable(s.settings)) return s;
       let game: GameState;
       try {
         game = applyAction(s.game, e.action);
-        if (e.action.type === 'next-hand' && isNative(s.settings.difficulty)) game=catalogueDeal({ ...game, config: PLUNGE_CONFIG },s.seed);
+        if (e.action.type === 'next-hand') {
+          game = { ...game, config: tableConfig(s.settings) };
+          if (isNative(s.settings.difficulty)) game = catalogueDeal(game,s.seed);
+        }
       } catch {
         return s; // defensive: stale tap / double tap — ignore
       }
@@ -296,10 +335,12 @@ export function loadApp(storage: StorageLike): SavedState | null {
   try {
     const raw = storage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const p = JSON.parse(raw) as SavedState;
+    const p = JSON.parse(raw) as SavedState & { settings: Settings & { nelloCounterexamples?: boolean } };
     if (p === null || typeof p !== 'object' || p.v !== 1) return null;
     if (!DIFFICULTIES.includes(p.settings?.difficulty)) return null;
     if (!PRESETS.includes(p.settings?.preset)) return null;
+    if (p.settings.nelloCounterexamples !== undefined && typeof p.settings.nelloCounterexamples !== 'boolean') return null;
+    if (p.settings.nelloPreview !== undefined && typeof p.settings.nelloPreview !== 'boolean') return null;
     if (p.settings.thinkDeeper !== undefined && typeof p.settings.thinkDeeper !== 'boolean') return null;
     if (p.settings.showHints !== undefined && typeof p.settings.showHints !== 'boolean') return null;
     if (p.showTrick !== undefined && typeof p.showTrick !== 'boolean') return null;
@@ -313,7 +354,9 @@ export function loadApp(storage: StorageLike): SavedState | null {
       if (!Array.isArray(g.hands) || g.hands.length !== 4) return null;
       if (!Array.isArray(g.marks) || g.marks.length !== 2) return null;
     }
-    return { ...p, settings: { ...p.settings, thinkDeeper: p.settings.thinkDeeper ?? false, showHints: p.settings.showHints ?? true } };
+    const { nelloCounterexamples, ...settings } = p.settings;
+    return { ...p, settings: { ...settings, thinkDeeper: settings.thinkDeeper ?? false, showHints: settings.showHints ?? true,
+      nelloPreview: settings.nelloPreview ?? nelloCounterexamples ?? false } };
   } catch {
     return null;
   }

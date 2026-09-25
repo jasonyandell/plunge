@@ -9,7 +9,8 @@ export function explainScope(g: GameState): boolean {
     waltDeclId(g.declaration) !== null &&
     waltContractBid(g.contract) !== null &&
     g.declarer !== null &&
-    g.sittingOut === null
+    (g.contract?.kind === 'nello' ? g.declaration?.type === 'nello' && g.config.nelloDoubles === 'own-suit'
+      && g.sittingOut === (g.declarer + 2) % 4 : g.sittingOut === null && g.declaration?.type !== 'nello')
   );
 }
 
@@ -45,6 +46,7 @@ export function explainRequestOf(
 
   return {
     req: {
+      ...(g.contract?.kind === 'nello' ? {contract:'nello' as const} : {}),
       decl,
       bid,
       seat: target.seat,

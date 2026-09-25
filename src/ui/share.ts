@@ -4,7 +4,7 @@
  * hand in review.
  *
  * Format (all printable, ~130 chars):
- *   v1 <preset c|t|f (Plunge forced-30)> <shaker 0-3> <dealt: 4 seats x 7 dominoes, "65"-style>
+ *   v1 <preset c|t|f|l (l = forced-30 + open Nel-O; f = legacy)> <shaker 0-3> <dealt: 4 seats x 7 dominoes, "65"-style>
  *   "." <action tokens>
  * Action tokens are parsed by replay phase, so no separators are needed:
  *   bidding:   P pass · two digits points (30..41) · M/G/S/N + marks value

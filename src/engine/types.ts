@@ -90,7 +90,9 @@ export const TOURNAMENT_CONFIG: GameConfig = {
 };
 
 /** Plunge's straight house game: the last bidder must take at least 30. */
-export const PLUNGE_CONFIG: GameConfig = { ...TOURNAMENT_CONFIG, allPass: 'force-30' };
+export const LEGACY_PLUNGE_CONFIG: GameConfig = { ...TOURNAMENT_CONFIG, allPass: 'force-30' };
+/** Family table: open human Nel-O, with the existing forced minimum bid. */
+export const PLUNGE_CONFIG: GameConfig = { ...LEGACY_PLUNGE_CONFIG, nello: 'open' };
 
 // ---------------------------------------------------------------------------
 // Bids and contracts
