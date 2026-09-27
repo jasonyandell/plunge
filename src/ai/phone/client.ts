@@ -2,7 +2,7 @@ import type { NativeDecision, NativeRequest } from '../native';
 import type { AuctionCall, AuctionSurvey } from '../auction';
 import { runAuctionPool, auctionPoolSize, type AuctionPoolOptions } from './auction-pool';
 
-export interface PlayerCall { request: NativeRequest; worlds: number; partner: boolean; budget_ms?: number }
+export interface PlayerCall { request: NativeRequest; worlds: number; partner: boolean; budget_ms?: number; nello_counterexamples?: boolean }
 
 /** One worker owns one decision. Ending a request also releases all solver
  * memory; requests cannot queue behind an abandoned calculation. */

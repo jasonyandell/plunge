@@ -180,7 +180,8 @@ function requestFor(obs: Observation): { kind: WaltKind; req: WaltRequest } | nu
       return req && { kind: 'declare', req };
     }
     case 'playing': {
-      const req = playRequestOf(obs, tuning);
+      const built = playRequestOf(obs, tuning);
+      const req = built?.contract ? null : built;
       return req && { kind: 'play', req };
     }
     default:

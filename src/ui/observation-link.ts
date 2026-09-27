@@ -1,3 +1,4 @@
+import { playLocation } from '../engine/play-index';
 /** A portable finished-hand observation. Reconstruct the position from the
  * replay; imported fields never enter a live player's information boundary. */
 import { type GameState } from '../engine';
@@ -24,7 +25,9 @@ export function decodeObservation(hash: string): { game: GameState; flag: FlagRe
       || !Number.isInteger(v.ply) || v.ply < 0 || v.ply > 27 || !Number.isInteger(v.seed) || v.seed < 0 || v.seed > 0xffffffff) return null;
     const game = decodeHand(v.hand);
     if (!game) return null;
-    const position = reviewPosition(game, { trick: Math.floor(v.ply / 4), play: v.ply % 4 }, v.seed);
+    const loc=playLocation(game,v.ply);
+    if (!loc) return null;
+    const position = reviewPosition(game, loc, v.seed);
     if (!position || (v.alternative !== null && !position.legal.includes(v.alternative))) return null;
     if (v.receipt) {
       if (v.receipt.schema !== 'plunge-decision-v1' || !/^[a-f0-9]{64}$/.test(v.receipt.id)

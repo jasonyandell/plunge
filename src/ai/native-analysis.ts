@@ -9,7 +9,7 @@ export function reviewPosition(g: GameState, sel: ReviewSelection, seed: number)
   const built = explainRequestOf(g, sel.trick, sel.play);
   if (!built || !g.rules) return null;
   const { decl, bid, bidder, seat, hand, plays } = built.req;
-  const request: NativeRequest = { decl, bid, bidder, seat, hand, plays, seed };
+  const request: NativeRequest = { ...(built.req.contract ? {contract:built.req.contract} : {}), decl, bid, bidder, seat, hand, plays, seed };
   const remaining = new Set(hand);
   for (let i = 1; i < plays.length; i += 2) remaining.delete(plays[i]!);
   const lead = sel.play === 0 ? null : g.tricks[sel.trick]!.plays[0]!.domino;

@@ -32,6 +32,8 @@ export function pipsOf(tile: number): [number, number] {
 }
 
 export interface PlayRequest {
+  /** Used by the shared player; the legacy oracle remains straight-only. */
+  contract?: 'nello';
   /** Declaration id: 0..6 pip trump, 7 doubles, 9 no-trump. */
   decl: number;
   /** Contract bid 30..=42 — the make/set thresholds walt plays to. */

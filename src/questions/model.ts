@@ -1,3 +1,4 @@
+import { playLocation, playIndex } from '../engine/play-index';
 /** Durable question evidence. A replay is evidence for the examiner, never AI input. */
 import { legalPlays, type GameState } from '../engine';
 import { decodeReplay } from '../engine/replay-code';
@@ -22,6 +23,7 @@ export interface LocalQuestion extends RemoteQuestion { syncedRevision: number; 
 export interface PublicQuestion {
   id: string; created: string; note: string; ply: number; seat: number; domino: string | null;
   kind: 'play' | 'move' | 'bid' | 'trump';
+  location?: { trick: number; play: number };
   complete: boolean; answer: Answer | null; question: Question | null;
 }
 export const QUESTION_ID = /^[a-f0-9]{32}$/;
@@ -61,11 +63,13 @@ export function validQuestion(value: unknown): Question {
       receipt_id: null, receipt: null, build: q.build, hint, hint_id: q.hint_id };
   }
   if (q.hint !== undefined || q.hint_id !== undefined || !allPlays(snapshot)[q.ply]) throw new Error('The saved play cannot be replayed.');
-  const built = explainRequestOf(examinerGame(snapshot), Math.floor(q.ply / 4), q.ply % 4);
+  const loc = playLocation(snapshot,q.ply);
+  if (!loc) throw new Error('Invalid play position.');
+  const built = explainRequestOf(examinerGame(snapshot),loc.trick,loc.play);
   if (!built) throw new Error('This play cannot be examined.');
   const before = new Set(snapshot.dealt[built.seat]);
   for (const p of allPlays(snapshot).slice(0,q.ply)) before.delete(p.domino);
-  const lead = q.ply % 4 ? allPlays(snapshot)[Math.floor(q.ply/4)*4]!.domino : null;
+  const lead = loc.play ? allPlays(snapshot)[playIndex(snapshot,loc.trick,0)]!.domino : null;
   const legal = legalPlays([...before],lead,snapshot.rules!).map(tileOfId);
   if (q.alternative !== null && (!Number.isInteger(q.alternative) || !legal.includes(q.alternative))) {
     throw new Error('Invalid alternative.');
@@ -85,7 +89,7 @@ export function validQuestion(value: unknown): Question {
       || (review.support !== undefined && !Number.isSafeInteger(review.support)))) throw new Error('Invalid partner review.');
     const req = r.identity.request;
     const expected = { ...built.req, seed: q.seed };
-    for (const k of ['decl', 'bid', 'bidder', 'seat', 'hand', 'plays', 'seed'] as const) {
+    for (const k of ['contract', 'decl', 'bid', 'bidder', 'seat', 'hand', 'plays', 'seed'] as const) {
       if (JSON.stringify(req?.[k]) !== JSON.stringify(expected[k])) throw new Error('Scores belong to a different decision.');
     }
     const tile = built.domino;
@@ -112,11 +116,13 @@ export function publicQuestion(q: Question, answer: Answer | null): PublicQuesti
   const g = decodeReplay(q.replay)!;
   const complete = finished(g);
   if (q.schema === 'plunge-question-v2') {
-    return { id: q.id, created: q.created, note: q.note, ply: q.ply, seat: 0, kind: q.hint.kind,
+    const captured = decodeReplay(q.snapshot)!;
+    const location = q.hint.kind === 'move' ? {location:{trick:captured.tricks.length,play:captured.currentTrick.length}} : {};
+    return { ...location, id: q.id, created: q.created, note: q.note, ply: q.ply, seat: 0, kind: q.hint.kind,
       domino: complete && q.hint.kind === 'move' ? idOfTile(q.hint.choice) : null,
       complete, answer: complete ? answer : null, question: complete ? q : null };
   }
   const p = allPlays(g)[q.ply]!;
-  return { id: q.id, created: q.created, note: q.note, ply: q.ply, seat: p.seat, domino: p.domino, kind: 'play',
+  return { location:playLocation(g,q.ply)!, id: q.id, created: q.created, note: q.note, ply: q.ply, seat: p.seat, domino: p.domino, kind: 'play',
     complete, answer: complete ? answer : null, question: complete ? q : null };
 }

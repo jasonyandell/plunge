@@ -124,3 +124,13 @@
   font-size: 13px;
   color: rgba(244, 234, 212, 0.7);
 }
+
+.preview-badge {
+  display: inline-block;
+  margin-left: .35rem;
+  padding: .12rem .4rem;
+  border: 1px solid currentColor;
+  border-radius: .3rem;
+  font-size: .7em;
+  font-weight: 600;
+}

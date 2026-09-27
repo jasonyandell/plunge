@@ -9,17 +9,19 @@ import {
   type Seat,
   TOURNAMENT_CONFIG,
   PLUNGE_CONFIG,
+  LEGACY_PLUNGE_CONFIG,
   CASUAL_CONFIG,
   applyAction,
   newDealtGame,
 } from './index';
-type Preset = 'casual' | 'tournament' | 'plunge';
-const configFor = (preset: Preset): GameConfig => preset === 'plunge' ? PLUNGE_CONFIG
+type Preset = 'casual' | 'tournament' | 'plunge' | 'plunge-nello';
+const configFor = (preset: Preset): GameConfig => preset === 'plunge-nello' ? PLUNGE_CONFIG : preset === 'plunge' ? LEGACY_PLUNGE_CONFIG
   : preset === 'tournament' ? TOURNAMENT_CONFIG : CASUAL_CONFIG;
 
 /** Which preset produced this game's config (custom configs read as casual). */
 export function presetOf(config: GameConfig): Preset {
-  if (JSON.stringify(config) === JSON.stringify(PLUNGE_CONFIG)) return 'plunge';
+  if (JSON.stringify(config) === JSON.stringify(PLUNGE_CONFIG)) return 'plunge-nello';
+  if (JSON.stringify(config) === JSON.stringify(LEGACY_PLUNGE_CONFIG)) return 'plunge';
   return JSON.stringify(config) === JSON.stringify(TOURNAMENT_CONFIG) ? 'tournament' : 'casual';
 }
 
@@ -81,7 +83,7 @@ export function encodeReplay(g: GameState): string | null {
     if (sim.points[0] !== g.points[0] || sim.points[1] !== g.points[1]) return null;
     const head =
       'v1' +
-      (preset === 'plunge' ? 'f' : preset === 'tournament' ? 't' : 'c') +
+      (preset === 'plunge-nello' ? 'l' : preset === 'plunge' ? 'f' : preset === 'tournament' ? 't' : 'c') +
       String(g.shaker) +
       g.dealt.map((h) => h.join('')).join('');
     return `${head}.${tokens}`;
@@ -95,8 +97,8 @@ export function decodeReplay(code: string): GameState | null {
   try {
     if (!code.startsWith('v1') || code.length < 61) return null;
     const pc = code[2];
-    if (pc !== 'c' && pc !== 't' && pc !== 'f') return null;
-    const preset: Preset = pc === 'f' ? 'plunge' : pc === 't' ? 'tournament' : 'casual';
+    if (pc !== 'c' && pc !== 't' && pc !== 'f' && pc !== 'l') return null;
+    const preset: Preset = pc === 'l' ? 'plunge-nello' : pc === 'f' ? 'plunge' : pc === 't' ? 'tournament' : 'casual';
     const shaker = Number(code[3]);
     if (!(shaker >= 0 && shaker <= 3)) return null;
     const dealt: DominoId[][] = [0, 1, 2, 3].map((s) => {

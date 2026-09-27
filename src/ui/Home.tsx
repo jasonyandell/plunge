@@ -3,8 +3,8 @@
  */
 
 import type { Difficulty } from '../ai';
-import { NATIVE_TABLE, isNative, nativeLabel } from '../ai/native';
-import type { AppEvent, AppState } from './store';
+import { DEEP_WORLDS, NATIVE_TABLE, isNative, nativeLabel } from '../ai/native';
+import { nelloAvailable, nelloPaused, type AppEvent, type AppState } from './store';
 import { Domino } from './Domino';
 import './home.css';
 
@@ -17,6 +17,7 @@ interface HomeProps {
 const DIFFS: readonly Difficulty[] = ['native-partner', 'native-l1'];
 
 export function Home({ app, dispatch, onQuestions }: HomeProps) {
+  const paused = nelloPaused(app);
   const resumable = app.game !== null && (app.game.phase !== 'game-over' || app.showTrick);
   return (
     <div class="home">
@@ -30,10 +31,11 @@ export function Home({ app, dispatch, onQuestions }: HomeProps) {
         <p class="home-welcome">You and Gran against Earl and Ruby.<br />First to seven marks wins.</p>
 
         {resumable && (
-          <button type="button" class="big-btn" onClick={() => dispatch({ type: 'resume' })}>
+          <button type="button" class="big-btn" disabled={paused} onClick={() => dispatch({ type: 'resume' })}>
             Resume your game
           </button>
         )}
+        {paused && <p class="setting-hint">Your Nel-O hand is saved. {NATIVE_TABLE ? 'Resume it in the browser with Nel-O Preview enabled.' : 'Enable Nel-O Preview in Advanced settings to resume.'}</p>}
         <button
           type="button"
           class={resumable ? 'big-btn secondary' : 'big-btn'}
@@ -42,6 +44,7 @@ export function Home({ app, dispatch, onQuestions }: HomeProps) {
           Deal me in
         </button>
 
+        {nelloAvailable(app.settings) && <p class="setting-hint">Nel-O Preview is on. Change it in Advanced settings.</p>}
         <div class="link-row">
           {onQuestions && <button type="button" class="text-btn" onClick={onQuestions}>Your questions</button>}
           <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'how' })}>
@@ -92,10 +95,25 @@ export function Home({ app, dispatch, onQuestions }: HomeProps) {
               <span class="switch-track" aria-hidden="true"><span /></span>
             </button>
             <p id="thinking-hint" class="setting-hint">
-              A larger sample for every computer move. May take longer. Bidding stays instant.
+              {DEEP_WORLDS} sampled deals for every computer move. May take longer. Bidding stays instant.
               {app.settings.difficulty === 'native-partner' && ' Uses deeper analysis in place of the regular partner check.'}
             </p>
           </div>
+          {!NATIVE_TABLE && <div class="setting">
+            <button type="button" role="switch" class="thinking-switch"
+              aria-checked={app.settings.nelloPreview} aria-describedby="nello-preview-hint"
+              onClick={() => {
+                const enabled = !app.settings.nelloPreview;
+                const url = new URL(location.href);
+                url.searchParams.set('nello', enabled ? 'preview' : 'off');
+                history.replaceState(null, '', url);
+                dispatch({ type: 'set-nello-preview', enabled });
+              }}>
+              <span>Nel-O <small class="preview-badge">Preview</small></span>
+              <span class="switch-track" aria-hidden="true"><span /></span>
+            </button>
+            <p id="nello-preview-hint" class="setting-hint">Enable experimental Nel-O, including Walt’s counterexample defense. May take longer. Off removes Nel-O from the available declarations.</p>
+          </div>}
           <p class="setting-hint native-intro">
             {NATIVE_TABLE ? 'Walt runs on your Mac.' : 'Walt runs right on your device.'}
             {' '}It uses only its own hand and the public plays. After a hand,

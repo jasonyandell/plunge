@@ -47,8 +47,13 @@ describe('hint questions preserve pre-action advice', () => {
     await editNote(first.question.id, 'I would keep that count.');
     const repeat = await saveHintQuestion(g, session, evidence);
     expect(repeat.question.id).toBe(first.question.id); expect(repeat.question.note).toContain('keep that count');
-    const deeper = await saveHintQuestion(g, session, moveEvidence(g,160));
+    const deeper = await saveHintQuestion(g, session, moveEvidence(g,350));
     expect(deeper.question.id).not.toBe(first.question.id);
+    const legacy=await saveHintQuestion(g,session,moveEvidence(g,160));
+    expect(legacy.question.id).not.toBe(deeper.question.id);
+    expect(legacy.question.id).not.toBe(first.question.id);
+    const previousPreview=await saveHintQuestion(g,session,moveEvidence(g,500));
+    expect(previousPreview.question.id).not.toBe(deeper.question.id);
     const played = applyAction(g, { type: 'play', domino: idOfTile(evidence.choice) });
     const actual = await saveQuestion(played, 0, session, null);
     expect(questionTarget(actual.question)).not.toBe(questionTarget(first.question));
