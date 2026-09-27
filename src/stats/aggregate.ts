@@ -17,12 +17,15 @@ import {
 } from '../engine';
 import { decodeReplay } from '../engine/replay-code';
 import { getBiddingHint } from '../ai/bidding-hint';
-import type { HandAnalysis, HandRecord } from './log';
+import type { HandAnalysis } from './log';
+import { marksAfter, type ScoredHand } from '../records/model';
 import { handSteps } from './replay';
 
 export interface DecodedHand {
-  readonly record: HandRecord;
+  readonly record: ScoredHand;
   readonly game: GameState;
+  /** Score after the hand and whether it ended the game — derived, never stored. */
+  readonly after: { readonly marks: readonly [number, number]; readonly gameOver: boolean };
 }
 
 export interface BidLine {
@@ -117,12 +120,16 @@ const bidEq = (a: Bid, b: Bid): boolean =>
 const declEq = (a: Declaration, b: Declaration): boolean =>
   a.type === b.type && (a.type !== 'pip' || a.pip === (b as { pip: number }).pip);
 
-/** Replay every record; anything the engine refuses drops out. */
-export function decodeRecords(records: readonly HandRecord[]): DecodedHand[] {
+/**
+ * Replay every finished hand; anything the engine refuses drops out.
+ * Abandoned hands are kept in the log but have no outcome to count.
+ */
+export function decodeRecords(records: readonly ScoredHand[]): DecodedHand[] {
   const out: DecodedHand[] = [];
   for (const record of records) {
+    if (record.outcome !== 'finished') continue;
     const game = decodeReplay(record.code);
-    if (game) out.push({ record, game });
+    if (game) out.push({ record, game, after: marksAfter(record, game) });
   }
   return out;
 }
@@ -140,7 +147,7 @@ function bucket(b: PlyBucket, match: boolean, regret: number): void {
 }
 
 export function aggregate(
-  records: readonly HandRecord[],
+  records: readonly ScoredHand[],
   analyses: readonly HandAnalysis[],
   profile: string,
 ): StatsReport {
@@ -149,9 +156,9 @@ export function aggregate(
   const analysisById = new Map(analyses.filter((a) => a.profile === profile && byId.has(a.id)).map((a) => [a.id, a]));
 
   // ---- games, marks, hand outcomes ----------------------------------------
-  const finals = hands.filter((h) => h.record.gameOver)
-    .sort((a, b) => a.record.endedAt.localeCompare(b.record.endedAt));
-  const gameWins = finals.map((h) => h.record.marksAfter[0] > h.record.marksAfter[1]);
+  const finals = hands.filter((h) => h.after.gameOver)
+    .sort((a, b) => a.record.ended.localeCompare(b.record.ended));
+  const gameWins = finals.map((h) => h.after.marks[0] > h.after.marks[1]);
   let best = 0, run = 0;
   for (const won of gameWins) { run = won ? run + 1 : 0; best = Math.max(best, run); }
   let current = 0;
@@ -200,6 +207,9 @@ export function aggregate(
 
   for (const { record, game: g } of hands) {
     const result = g.handResult;
+    // Nel-O is played three-handed for zero tricks: count, sweeps and partner
+    // play mean nothing there. The hand still counts for marks and bidding.
+    const nello = g.contract?.kind === 'nello';
     if (g.thrownIn) report.thrownIn++;
     if (result) {
       report.decided++;
@@ -224,14 +234,14 @@ export function aggregate(
         if (winning) line(report.bidding.byBid as BidLine[], bidBucket(winning), result.made);
         if (g.declaration) line(report.bidding.byTrump as BidLine[], trumpName(g.declaration), result.made);
       }
-      if (g.tricks.length === 7 && g.tricks.every((t) => teamOf(t.winner) === teamOf(g.tricks[0]!.winner))) {
+      if (!nello && g.tricks.length === 7 && g.tricks.every((t) => teamOf(t.winner) === teamOf(g.tricks[0]!.winner))) {
         if (teamOf(g.tricks[0]!.winner) === 0) report.sweeps.us++;
         else report.sweeps.them++;
       }
     }
 
     // ---- trick-level: assists, saves, gifts, count capture ----------------
-    for (const t of g.tricks) {
+    for (const t of nello ? [] : g.tricks) {
       const trickCount = t.points - 1;
       report.count.decided += trickCount;
       if (teamOf(t.winner) === 0) report.count.captured += trickCount;
@@ -293,7 +303,7 @@ export function aggregate(
       bucket(declaring ? report.play.declaring : report.play.defending, v.playedBest, gap);
       if (!v.playedBest && v.suggested !== null && gap > DEFENSIBLE_BAND) {
         disagreements.push({
-          id: record.id, code: record.code, handNumber: record.handNumber, ply: v.ply,
+          id: record.id, code: record.code, handNumber: record.game.hand, ply: v.ply,
           played: v.played, suggested: v.suggested, gap,
           objective: declaring ? 'make' : 'set',
         });

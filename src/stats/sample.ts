@@ -8,7 +8,7 @@
  * Nothing here ever touches the log — the sample lives only in memory.
  */
 import {
-  PLUNGE_CONFIG,
+  LEGACY_PLUNGE_CONFIG,
   applyAction,
   legalActions,
   legalDominoes,
@@ -21,30 +21,44 @@ import { mediumAction } from '../ai/medium';
 import { observe } from '../ai/observation';
 import { tileOfId } from '../ai/walt/requests';
 import { ANALYSIS_PROFILE } from './analysis';
-import { handRecordOf, type HandAnalysis, type HandRecord, type PlyVerdict } from './log';
+import { encodeReplay } from '../engine/replay-code';
+import type { GameState } from '../engine';
+import type { ScoredHand } from '../records/model';
+import type { HandAnalysis, PlyVerdict } from './log';
 import { handSteps } from './replay';
 import { decodeRecords } from './aggregate';
 
 export interface SampleData {
-  readonly hands: readonly HandRecord[];
+  readonly hands: readonly ScoredHand[];
   readonly analyses: readonly HandAnalysis[];
 }
 
 const GAMES = 8;
 const START_MS = Date.parse('2026-08-30T19:00:00Z');
 
-function playGame(index: number): HandRecord[] {
+const COMPUTER = { kind: 'computer', player: 'sample', walt: null } as const;
+
+function sampleHand(g: GameState, gameId: string, ended: string): ScoredHand | null {
+  const code = encodeReplay(g);
+  if (!code) return null;
+  const marksBefore: [number, number] = [g.marks[0], g.marks[1]];
+  if (g.handResult) marksBefore[g.handResult.team] -= g.handResult.marks;
+  return { id: `${gameId}:${g.handNumber}`, game: { id: gameId, hand: g.handNumber }, ended, outcome: 'finished',
+    marksBefore, code, seats: [{ kind: 'person' }, COMPUTER, COMPUTER, COMPUTER] };
+}
+
+function playGame(index: number): ScoredHand[] {
   const seed = `walt-demo-${index + 1}`;
   const gameId = `sample-${index + 1}`;
   const rand = mulberry32(toSeed(seed));
   let endedMs = START_MS + index * 26 * 3_600_000;
-  let g = catalogueDeal(newGame(PLUNGE_CONFIG, seed), seed);
-  const records: HandRecord[] = [];
+  let g = catalogueDeal(newGame(LEGACY_PLUNGE_CONFIG, seed), seed);
+  const records: ScoredHand[] = [];
   for (let guard = 0; guard < 3000; guard++) {
     if (g.phase === 'hand-over' || g.phase === 'game-over') {
-      const record = handRecordOf(g, gameId, 'sample');
       endedMs += (6 + Math.floor(rand() * 7)) * 60_000;
-      if (record) records.push({ ...record, endedAt: new Date(endedMs).toISOString() });
+      const record = sampleHand(g, gameId, new Date(endedMs).toISOString());
+      if (record) records.push(record);
       if (g.phase === 'game-over') return records;
       g = catalogueDeal(applyAction(g, { type: 'next-hand' }), seed);
       continue;
@@ -56,7 +70,7 @@ function playGame(index: number): HandRecord[] {
 }
 
 /** Plausible, clearly-labeled review verdicts for the preview dashboard. */
-function fakeAnalysis(record: HandRecord): HandAnalysis | null {
+function fakeAnalysis(record: ScoredHand): HandAnalysis | null {
   const decoded = decodeRecords([record])[0];
   const steps = decoded && handSteps(decoded.game);
   if (!steps) return null;

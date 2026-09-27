@@ -5,6 +5,8 @@ import { requestTile } from '../ai/native';
 import { getHint, hintExplanation, type Hint } from '../ai/hint';
 import { Domino } from './Domino';
 import { SaveHint } from './SaveHint';
+import { announceHint } from '../records/assist';
+import type { MoveHintEvidence } from '../questions/hint-evidence';
 import { MoveScores } from './MoveScores';
 import { SEAT_NAMES, ledChip, trumpChip } from './store';
 import './hint.css';
@@ -57,6 +59,11 @@ export function MoveHint({ g, sessionId, onQuestion }: { g: GameState; sessionId
   };
   const tile = hint?.choice ?? null;
   const led = ledChip(g, g.currentTrick);
+  const evidence: MoveHintEvidence | null = hint && tile !== null ? { kind: 'move',
+    requested_worlds: hint.requestedWorlds, choice: tile, forced: hint.forced, estimate: hint.estimate,
+    explanation: hintExplanation(hint), context: hintTrickEffect(g, tile) } : null;
+  // Each hint Walt actually shows is kept with the hand (never scored).
+  useEffect(() => { if (evidence) announceHint(evidence); }, [hint]);
   return <>
     <button type="button" class="hint-button" ref={button} onClick={() => {
       setOpen(true); if (!hint || hint.choice === null) void inspect(40);
@@ -80,9 +87,7 @@ export function MoveHint({ g, sessionId, onQuestion }: { g: GameState; sessionId
             <p class="setting-hint">Hints use your hand and public plays. They compare the baseline player’s outcomes without the separate partner check.</p>
           </details>
         </>}
-        {hint && <SaveHint g={g} sessionId={sessionId} disabled={busy} evidence={{ kind: 'move',
-          requested_worlds: hint.requestedWorlds, choice: tile, forced: hint.forced, estimate: hint.estimate,
-          explanation: hintExplanation(hint), context: hintTrickEffect(g, tile) }}
+        {evidence && <SaveHint g={g} sessionId={sessionId} disabled={busy} evidence={evidence}
           onSaved={id => { close(); onQuestion(id); }} />}
       </>}
       {busy && <p role="status">Walt is comparing your options…</p>}

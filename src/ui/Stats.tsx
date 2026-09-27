@@ -1,8 +1,10 @@
 /**
  * Your stats: the on-device dashboard over the append-only hand log.
  *
- * Everything is computed from recorded replays. "Agreed with Walt" measures
- * decisions, never hint use — nothing about hints is recorded anywhere.
+ * Everything is computed from recorded replays, through the hint-free
+ * ScoredHand projection: hints are kept with each hand as facts, but no stat
+ * can read them. "Agreed with Walt" measures decisions, never hint use, and
+ * stays on your own screen only (docs-data-model.md).
  * While the log is empty the screen shows a clearly-labeled sample so the
  * layout reads populated from day one.
  */
@@ -11,7 +13,9 @@ import { idOfTile } from '../ai/walt/requests';
 import { decodeReplay } from '../engine/replay-code';
 import { ANALYSIS_PROFILE, reviewMissing, type ReviewProgress } from '../stats/analysis';
 import { aggregate, type Disagreement, type StatsReport } from '../stats/aggregate';
-import { listAnalyses, listHands, putAnalysis, type HandAnalysis, type HandRecord } from '../stats/log';
+import type { HandAnalysis } from '../stats/log';
+import { scored, type ScoredHand } from '../records/model';
+import { listHands, listReviews, putReview } from '../records/storage';
 import { sampleData } from '../stats/sample';
 import type { AppEvent } from './store';
 import { BackBar } from './Home';
@@ -23,7 +27,8 @@ interface StatsProps {
 }
 
 interface Loaded {
-  records: readonly HandRecord[];
+  /** Hands as stats may see them: the hint-free projection (src/records/model.ts). */
+  records: readonly ScoredHand[];
   analyses: readonly HandAnalysis[];
   sample: boolean;
 }
@@ -38,10 +43,11 @@ export function Stats({ dispatch }: StatsProps) {
 
   useEffect(() => {
     let alive = true;
-    void Promise.all([listHands(), listAnalyses()])
-      .catch(() => [[], []] as [HandRecord[], HandAnalysis[]])
-      .then(([records, analyses]) => {
+    void Promise.all([listHands().then((hands) => hands.map(scored)), listReviews()])
+      .catch(() => [[], []] as [ScoredHand[], HandAnalysis[]])
+      .then(([all, analyses]) => {
         if (!alive) return;
+        const records = all.filter((r) => r.outcome === 'finished');
         if (records.length === 0) {
           const sample = sampleData();
           setData({ records: sample.hands, analyses: sample.analyses, sample: true });
@@ -59,7 +65,7 @@ export function Stats({ dispatch }: StatsProps) {
     if (!data.records.some((r) => !missing.has(r.id))) return;
     reviewing.current = true;
     const controller = new AbortController();
-    void reviewMissing(data.records, data.analyses, putAnalysis, setProgress, controller.signal)
+    void reviewMissing(data.records, data.analyses, putReview, setProgress, controller.signal)
       .then((fresh) => {
         if (!controller.signal.aborted && fresh.length) {
           setData((d) => d && { ...d, analyses: [...d.analyses, ...fresh] });
@@ -83,7 +89,7 @@ export function Stats({ dispatch }: StatsProps) {
         {data?.sample && (
           <div class="stat-sample" role="note">
             <strong>Sample data.</strong> This is what your stats will look like.
-            Deal yourself in and the real thing starts counting — everything stays on this device.
+            Deal yourself in and the real thing starts counting.
           </div>
         )}
         {report && data && (
@@ -94,7 +100,8 @@ export function Stats({ dispatch }: StatsProps) {
             <WaltAgreement r={report} />
             <WaltReview r={report} progress={progress} stalled={reviewStalled} sample={data.sample} dispatch={dispatch} />
             <p class="fine stat-footnote">
-              Kept on this device only, from finished hands. Walt's play review is a
+              From finished hands, kept on this device and backed up anonymously when you're online.
+              Hints you open are saved with the hand but never count here. Walt's play review is a
               40-world sample per move — a couple of points either way is weather, not climate.
             </p>
           </>

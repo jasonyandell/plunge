@@ -10,12 +10,18 @@
 import { legalDominoes } from '../engine';
 import { decodeReplay } from '../engine/replay-code';
 import { getHint } from '../ai/hint';
+import { WALT_ID } from '../ai/walt-identity';
 import { tileOfId } from '../ai/walt/requests';
-import type { HandAnalysis, HandRecord, PlyVerdict } from './log';
+import type { HandAnalysis, PlyVerdict } from './log';
+import type { ScoredHand } from '../records/model';
 import { handSteps } from './replay';
 
-/** Bump when the reviewer changes; cached hands re-analyze on the next visit. */
-export const ANALYSIS_PROFILE = 'walt-l1-40w-v1';
+/**
+ * The reviewer's identity: its settings plus the Walt build that runs them.
+ * A new Walt build or a changed setting is a new profile, so cached hands
+ * re-analyze on the next visit and verdicts from two builds never mix.
+ */
+export const ANALYSIS_PROFILE = `walt-l1-40w-v1:${WALT_ID}`;
 
 export type HintFn = typeof getHint;
 
@@ -25,7 +31,7 @@ const isAbort = (e: unknown): boolean => e instanceof DOMException && e.name ===
  * Review one hand. Throws on abort or a transient player failure (so the hand
  * retries next visit); returns `unsupported` for contracts out of Walt's scope.
  */
-export async function analyzeHand(record: HandRecord, signal?: AbortSignal, hint: HintFn = getHint): Promise<HandAnalysis> {
+export async function analyzeHand(record: ScoredHand, signal?: AbortSignal, hint: HintFn = getHint): Promise<HandAnalysis> {
   const done = (plies: PlyVerdict[], unsupported: boolean): HandAnalysis =>
     ({ schema: 'plunge-hand-analysis-v1', id: record.id, profile: ANALYSIS_PROFILE, plies, unsupported });
   const g = decodeReplay(record.code);
@@ -44,7 +50,7 @@ export async function analyzeHand(record: HandRecord, signal?: AbortSignal, hint
     }
     let h;
     try {
-      h = await hint(state, record.gameId, 40, signal);
+      h = await hint(state, record.game.id, 40, signal);
     } catch (error) {
       if (isAbort(error) || !/straight 42/.test(String(error))) throw error;
       return done(plies, true); // out of Walt's scope — cache that verdict
@@ -74,7 +80,7 @@ export interface ReviewProgress {
  * analyses; stops quietly on abort.
  */
 export async function reviewMissing(
-  records: readonly HandRecord[],
+  records: readonly ScoredHand[],
   existing: readonly HandAnalysis[],
   save: (a: HandAnalysis) => Promise<void>,
   onProgress: (p: ReviewProgress) => void,

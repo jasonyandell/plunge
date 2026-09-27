@@ -1,6 +1,13 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
+import { createHash } from 'node:crypto';
+import manifest from './src/ai/phone/manifest.json';
+import { canonicalJson } from './src/records/canonical';
+
+// Walt's content address (src/ai/walt-identity.ts): the pinned manifest names
+// the exact WASM bytes, so hashing it identifies the build that plays.
+const WALT_ID = createHash('sha256').update(canonicalJson(manifest)).digest('hex');
 
 export default defineConfig({
   plugins: [preact()],
@@ -26,5 +33,6 @@ export default defineConfig({
   define: {
     // Stamped with the commit SHA in CI; 'dev' locally (disables update polling).
     __BUILD_ID__: JSON.stringify(process.env.GITHUB_SHA ?? 'dev'),
+    __WALT_ID__: JSON.stringify(WALT_ID),
   },
 });

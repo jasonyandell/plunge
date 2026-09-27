@@ -1,8 +1,10 @@
 # Plunge data model
 
-**Status: proposal (2026-09-27).** No player data exists in this format yet. It replaces
-the on-device format in PR #7 before the first release, which is the point after which
-changing it costs a migration.
+**Status (2026-09-27): hands, Walt identity, the hint firewall and hand sync are
+implemented** (`src/records/`, `migrations/0002_records.sql`, `PUT /api/hands/:id`). Notes,
+the shared previews database, logins and the leaderboard are designed here and not yet
+built. The authoritative record types are in `src/records/model.ts`; the sketches below
+summarize them.
 
 ## Goals
 
@@ -50,30 +52,35 @@ interface HandRecord {
   game: { id: string;         // random per game, shared by its hands
           seed: string;       // the game's RNG seed; deals derive from it
           hand: number };     // hand number within the game
-  owner: 'device';            // the server attaches the owner hash; never sent in the body
   app: string;                // BUILD_ID (commit SHA; 'dev' for local builds)
   started: string; ended: string;         // ISO times
   outcome: 'finished' | 'abandoned';
+  marksBefore: [number, number];          // game score when the hand began
   code: string;               // engine-validated replay code (src/engine/replay-code.ts)
-  seats: [Seat0, Seat1, Seat2, Seat3];    // { kind: 'person' } | { kind: 'walt', walt: WaltRef }
-  settings: { preset: string; hints: boolean; thinkDeeper: boolean; nello: boolean;
-              comfort?: boolean };        // snapshot at the hand's start
+  seats: SeatRecord[4];       // { kind: 'person' } | { kind: 'computer', player, walt }
+  settings: SettingsEntry[];  // settings from `at` ms onward; the first entry is at 0
+  profiles: WaltProfile[];    // distinct computer profiles used in the hand
   actions: ActionMeta[];      // one per action in the replay code, same order
   assist: AssistEvent[];      // hints displayed during the hand (never read by stats)
 }
 
 interface ActionMeta {
-  at: number;                 // ms since `started`
-  walt?: number;              // index into `profiles` when a computer made this move
-  receipt?: string;           // digest of the decision receipt, when one exists
+  at: number | null;          // ms since `started`; null for actions before recording began
+  by: 'person' | 'computer';  // checked against the seat whose turn it was
+  profile?: number;           // index into `profiles` for a computer move
+  receipt?: string;           // digest of the Walt decision receipt, when one exists
 }
 ```
 
-`HandRecord` also carries `profiles: WaltProfile[]`, the distinct Walt profiles used in
-the hand, so each move references a small index rather than repeating the profile.
+The owner is never in the body: the server attaches the hash of the uploading browser's
+key. `marksAfter` and "game over" are derived from `marksBefore` and the replay's result.
+`marksBefore` itself stays a stored fact, because it cannot be derived when earlier hands
+of the game went unrecorded (a game saved before this release, say).
 
-The existing `marksBefore`/`marksAfter` fields in PR #7 are dropped. They are derived
-from the game's hands in order, and storing them creates a second authority.
+A game saved before recording existed is adopted when play resumes: its earlier actions
+are kept with `at: null` rather than dropped. If a journal ever disagrees with the
+replay's length, the hand is still kept, with every timing marked unknown rather than
+misaligned. An abandoned hand with no actions is only a deal and is not recorded.
 
 ### Note: revisioned
 
@@ -99,16 +106,25 @@ records remain readable and are presented as notes. They are not rewritten.
 
 ## Walt identity
 
-Every Walt output (computer move, hint, review verdict) carries a `WaltRef`:
+Every computer seat names its Walt build, and every computer move names the profile it
+was decided with:
 
 ```ts
-interface WaltRef { binary: string; profile: number }   // profile indexes HandRecord.profiles
 interface WaltProfile {
-  binary: string;             // walt id, below
-  worlds: number; inner?: number; budgetMs: number;
-  partner?: boolean; counterexamples?: { candidates: number; rounds: number; keep: number };
+  source: 'play' | 'auction' | 'heuristic';
+  player: string;             // e.g. 'l1-default', 'walt-auction', 'bid-book:<id>:<profile>'
+  walt: string | null;        // walt id, below; null when unidentified
+  worlds: number | null; budgetMs: number | null; mode: string | null;
+  counterexamples: boolean;   // the Nel-O counterexample pass ran
 }
 ```
+
+Profiles are read from the decision itself (the receipt's response), so Think deeper,
+counterexample defense and budget cuts show up as they actually ran.
+
+A move hint's saved evidence already carries its decision's implementation manifest.
+Walt's post-hoc reviews are cached under a profile that includes the Walt id, so a new
+build re-reviews history rather than mixing verdicts from two builds.
 
 **Walt id** is `sha256` of the canonical JSON of the pinned manifest
 (`src/ai/phone/manifest.json`). The manifest already includes the `wasm_sha256` of the
@@ -120,9 +136,10 @@ id is therefore content-addressed:
   byte-identical to it.
 - A released Walt can be rebuilt and checked from its manifest alone.
 
-The deploy workflow registers each released manifest on the server (`walts` table, keyed
-by id). A record naming an unregistered id is shown as *unreleased Walt*. It is kept,
-never merged with a released one, and never counted on a leaderboard.
+Each deployment registers the Walt it serves: the Worker hashes its bundled manifest the
+same way and records it in `walts` under its own partition. A Walt present in the `prod`
+partition was released. A record naming any other id is shown as *unreleased Walt*. It
+is kept, never merged with a released one, and never counted on a leaderboard.
 
 This meets the goal without signing keys. A signature would need a private key shipped
 inside the app, which any player could extract. Content addressing, plus the server's
@@ -132,8 +149,10 @@ spot-check it by replaying the recorded request against the registered binary. C
 are exact for decisions that completed within their budget. Budget-cut anytime results
 can legitimately differ between devices, so they are only checked for legality.
 
-Native Mac players get ids the same way from their own build manifest, so they can never
-be confused with the phone's WASM build.
+The Mac research table runs a separately built native player that has no manifest of
+its own yet. Its seats are recorded with `walt: null` (unidentified), never with the
+phone build's id. Giving the native build its own manifest, hashed the same way, is the
+follow-up that identifies it.
 
 ## Hints: kept, never scored
 
@@ -143,17 +162,17 @@ Hint events are facts and are kept:
 interface AssistEvent {
   at: number;                 // ms since hand start
   before: number;             // index of the action it preceded
-  kind: 'move' | 'bid' | 'trump';
   evidence: HintEvidence;     // exactly what was shown (src/questions/hint-evidence.ts)
-  walt?: WaltRef;
 }
 ```
 
 The firewall is enforced in the code, not left to convention:
 
-- Stats and leaderboard code receive a `ScoredHand`, which is `HandRecord` without
-  `assist` and without `settings.hints`. The projection functions do not accept the full
-  record, so a stat cannot read hint use by accident.
+- Stats and leaderboard code receive a `ScoredHand`: an allowlist of `id`, `game`
+  (without the seed), `ended`, `outcome`, `marksBefore`, `code` and `seats`. It has no
+  hint events, no settings (which include the hints switch) and no timings. A field added
+  to `HandRecord` stays out until it is deliberately listed. The projection functions
+  do not accept the full record, so a stat cannot read hint use by accident.
 - A test runs every stats projection on the same hands with and without hint events and
   with hints on and off. The outputs must be byte-identical.
 - Research and training exports read the full record. They are a separate code path and
@@ -170,8 +189,11 @@ recomputation is a view with its own Walt id.
 
 ## Device storage and sync
 
-- IndexedDB `plunge-records` has two stores, `hands` and `notes`, plus a derived store
-  `reviews` for Walt's post-hoc play reviews (keyed by hand id and Walt id, safe to drop).
+- IndexedDB `plunge-records` has a `hands` store and a derived `reviews` store for
+  Walt's post-hoc play reviews (versioned by analysis profile, safe to drop). Notes will
+  join it; today they are still the question notebook's own store.
+- The open hand's journal and any closed records not yet in IndexedDB are saved with
+  the game, so a reload or crash between closing a hand and writing it loses nothing.
 - Every record carries a `synced` flag. The existing notebook flush loop (on load, on a timer, on
   `online` and focus, after each save) uploads unsynced records.
 - Hands: `PUT /api/hands/:id`. The server inserts or ignores. Hands never change, so a
@@ -179,25 +201,31 @@ recomputation is a view with its own Walt id.
 - Notes: the existing revisioned `PUT` with compare-and-swap.
 - Owner: the existing anonymous browser key (`ownerToken()` in
   `src/questions/storage.ts`), sent as a bearer token. The server stores only its hash.
-- Sync failure is silent to play. The stats screen shows "n hands not yet backed up" and
-  nothing more.
+- Sync failure is silent to play. A record the server rejects stays on the device,
+  unsynced. It never blocks the others.
 
 ## Server schema
 
 One schema for production and previews, in one D1 database per trust level (below):
 
 ```sql
-CREATE TABLE hands (
-  partition TEXT NOT NULL, id TEXT NOT NULL, owner_hash TEXT NOT NULL,
-  schema TEXT NOT NULL, app TEXT NOT NULL, ended TEXT NOT NULL,
-  body TEXT NOT NULL, received TEXT NOT NULL,
-  PRIMARY KEY (partition, id));
-CREATE TABLE notes (…same shape plus revision, answer, answered_at…);
-CREATE TABLE walts (id TEXT PRIMARY KEY, manifest TEXT NOT NULL, registered TEXT NOT NULL);
+-- migrations/0002_records.sql (built)
+CREATE TABLE hands (partition, id, owner_hash, schema, app, game_id, hand_number,
+  outcome, started, ended, body, received, PRIMARY KEY (partition, id));
+CREATE TABLE walts (partition, id, manifest, registered, PRIMARY KEY (partition, id));
+-- later
+CREATE TABLE notes (…hands' shape plus revision, answer, answered_at…);
 ```
 
-`partition` comes from the Worker's own configuration (`prod`, `pr-4`, …), never from the
-request. Closing a PR marks its partition closed and deletes nothing.
+The server validates every hand with the same `validHand` the app uses: the replay must
+decode and re-simulate, there must be one action entry per replay action, and each
+entry's `by` must match the seat whose turn it was.
+
+`partition` comes from the Worker's own configuration, never from the request:
+`PARTITION = "prod"` in `wrangler.toml`, and `pr-N` in each generated preview
+configuration. Today each preview still has its own database, deleted when its PR
+closes. Once previews share one database (below), closing a PR marks its partition
+closed and deletes nothing.
 
 Production and previews use two databases rather than one: preview code is untrusted
 branch code, so it must not hold a binding to production data. Every preview shares the
@@ -227,18 +255,24 @@ A server-side view over `hands` in the `prod` partition, grouped by account:
 - Optionally, deals are checked against the game seed so a person cannot cherry-pick
   deals. Recording the seed now keeps that option open.
 
-## Changes to PR #7
+## Implementation status
 
-1. Replace `plunge-hand-v1` with `plunge-hand-v2` above: random ids, seed, per-action
-   times, seats with Walt refs, settings, abandoned hands, and hint events.
-2. Remove the local `CONFIGS` map in `src/stats/replay.ts` and use `replay-code.ts`'s
-   configuration lookup. The local map drops every Nel-O-preview hand after PR #4.
-3. Give Nel-O hands defined treatment in each stat: partner sits out, and there are no
-   assists or team make rate.
-4. Stats projections take `ScoredHand` and add the hint-invariance test.
-5. Walt agreement stays on the personal screen only.
-6. Ship capture and sync in the Nel-O release. The dashboard can follow, since it is
-   computed from the log and covers every hand from the first day.
+Built on top of PR #7's dashboard:
+
+1. `plunge-hand-v2` records with random ids, seed, per-action timing, seats and
+   profiles stamped with the Walt id, settings history, abandoned hands, and hint events.
+   They are written through a journal in the table's reducer (`src/records/journal.ts`,
+   `recordTransition` in `src/ui/store.ts`), on an injectable clock.
+2. Replays use each hand's own rules (`src/stats/replay.ts`), which fixes the dropped
+   Nel-O hands.
+3. Nel-O hands count for marks and bidding, but not for count, sweeps or partner play.
+   The sample slate plays the straight house game.
+4. Stats read `ScoredHand` only, and a test holds every stat identical with hints added,
+   removed or switched off.
+5. Walt agreement stays on the personal stats screen.
+6. Hands upload to `PUT /api/hands/:id`, partitioned and write-once.
+
+Next: notes (the feedback button), the shared previews database, logins, the leaderboard.
 
 ## Open decisions
 

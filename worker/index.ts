@@ -1,5 +1,8 @@
 import { MAX_QUESTION_BYTES, OWNER_TOKEN, QUESTION_ID, publicQuestion, validQuestion, validUpdate,
   type Question, type RemoteQuestion } from '../src/questions/model';
+import { HAND_ID, MAX_HAND_BYTES, validHand } from '../src/records/model';
+import { canonicalJson } from '../src/records/canonical';
+import manifest from '../src/ai/phone/manifest.json';
 
 // Minimal D1 surface keeps the browser and worker type environments independent.
 interface Statement {
@@ -8,7 +11,7 @@ interface Statement {
   all<T>(): Promise<{results:T[]}>;
   run(): Promise<unknown>;
 }
-interface Env { QUESTIONS: { prepare(sql:string):Statement }; ASSETS: { fetch(request:Request):Promise<Response> } }
+interface Env { QUESTIONS: { prepare(sql:string):Statement }; ASSETS: { fetch(request:Request):Promise<Response> }; PARTITION?: string }
 interface Row { id:string; owner_hash:string; revision:number; payload:string; answer:string|null; answered_at:string|null }
 const json = (value: unknown, status=200) => Response.json(value,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const remote = (r:Row):RemoteQuestion => ({question:JSON.parse(r.payload) as Question,revision:r.revision,
@@ -19,22 +22,57 @@ async function owner(request:Request):Promise<string|null> {
   const hash = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token));
   return [...new Uint8Array(hash)].map(n=>n.toString(16).padStart(2,'0')).join('');
 }
-async function body(request:Request):Promise<unknown> {
+async function body(request:Request,limit=MAX_QUESTION_BYTES):Promise<unknown> {
   const reader=request.body?.getReader();
-  if (!reader) throw new Error('Missing question.');
+  if (!reader) throw new Error('Missing body.');
   let size=0, text=''; const decoder=new TextDecoder();
   while (true) {
     const r=await reader.read(); if(r.done) break;
     size+=r.value.length;
-    if(size>MAX_QUESTION_BYTES) {await reader.cancel();throw new Error('Question is too large.');}
+    if(size>limit) {await reader.cancel();throw new Error('Upload is too large.');}
     text+=decoder.decode(r.value,{stream:true});
   }
   return JSON.parse(text+decoder.decode());
 }
+const sha256=async(text:string)=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))]
+  .map(n=>n.toString(16).padStart(2,'0')).join('');
+/** This deployment's Walt, by the same content address the app stamps (src/ai/walt-identity.ts). */
+let served:Promise<{id:string;manifest:string}>|undefined;
+const servedWalt=()=>served??=(async()=>{const text=canonicalJson(manifest);return {id:await sha256(text),manifest:text};})();
+
+/** Store a finished or abandoned hand once. Hands never change, so a retry is a no-op. */
+async function putHand(request:Request,env:Env,id:string):Promise<Response> {
+  const hash=await owner(request);
+  if(!hash) return json({error:'A browser key is required.'},401);
+  const origin=request.headers.get('Origin');
+  if(origin && origin!==new URL(request.url).origin) return json({error:'Wrong origin.'},403);
+  let hand;
+  try {
+    hand=validHand(((await body(request,MAX_HAND_BYTES)) as {hand:unknown}).hand);
+    if(hand.id!==id) throw new Error('The hand id does not match.');
+  } catch(e) {return json({error:e instanceof Error ? e.message : 'Invalid hand.'},400);}
+  const partition=env.PARTITION ?? 'unpartitioned', now=new Date().toISOString();
+  await env.QUESTIONS.prepare(`INSERT OR IGNORE INTO hands(partition,id,owner_hash,schema,app,game_id,hand_number,outcome,started,ended,body,received)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).bind(partition,id,hash,hand.schema,hand.app,hand.game.id,hand.game.hand,hand.outcome,
+    hand.started,hand.ended,JSON.stringify(hand),now).run();
+  const stored=await env.QUESTIONS.prepare('SELECT owner_hash FROM hands WHERE partition = ? AND id = ?').bind(partition,id).first<{owner_hash:string}>();
+  if(!stored || stored.owner_hash!==hash) return json({error:'That hand belongs to another browser.'},409);
+  const walt=await servedWalt();
+  await env.QUESTIONS.prepare('INSERT OR IGNORE INTO walts(partition,id,manifest,registered) VALUES(?,?,?,?)')
+    .bind(partition,walt.id,walt.manifest,now).run();
+  return json({stored:true});
+}
+
 export default {
   async fetch(request:Request,env:Env):Promise<Response> {
     const url=new URL(request.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
+    const hand=/^\/api\/hands\/([a-f0-9]{32})$/.exec(url.pathname);
+    if (hand) {
+      if (request.method!=='PUT' || !HAND_ID.test(hand[1]!)) return json({error:'Method not allowed.'},405);
+      try {return await putHand(request,env,hand[1]!);}
+      catch {return json({error:'Hands are temporarily unavailable. Your device keeps them and retries.'},503);}
+    }
     const match=/^\/api\/questions(?:\/([a-f0-9]{32}))?$/.exec(url.pathname);
     if (!match) return json({error:'Not found.'},404);
     const id=match[1];

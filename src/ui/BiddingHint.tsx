@@ -5,6 +5,7 @@ import { getBiddingHint, type BiddingHint as Advice } from '../ai/bidding-hint';
 import { bidLabel, PIP_SUIT_NAMES, SEAT_NAMES } from './store';
 import type { BookHintEvidence } from '../questions/hint-evidence';
 import { SaveHint } from './SaveHint';
+import { announceHint } from '../records/assist';
 import './hint.css';
 
 type BookAdvice = Extract<Advice, { kind: 'book' }>;
@@ -54,6 +55,13 @@ export function BookDetails({ hint, g, captured, capture }: {
   const rows = [...hint.panels].sort((a, b) => b.tails[target - 30]! / b.games - a.tails[target - 30]! / a.games);
   const best = (p: PlayedPanel) => p.tails[target - 30]! * selected.games === selected.tails[target - 30]! * p.games;
   const next = hint.reason === 'bid' && hint.target < 42 ? bestPanel(hint.panels, hint.target + 1) : null;
+  const evidence = (explored: number, open: boolean): BookHintEvidence => ({
+    kind: g.phase === 'bidding' ? 'bid' : 'trump', book_id: BID_BOOK.source_book, profile: BID_BOOK.profile,
+    policy_bid: BID_BOOK.policy_bid, threshold: [...BID_BOOK.threshold], advice: hint, explored_target: explored,
+    comparison_open: open, heading, explanation,
+  });
+  // A live hint (not a saved one being reread) is kept with the hand as shown, never scored.
+  useEffect(() => { if (capture) announceHint(evidence(hint.target, false)); }, []);
   return <>
     <h3 class="bid-hint-suggestion">{heading}</h3>
     <p>{explanation}</p>
@@ -82,11 +90,7 @@ export function BookDetails({ hint, g, captured, capture }: {
       <p class="setting-hint">A higher recorded rate isn’t a guarantee. Sample counts vary; “unsettled” means more samples may change which side of {cutoff}% a score falls on.</p>
       <p class="setting-hint">These are completed Walt games with your seven dominoes and different partner and opponent hands. No one’s actual hidden hand is used. The results don’t infer hidden hands from this auction’s bids.</p>
     </details>
-    {capture && <SaveHint g={g} sessionId={capture.sessionId} onSaved={capture.onSaved} evidence={{
-      kind: g.phase === 'bidding' ? 'bid' : 'trump', book_id: BID_BOOK.source_book, profile: BID_BOOK.profile,
-      policy_bid: BID_BOOK.policy_bid, threshold: [...BID_BOOK.threshold], advice: hint, explored_target: target,
-      comparison_open: comparisonOpen, heading, explanation,
-    }} />}
+    {capture && <SaveHint g={g} sessionId={capture.sessionId} onSaved={capture.onSaved} evidence={evidence(target, comparisonOpen)} />}
   </>;
 }
 

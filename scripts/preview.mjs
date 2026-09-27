@@ -22,6 +22,8 @@ export function previewConfig(pr, database) {
     assets: { directory: './dist', binding: 'ASSETS', run_worker_first: ['/api/*'], not_found_handling: 'single-page-application' },
     d1_databases: [{ binding: 'QUESTIONS', database_name: target.database,
       database_id: databaseId(database, target.database), migrations_dir: 'migrations' }],
+    // Records carry their preview's partition, never production's (docs-data-model.md).
+    vars: { PARTITION: `pr-${pr}` },
   };
 }
 export function cloudflare({ account = process.env.CLOUDFLARE_ACCOUNT_ID,

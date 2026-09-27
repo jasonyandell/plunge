@@ -7,71 +7,58 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import type { VNode } from 'preact';
-import { applyAction, countValue, fromId, legalActions, newGame, teamOf, PLUNGE_CONFIG, type GameState } from '../src/engine';
+import { countValue, fromId, legalActions, teamOf, type GameState } from '../src/engine';
 import { decodeReplay } from '../src/engine/replay-code';
-import { chooseAction } from '../src/ai';
-import { appendHand, handRecordOf, listAnalyses, listHands, putAnalysis, type HandRecord } from '../src/stats/log';
+import { scored, validHand, type HandRecord } from '../src/records/model';
+import { appendHands, listHands, listReviews, markSynced, putReview, unsyncedHands } from '../src/records/storage';
 import { aggregate, decodeRecords } from '../src/stats/aggregate';
 import { handSteps } from '../src/stats/replay';
 import { ANALYSIS_PROFILE } from '../src/stats/analysis';
 import { sampleData } from '../src/stats/sample';
 import { GameOverSheet } from '../src/ui/sheets';
 import { reducer, initialApp, type AppEvent } from '../src/ui/store';
-import { mulberry32 } from '../src/engine';
+import { playRecorded } from './record-fixtures';
 
-/** Play one full game with the cheap legal policy; capture like App.tsx would. */
-function playRecordedGame(seed: string, gameId: string): HandRecord[] {
-  let g: GameState = newGame(PLUNGE_CONFIG, seed);
-  const rand = mulberry32(7);
-  const records: HandRecord[] = [];
-  for (let guard = 0; guard < 5000; guard++) {
-    if (g.phase === 'hand-over' || g.phase === 'game-over') {
-      const record = handRecordOf(g, gameId, 'easy');
-      expect(record).not.toBeNull();
-      records.push(record!);
-      if (g.phase === 'game-over') return records;
-      g = applyAction(g, { type: 'next-hand' });
-      continue;
-    }
-    g = applyAction(g, chooseAction(g, g.turn!, 'easy', rand));
-  }
-  throw new Error('game never finished');
+/** Play one full game with the cheap legal policy, recorded exactly as the table records it. */
+function playRecordedGame(seed: string): HandRecord[] {
+  return playRecorded(seed).records;
 }
 
 describe('hand log', () => {
-  it('records only finished hands, appends once, and lists in play order', async () => {
-    const records = playRecordedGame('stats-log', 'game-a');
-    expect(handRecordOf(newGame(PLUNGE_CONFIG, 'mid'), 'game-a', 'easy')).toBeNull();
-    expect(handRecordOf(decodeReplay(records[0]!.code)!, 'bad id!', 'easy')).toBeNull();
-    for (const r of records) await appendHand(r);
-    await appendHand({ ...records[0]!, player: 'tampered' }); // dedup keeps the original
+  it('records every hand, appends once, lists in play order, and tracks uploads', async () => {
+    const records = playRecordedGame('stats-log');
+    for (const r of records) expect(validHand(r)).toBe(r);
+    await appendHands(records);
+    await appendHands([{ ...records[0]!, app: 'tampered' }]); // the log keeps the original
     const listed = await listHands();
     expect(listed.length).toBe(records.length);
-    expect(listed[0]!.player).toBe('easy');
+    expect(listed[0]!.app).toBe('test');
     expect(listed.map((r) => r.id)).toEqual(records.map((r) => r.id));
     expect(new Set(listed.map((r) => r.id)).size).toBe(records.length);
-    const last = listed[listed.length - 1]!;
-    expect(last.gameOver).toBe(true);
-    expect(Math.max(...last.marksAfter)).toBeGreaterThanOrEqual(7);
-    // Every record replays through the engine and marks stay consistent.
-    for (const r of listed) {
-      const g = decodeReplay(r.code)!;
-      expect(g).not.toBeNull();
-      const awarded = g.handResult ? g.handResult.marks : 0;
-      expect((r.marksAfter[0] + r.marksAfter[1]) - (r.marksBefore[0] + r.marksBefore[1])).toBe(awarded);
-    }
-    // The analysis cache is a separate, overwritable store.
-    await putAnalysis({ schema: 'plunge-hand-analysis-v1', id: last.id, profile: ANALYSIS_PROFILE, plies: [], unsupported: false });
-    await putAnalysis({ schema: 'plunge-hand-analysis-v1', id: last.id, profile: ANALYSIS_PROFILE, plies: [], unsupported: true });
-    const analyses = await listAnalyses();
-    expect(analyses.length).toBe(1);
-    expect(analyses[0]!.unsupported).toBe(true);
+    expect(new Set(listed.map((r) => r.game.id)).size).toBe(1);
+    const decoded = decodeRecords(listed.map(scored));
+    const last = decoded[decoded.length - 1]!;
+    expect(last.after.gameOver).toBe(true);
+    expect(Math.max(...last.after.marks)).toBeGreaterThanOrEqual(7);
+    // Marks carry from hand to hand: each hand starts where the last one ended.
+    for (let i = 1; i < decoded.length; i++) expect(decoded[i]!.record.marksBefore).toEqual(decoded[i - 1]!.after.marks);
+    // Uploads are acknowledged per record; the record itself never changes.
+    expect((await unsyncedHands()).length).toBe(records.length);
+    await markSynced(records[0]!.id);
+    expect((await unsyncedHands()).map((r) => r.id)).not.toContain(records[0]!.id);
+    expect((await listHands())[0]).toEqual(records[0]);
+    // The review cache is a separate, overwritable store.
+    await putReview({ schema: 'plunge-hand-analysis-v1', id: records[0]!.id, profile: ANALYSIS_PROFILE, plies: [], unsupported: false });
+    await putReview({ schema: 'plunge-hand-analysis-v1', id: records[0]!.id, profile: ANALYSIS_PROFILE, plies: [], unsupported: true });
+    const reviews = await listReviews();
+    expect(reviews.length).toBe(1);
+    expect(reviews[0]!.unsupported).toBe(true);
   });
 });
 
 describe('replay walk', () => {
   it('re-simulates every recorded decision with the position it was made from', () => {
-    const record = playRecordedGame('stats-walk', 'game-b').find((r) => !r.thrownIn)!;
+    const record = playRecordedGame('stats-walk').find((r) => !decodeReplay(r.code)!.thrownIn)!;
     const g = decodeReplay(record.code)!;
     const steps = handSteps(g)!;
     expect(steps).not.toBeNull();

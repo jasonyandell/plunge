@@ -42,6 +42,7 @@ test('first deployment provisions only this PR; repeat deployment retains its da
   assert.equal(first.config.name, 'plunge-pr-4');
   assert.equal(first.config.routes, undefined);
   assert.equal(first.config.preview_urls, false);
+  assert.deepEqual(first.config.vars, { PARTITION: 'pr-4' });
   assert.equal(f.calls.filter(c => c.method === 'POST').length, 1);
 });
 test('database lookup follows pagination before provisioning', async () => {

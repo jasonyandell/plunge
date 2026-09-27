@@ -8,6 +8,10 @@ binding = "ASSETS"
 run_worker_first = ["/api/*"]
 not_found_handling = "single-page-application"
 
+# Records written by this deployment land in this partition (docs-data-model.md).
+[vars]
+PARTITION = "prod"
+
 [[d1_databases]]
 binding = "QUESTIONS"
 database_name = "plunge-questions"

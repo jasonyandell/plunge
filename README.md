@@ -64,15 +64,23 @@ public effect on the current trick. The first comparison uses 40 worlds;
 use only your hand and public history, with no separate partner review, and
 never label an unscored emergency fallback as a measured recommendation.
 
-**Your stats** on the home screen keeps an append-only log of finished hands on
-the device and turns it into a dashboard: games and marks, bid make rates by bid
-and by trump, sets delivered on defense, count fed to Gran's tricks (assists),
-and how often your bids and plays match Walt. Agreement is scored after the
-fact from the recorded hand — it measures the decision you made, never whether
-you opened a hint, and nothing about hint use is recorded at all. Walt reviews
-your plays on the device the first time you open the screen and remembers his
-verdicts; the log never leaves the phone. While the log is empty, the screen
-shows a clearly-labeled sample slate.
+Every hand you play is recorded on the device as it happens: the deal and each
+action with its timing, which Walt build played the other seats and how hard it
+was asked to think, the settings in force, and any hint you opened. Finished and
+abandoned hands are kept; records are never rewritten, and they upload
+anonymously (same browser key as the question notebook) whenever you're online.
+Walt is identified by the sha256 of its pinned build manifest, so no other build
+can pass for it. See [the data model](docs-data-model.md).
+
+**Your stats** on the home screen turns the log into a dashboard: games and
+marks, bid make rates by bid and by trump, sets delivered on defense, count fed
+to Gran's tricks (assists), and how often your bids and plays match Walt. Stats
+read hands through a projection that has no hint data, so hint use never
+counts for or against anyone; a test holds every stat identical with hints
+added, removed, or switched off. Nel-O hands count for marks and bidding but not
+for count, sweeps or partner play. Walt reviews your plays on the device the
+first time you open the screen and remembers his verdicts. While the log is
+empty, the screen shows a clearly-labeled sample slate.
 
 ## What's inside
 

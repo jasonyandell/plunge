@@ -14,6 +14,15 @@ import { chooseAction } from '../ai/table';
 import { catalogueDeal } from '../ai/catalogue';
 import { NATIVE_TABLE, isNative, requestOf, requestKey, checkedAction, type NativeReceipt, type FlagRecord } from '../ai/native';
 import { auctionKey, type AuctionDecision, type AuctionEvidence } from '../ai/auction';
+import { TABLE_WALT } from '../ai/walt-identity';
+import type { HintEvidence } from '../questions/hint-evidence';
+import { randomHex } from '../questions/storage';
+import type { HandRecord } from '../records/model';
+import {
+  adoptJournal, closeJournal, finished, openJournal, withAction, withHint, withSettings,
+  type ComputerMove, type HandJournal, type JournalContext,
+} from '../records/journal';
+import { BUILD_ID } from './update';
 import {
   type Action,
   type Bid,
@@ -111,6 +120,10 @@ export interface AppState {
   readonly nativeReceipts: Record<string, string>;
   readonly scenarioFlag: FlagRecord | null;
   readonly auctionSurveys: Record<string, AuctionEvidence>;
+  /** Facts gathered for the hand on the table (src/records/journal.ts). */
+  readonly journal: HandJournal | null;
+  /** Closed hand records waiting to be written to the device log. */
+  readonly outbox: readonly HandRecord[];
 }
 
 export type ChooseFn = typeof chooseAction;
@@ -131,7 +144,11 @@ export type AppEvent =
   /** Open a shared hand (from a share link) in view-only review. */
   | { readonly type: 'view-scenario'; readonly game: GameState; readonly flag?: FlagRecord }
   | { readonly type: 'native-ai'; readonly receipt: NativeReceipt }
-  | { readonly type: 'auction-ai'; readonly decision: AuctionDecision };
+  | { readonly type: 'auction-ai'; readonly decision: AuctionDecision }
+  /** A hint was displayed. Recorded as a fact; changes nothing about the game. */
+  | { readonly type: 'hint-shown'; readonly evidence: HintEvidence }
+  /** These outbox records are now durable in the device log. */
+  | { readonly type: 'records-saved'; readonly ids: readonly string[] };
 
 export function initialApp(saved?: SavedState | null, search = ''): AppState {
   if (saved && !isNative(saved.settings.difficulty)) saved = null;
@@ -151,6 +168,8 @@ export function initialApp(saved?: SavedState | null, search = ''): AppState {
     sessionId: saved?.sessionId ?? 'legacy',
     nativeReceipts: saved?.nativeReceipts ?? {},
     auctionSurveys: saved?.auctionSurveys ?? {},
+    journal: saved?.journal ?? null,
+    outbox: saved?.outbox ?? [],
   };
 }
 
@@ -249,6 +268,12 @@ export function reducer(s: AppState, e: AppEvent): AppState {
         return {...s,game,aiMoves:s.aiMoves+1,auctionSurveys:d.survey ? {...s.auctionSurveys,[`${g.handNumber}:${seat}`]:d.survey} : s.auctionSurveys};
       } catch { return s; }
     }
+    case 'hint-shown':
+      return s;
+    case 'records-saved': {
+      const saved = new Set(e.ids);
+      return { ...s, outbox: s.outbox.filter(r => !saved.has(r.id)) };
+    }
     case 'native-ai': {
       const seat = pendingAiSeat(s);
       if (seat === null || !s.game || s.game.phase !== 'playing' || !isNative(s.settings.difficulty)) return s;
@@ -275,6 +300,69 @@ export function reducer(s: AppState, e: AppEvent): AppState {
       };
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Recording (docs-data-model.md): facts about each hand, kept beside the game
+// ---------------------------------------------------------------------------
+
+const tableContext = (now: number, newId: () => string): JournalContext =>
+  ({ now, newId, app: BUILD_ID, walt: TABLE_WALT });
+
+function computerMove(s: AppState, e: AppEvent): ComputerMove | undefined {
+  switch (e.type) {
+    case 'native-ai': return { kind: 'native', receipt: e.receipt };
+    case 'auction-ai': return { kind: 'auction', survey: e.decision.survey };
+    case 'ai': return { kind: 'heuristic', player: s.settings.difficulty };
+    default: return undefined;
+  }
+}
+
+/**
+ * Record what `reducer` just did. One action event that changes the game adds
+ * one journal entry, so entries line up with the replay's actions exactly
+ * (a forced Nel-O's implicit declaration is not an action). A finished hand,
+ * or one abandoned by a new game, closes into the outbox.
+ */
+export function recordTransition(s: AppState, next: AppState, e: AppEvent, ctx: JournalContext): AppState {
+  let journal = next.journal, outbox = next.outbox;
+  const close = (g: GameState, outcome: 'finished' | 'abandoned') => {
+    if (!journal || journal.closed) return;
+    const closed = closeJournal(journal, g, outcome, ctx);
+    journal = closed.journal;
+    if (closed.record) outbox = [...outbox, closed.record];
+  };
+  // A hand on the table with no journal was dealt before recording existed:
+  // adopt it so it is kept, even if the first thing that happens is a new game.
+  if (e.type === 'new-game' || (e.type === 'human' && e.action.type === 'next-hand')) {
+    if (s.game) {
+      journal ??= adoptJournal(s.game, s.seed, s.settings, ctx);
+      if (e.type === 'new-game' || finished(s.game)) close(s.game, finished(s.game) ? 'finished' : 'abandoned');
+    }
+  }
+  if (e.type === 'new-game') {
+    journal = next.game ? openJournal(next.game, { id: ctx.newId(), seed: next.seed }, next.settings, ctx) : null;
+    return { ...next, journal, outbox };
+  }
+  if (!next.game) return next;
+  if (e.type === 'human' && e.action.type === 'next-hand') {
+    if (next.game === s.game) return { ...next, journal, outbox };
+    const game = journal ? { id: journal.game.id, seed: journal.game.seed } : { id: ctx.newId(), seed: next.seed };
+    return { ...next, journal: openJournal(next.game, game, next.settings, ctx), outbox };
+  }
+  if (!journal) journal = adoptJournal(s.game ?? next.game, next.seed, s.settings, ctx);
+  if (next.settings !== s.settings) journal = withSettings(journal, ctx.now, next.settings);
+  if (e.type === 'hint-shown') journal = withHint(journal, ctx.now, e.evidence);
+  const acted = next.game !== s.game && s.game !== null && next.game.handNumber === s.game.handNumber
+    && (e.type === 'human' || e.type === 'ai' || e.type === 'native-ai' || e.type === 'auction-ai');
+  if (acted) journal = withAction(journal, ctx.now, ctx.walt, computerMove(s, e));
+  if (finished(next.game)) close(next.game, 'finished');
+  return journal === next.journal && outbox === next.outbox ? next : { ...next, journal, outbox };
+}
+
+/** The table's reducer: game logic plus recording, on the wall clock. */
+export function tableReducer(s: AppState, e: AppEvent): AppState {
+  return recordTransition(s, reducer(s, e), e, tableContext(Date.now(), () => randomHex(16)));
 }
 
 // ---------------------------------------------------------------------------
@@ -305,6 +393,8 @@ export interface SavedState {
   readonly sessionId?: string;
   readonly nativeReceipts?: Record<string, string>;
   readonly auctionSurveys?: Record<string, AuctionEvidence>;
+  readonly journal?: HandJournal | null;
+  readonly outbox?: readonly HandRecord[];
 }
 
 export interface StorageLike {
@@ -317,7 +407,8 @@ export const STORAGE_KEY = 'plunge:save:v1';
 
 export function toSaved(s: AppState): SavedState {
   return { v: 1, showTrick: s.showTrick, settings: s.settings, seed: s.seed, game: s.game, aiMoves: s.aiMoves,
-    sessionId: s.sessionId, nativeReceipts: s.nativeReceipts, auctionSurveys: s.auctionSurveys };
+    sessionId: s.sessionId, nativeReceipts: s.nativeReceipts, auctionSurveys: s.auctionSurveys,
+    journal: s.journal, outbox: s.outbox };
 }
 
 export function saveApp(storage: StorageLike, s: AppState): void {
@@ -355,7 +446,12 @@ export function loadApp(storage: StorageLike): SavedState | null {
       if (!Array.isArray(g.marks) || g.marks.length !== 2) return null;
     }
     const { nelloCounterexamples, ...settings } = p.settings;
-    return { ...p, settings: { ...settings, thinkDeeper: settings.thinkDeeper ?? false, showHints: settings.showHints ?? true,
+    // Recording state is best effort: a damaged journal is dropped (the hand is
+    // re-adopted with unknown times), never allowed to block the saved game.
+    const journal = p.journal && typeof p.journal === 'object' && Array.isArray(p.journal.actions)
+      && Array.isArray(p.journal.assist) && Array.isArray(p.journal.settings) ? p.journal : null;
+    const outbox = Array.isArray(p.outbox) ? p.outbox.filter(r => r && r.schema === 'plunge-hand-v2') : [];
+    return { ...p, journal, outbox, settings: { ...settings, thinkDeeper: settings.thinkDeeper ?? false, showHints: settings.showHints ?? true,
       nelloPreview: settings.nelloPreview ?? nelloCounterexamples ?? false } };
   } catch {
     return null;

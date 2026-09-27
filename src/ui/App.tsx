@@ -9,7 +9,7 @@
 import { useEffect, useReducer, useRef, useState } from 'preact/hooks';
 import type { Seat } from '../engine';
 import {
-  HUMAN_SEAT, TRICK_SHOW_MS, nelloAvailable, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
+  HUMAN_SEAT, TRICK_SHOW_MS, nelloAvailable, aiDelayMs, initialApp, loadApp, pendingAiSeat, tableReducer, saveApp,
 } from './store';
 import {
   BUILD_ID, UPDATE_POLL_MS, fetchRemoteVersion, updateAvailable,
@@ -25,17 +25,20 @@ import './app.css';
 import { Questions } from './Questions';
 import { Stats } from './Stats';
 import { attachGame, syncQuestions } from '../questions/client';
-import { recordFinishedHand } from '../stats/log';
+import { appendHands } from '../records/storage';
+import { syncHands } from '../records/sync';
+import { HINT_SHOWN } from '../records/assist';
+import type { HintEvidence } from '../questions/hint-evidence';
 
 export function App() {
-  const [app, dispatch] = useReducer(reducer, undefined, () =>
+  const [app, dispatch] = useReducer(tableReducer, undefined, () =>
     initialApp(typeof localStorage !== 'undefined' ? loadApp(localStorage) : null, location.search),
   );
 
   const [questions, setQuestions] = useState<{ id: string | null } | null>(null);
   const openQuestion = (id: string) => setQuestions({ id });
   useEffect(() => {
-    const sync = () => void syncQuestions();
+    const sync = () => { void syncQuestions(); void syncHands(); };
     const timer = setInterval(sync, 30000);
     window.addEventListener('online', sync);
     window.addEventListener('focus', sync);
@@ -49,11 +52,21 @@ export function App() {
     return () => window.removeEventListener('plunge-questions-changed', attach);
   }, [app.game, app.sessionId]);
 
-  // Append each finished hand to the on-device stats log (idempotent by
-  // game + hand number, so re-renders and reloads never double-count).
+  // Closed hands move from the saved outbox to the device log, then upload.
+  // The outbox persists with the game, so a reload before this lands loses nothing;
+  // the log ignores a record it already holds.
   useEffect(() => {
-    if (app.game) void recordFinishedHand(app.game, app.sessionId, app.settings.difficulty).catch(() => {});
-  }, [app.game, app.sessionId]);
+    if (app.outbox.length === 0) return;
+    const ids = app.outbox.map((r) => r.id);
+    void appendHands(app.outbox)
+      .then(() => { dispatch({ type: 'records-saved', ids }); void syncHands(); })
+      .catch(() => { /* Storage unavailable: the outbox keeps them for the next try. */ });
+  }, [app.outbox]);
+  useEffect(() => {
+    const shown = (e: Event) => dispatch({ type: 'hint-shown', evidence: (e as CustomEvent<HintEvidence>).detail });
+    window.addEventListener(HINT_SHOWN, shown);
+    return () => window.removeEventListener(HINT_SHOWN, shown);
+  }, []);
 
   const preparation = useRef<AuctionPreparation>();
   useEffect(() => {
