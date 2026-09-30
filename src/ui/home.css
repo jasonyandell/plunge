@@ -56,6 +56,14 @@
 .seg-btn.on { background: var(--teal); color: white; font-weight: 600; }
 .link-row { display: flex; justify-content: center; gap: 24px; margin-top: 8px; }
 .home .text-btn { color: var(--teal-ink); }
+.install-help > summary { text-align: center; }
+.install-help h2 { font-size: 15px; margin: 16px 8px 6px; }
+.install-help ol { margin: 6px 8px 14px; padding-left: 20px; }
+.install-help li + li { margin-top: 10px; }
+.install-help a { color: var(--teal-ink); }
+@media (display-mode: standalone) {
+  .install-help { display: none; }
+}
 .doc .text-btn { color: var(--teal-bright); }
 .home-settings { margin-top: 10px; }
 .thinking-switch {
