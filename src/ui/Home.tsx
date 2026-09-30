@@ -18,7 +18,8 @@ const DIFFS: readonly Difficulty[] = ['native-partner', 'native-l1'];
 
 export function Home({ app, dispatch, onQuestions }: HomeProps) {
   const paused = nelloPaused(app);
-  const resumable = app.game !== null && (app.game.phase !== 'game-over' || app.showTrick);
+  const resumable = app.game !== null;
+  const finished = app.game?.phase === 'game-over' && !app.showTrick;
   return (
     <div class="home">
       <div class="home-card">
@@ -32,7 +33,7 @@ export function Home({ app, dispatch, onQuestions }: HomeProps) {
 
         {resumable && (
           <button type="button" class="big-btn" disabled={paused} onClick={() => dispatch({ type: 'resume' })}>
-            Resume your game
+            {finished ? 'Review last hand' : 'Resume your game'}
           </button>
         )}
         {paused && <p class="setting-hint">Your Nel-O hand is saved. {NATIVE_TABLE ? 'Resume it in the browser with Nel-O Preview enabled.' : 'Enable Nel-O Preview in Advanced settings to resume.'}</p>}

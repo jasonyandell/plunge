@@ -13,6 +13,7 @@ import {
 } from './store';
 import { Tally } from './Tally';
 import { BiddingHint } from './BiddingHint';
+import { RemainingHands } from './RemainingHands';
 import './sheets.css';
 
 interface SheetProps {
@@ -195,7 +196,7 @@ export function HandOverSheet({ g, dispatch, onReview, scenario }: EndSheetProps
   const copy = handOverCopy(g);
   return (
     <div class="overlay">
-      <div class="card" role="dialog" aria-label="Hand over">
+      <div class="card result-card" role="dialog" aria-label="Hand over">
         <p class="eyebrow">Hand {g.handNumber}</p>
         <h2 class="card-title">{copy.title}</h2>
         <p class="card-detail">{copy.detail}</p>
@@ -203,6 +204,7 @@ export function HandOverSheet({ g, dispatch, onReview, scenario }: EndSheetProps
           <Tally marks={g.marks[0] ?? 0} label="Us" />
           <Tally marks={g.marks[1] ?? 0} label="Them" />
         </div>
+        <RemainingHands g={g} />
         {scenario ? (
           <button type="button" class="big-btn" onClick={() => dispatch({ type: 'go', screen: 'home' })}>
             Back home
@@ -231,7 +233,7 @@ export function GameOverSheet({ g, dispatch, onReview }: EndSheetProps) {
   const won = g.winner === 0;
   return (
     <div class="overlay">
-      <div class={`card ${won ? 'card-win' : 'card-loss'}`} role="dialog" aria-label="Game over">
+      <div class={`card result-card ${won ? 'card-win' : 'card-loss'}`} role="dialog" aria-label="Game over">
         <p class="eyebrow">{won ? 'A good game' : 'Until the next hand'}</p>
         <h2 class="card-title">{copy.title}</h2>
         <p class="card-detail">{copy.detail}</p>
@@ -239,6 +241,7 @@ export function GameOverSheet({ g, dispatch, onReview }: EndSheetProps) {
           <Tally marks={g.marks[0] ?? 0} label="Us" />
           <Tally marks={g.marks[1] ?? 0} label="Them" />
         </div>
+        <RemainingHands g={g} />
         <button
           type="button"
           class="big-btn"
