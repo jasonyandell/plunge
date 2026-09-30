@@ -8,6 +8,7 @@ import { encodeHand, shareUrl } from './share';
 import { saveQuestion } from '../questions/client';
 import { observationUrl } from './observation-link';
 import { TrickHistory } from './TrickHistory';
+import { StartingHands } from './StartingHands';
 import { Domino } from './Domino';
 import { NativeStats } from './NativeStats';
 import { contractLabel, declLabel, SEAT_NAMES } from './store';
@@ -118,8 +119,9 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQu
     <h2 class="card-title">How it went</h2>
     <p class="card-detail">{g.declarer !== null && `${SEAT_NAMES[g.declarer]} bid `}{g.contract && contractLabel(g.contract)}
       {g.declaration && ` in ${declLabel(g.declaration)}`} · Us {g.points[0]} · Them {g.points[1]}.</p>
-    <p class="review-hint">Tap a domino to see the player’s hand and what Walt thinks.</p>
     <div class="review-scroll">
+      <StartingHands g={g} />
+      <p class="review-hint">Tap a played domino below to see the player’s hand and what Walt thinks.</p>
       <div class="native-history"><TrickHistory g={g} onTapPlay={select} selected={sel} /></div>
       {sel && current && <section class="native-question" ref={question}>
         <h3>{SEAT_NAMES[current.seat]} played {current.domino.split('').join('–')} · play {ply! + 1}</h3>
