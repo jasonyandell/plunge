@@ -45,6 +45,7 @@ export function Home({ app, dispatch, onQuestions }: HomeProps) {
         </button>
 
         {nelloAvailable(app.settings) && <p class="setting-hint">Nel-O Preview is on. Change it in Advanced settings.</p>}
+        {!NATIVE_TABLE && <InstallHelp />}
         <div class="link-row">
           {onQuestions && <button type="button" class="text-btn" onClick={onQuestions}>Your questions</button>}
           <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'how' })}>
@@ -122,6 +123,26 @@ export function Home({ app, dispatch, onQuestions }: HomeProps) {
         </details>
       </div>
     </div>
+  );
+}
+
+function InstallHelp() {
+  // Safari's legacy flag complements the display-mode CSS query below.
+  if ((navigator as Navigator & { standalone?: boolean }).standalone) return null;
+  return (
+    <details class="disclosure install-help">
+      <summary>Add to Home Screen</summary>
+      <p>Keep Plunge beside your other apps. These instructions are always here, even if you dismissed the reminder.</p>
+      <h2>iPhone or iPad</h2>
+      <ol>
+        <li>Open <a href="https://plunge.texas42.workers.dev/">Plunge</a> in Safari. If the link opened inside another app, copy it into Safari first.</li>
+        <li>Tap <strong>Share</strong> (the square with an upward arrow). You may need to open Safari’s menu first.</li>
+        <li>Scroll down and tap <strong>Add to Home Screen</strong>. If it’s missing, look in <strong>Edit Actions</strong>.</li>
+        <li>Leave <strong>Open as Web App</strong> on if shown, then tap <strong>Add</strong>.</li>
+      </ol>
+      <h2>Android or computer</h2>
+      <p>Open your browser’s menu and look for <strong>Install app</strong> or <strong>Add to Home Screen</strong>. On a Mac in Safari, choose <strong>File → Add to Dock</strong>.</p>
+    </details>
   );
 }
 

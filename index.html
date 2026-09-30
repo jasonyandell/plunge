@@ -38,7 +38,10 @@
         const KEY = 'plunge:install-dismissed';
         const standalone =
           matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-        if (standalone || localStorage.getItem(KEY)) return;
+        if (standalone) return;
+        // Dismissing the reminder must never remove the help on the home screen.
+        // Storage can be unavailable in restricted browsing contexts.
+        try { if (localStorage.getItem(KEY)) return; } catch {}
 
         const show = (msg, installFn) => {
           const bar = document.createElement('div');
@@ -66,7 +69,10 @@
           no.style.cssText =
             'background:transparent;color:#f4ead4;border:1px solid #f4ead488;border-radius:10px;' +
             'padding:10px 14px;font:14px Georgia,serif;min-height:44px';
-          no.onclick = () => { localStorage.setItem(KEY, '1'); bar.remove(); };
+          no.onclick = () => {
+            try { localStorage.setItem(KEY, '1'); } catch {}
+            bar.remove();
+          };
           bar.appendChild(no);
           document.body.appendChild(bar);
         };
@@ -77,10 +83,16 @@
           deferred = e;
           show('Keep Plunge on your home screen?', () => deferred.prompt());
         });
-        if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
-          addEventListener('load', () =>
-            show('To keep Plunge handy: tap Share, then "Add to Home Screen".', null),
+        // iPadOS (and Request Desktop Website) may identify as a touch-capable Mac.
+        const appleMobile = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+          (/Mac/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+        if (appleMobile) {
+          const remind = () => show(
+            'In Safari, tap Share, then "Add to Home Screen". You can find these steps on Plunge’s home screen anytime.',
+            null,
           );
+          if (document.readyState === 'complete') remind();
+          else addEventListener('load', remind, { once: true });
         }
       })();
     </script>
