@@ -35,7 +35,7 @@ export function NativeStats({ g, sel, position, receipt, loading, nelloPreview }
     setBusy(true); setError('');
     controller.current = new AbortController();
     try {
-      const value = await api<NativeEstimate>('estimates', { request, worlds }, worlds > 40 ? 24000 : 18000, controller.current.signal);
+      const value = await api<NativeEstimate>('estimates', { request, worlds, level: receipt?.response.profile?.level ?? 2 }, worlds > 40 ? 24000 : 18000, controller.current.signal);
       if (value.schema !== 'plunge-estimate-v1' || requestKey(value.identity.request) !== requestKey(request)
         || value.identity.player.n !== worlds) throw new Error('The estimate does not match this position.');
       if (alive.current) setEstimate(value);
@@ -56,6 +56,7 @@ export function NativeStats({ g, sel, position, receipt, loading, nelloPreview }
         : original ? <MoveScores stats={original} selected={played} selectionLabel="Played" />
         : !estimate && <p class="setting-hint">{receipt ? 'No completed option scores were saved for this decision.'
           : 'No original Walt estimate for this play. Ask Walt to compare the options from this player’s view.'}</p>}
+      {receipt?.response.profile && <p class="setting-hint">Walt L{receipt.response.profile.level} · {receipt.response.profile.samples.join(' / ')} sampled deals.</p>}
       {receipt?.response.interruption && <p class="setting-hint">{receipt.response.interruption}</p>}
       {receipt?.response.review_result?.status === 'changed' && <p class="setting-hint">These were Walt’s first estimates. A separate partner check changed its choice.</p>}
       {receipt && <CounterexampleScores response={receipt.response} request={request} legal={legal} />}
@@ -64,11 +65,11 @@ export function NativeStats({ g, sel, position, receipt, loading, nelloPreview }
         <h4>A fresh look from Walt</h4>
         {fresh ? <MoveScores stats={fresh} selected={played} selectionLabel="Played" /> : <p>No complete comparison finished within the time limit. You can retry.</p>}
         <CounterexampleScores response={estimate.response} request={request} legal={legal} />
-        {fresh?.fallback && <p>The larger comparison did not finish; these are the smaller completed sample’s scores. You can retry.</p>}
+        {fresh?.fallback && <p>The requested comparison did not finish; these scores come from the last completed profile. You can retry.</p>}
         <p class="setting-hint">A new estimate from the same player’s view.
           {' '}{original ? 'The original scores stay above.' : 'Small differences can come down to the sample.'}</p>
         <details class="disclosure"><summary>Recheck details</summary>
-          <p>Later L1 recheck · requested {estimate.identity.player.n} worlds · {(estimate.response.elapsed_us/1e6).toFixed(2)} s.
+          <p>L{estimate.response.profile?.level ?? 1} recheck · requested {estimate.identity.player.n} worlds · {(estimate.response.elapsed_us/1e6).toFixed(2)} s.
             {' '}The scores show the largest comparison that finished.</p>
         </details>
       </div>}

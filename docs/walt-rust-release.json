@@ -1,0 +1,572 @@
+{
+  "date": "2026-09-30",
+  "host": "Mac M5 Max, 18 CPU cores, 48 GiB RAM",
+  "scope": "Desktop portability and timing; not a strength evaluation or physical-phone validation.",
+  "source_commit": "fd5ce00f9371b5c2d43a0554e9c9e06555f8e4cf",
+  "wasm_sha256": "77345fed54159f03bcc17932b33a3a2886e78c5b681d0a348f34ca5b2a00174a",
+  "whole_hands": {
+    "engine": "WASM in Node",
+    "samples": [
+      24,
+      160
+    ],
+    "rows": [
+      {
+        "seed": 1,
+        "seconds": 1.732905792,
+        "moves": 24,
+        "status": "complete"
+      },
+      {
+        "seed": 2,
+        "seconds": 1.7832536669999994,
+        "moves": 12,
+        "status": "complete"
+      },
+      {
+        "seed": 3,
+        "seconds": 3.0271520839999995,
+        "moves": 20,
+        "status": "complete"
+      }
+    ]
+  },
+  "browser": {
+    "url": "http://127.0.0.1:5187/",
+    "source_commit": "fd5ce00f9371b5c2d43a0554e9c9e06555f8e4cf",
+    "wasm_sha256": "77345fed54159f03bcc17932b33a3a2886e78c5b681d0a348f34ca5b2a00174a",
+    "scope": "Desktop Chromium and WebKit; not a physical phone measurement.",
+    "rows": [
+      {
+        "browser": "chromium",
+        "version": "153.0.8010.12",
+        "mode": "dev-client",
+        "values": [
+          {
+            "request": {
+              "decl": 3,
+              "bid": 30,
+              "bidder": 1,
+              "seat": 1,
+              "seed": 57,
+              "hand": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "plays": []
+            },
+            "value": {
+              "budget_ms": 20000,
+              "choice": 5,
+              "elapsed_us": 2078000,
+              "evaluation": {
+                "options": [
+                  [
+                    0,
+                    "66",
+                    "160"
+                  ],
+                  [
+                    1,
+                    "49",
+                    "160"
+                  ],
+                  [
+                    2,
+                    "70",
+                    "160"
+                  ],
+                  [
+                    3,
+                    "58",
+                    "160"
+                  ],
+                  [
+                    4,
+                    "54",
+                    "160"
+                  ],
+                  [
+                    5,
+                    "75",
+                    "160"
+                  ],
+                  [
+                    6,
+                    "45",
+                    "160"
+                  ]
+                ],
+                "outer_worlds": 160
+              },
+              "inner_belief": "void-consistent",
+              "leader": 1,
+              "legal": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "metrics": {
+                "nodes": 76772180,
+                "pruned": 1537772
+              },
+              "over_budget": false,
+              "phases": [
+                {
+                  "name": "baseline",
+                  "status": "completed",
+                  "worlds": 160
+                }
+              ],
+              "player_version": "walt-table-v3",
+              "points": [
+                0,
+                0
+              ],
+              "profile": {
+                "delta": 1,
+                "level": 2,
+                "samples": [
+                  24,
+                  160
+                ]
+              },
+              "requested_profile": {
+                "samples": [
+                  24,
+                  160
+                ]
+              },
+              "route": "baseline",
+              "schema": "partnership-decision-v1",
+              "trick": 1
+            },
+            "wall_ms": 2092.7000000476837
+          },
+          {
+            "request": {
+              "contract": "nello",
+              "decl": 8,
+              "bid": 1,
+              "bidder": 0,
+              "seat": 3,
+              "seed": 1,
+              "hand": [
+                4,
+                7,
+                12,
+                14,
+                16,
+                25,
+                27
+              ],
+              "plays": [
+                0,
+                3,
+                1,
+                23,
+                3,
+                12,
+                1,
+                11,
+                3,
+                25,
+                0,
+                13,
+                3,
+                27,
+                0,
+                9,
+                1,
+                2
+              ]
+            },
+            "value": {
+              "budget_ms": 20000,
+              "choice": 16,
+              "contract": "nello",
+              "counterexample_result": {
+                "baseline": 14,
+                "choice": 16,
+                "options": [
+                  [
+                    4,
+                    "18",
+                    "43"
+                  ],
+                  [
+                    7,
+                    "51",
+                    "172"
+                  ],
+                  [
+                    14,
+                    "13",
+                    "43"
+                  ],
+                  [
+                    16,
+                    "25",
+                    "86"
+                  ]
+                ],
+                "ordinary_worlds": 160,
+                "rounds": 3,
+                "schema": "nello-counterexamples-v1",
+                "score_kind": "witness-mixture",
+                "status": "completed",
+                "stop": "round-limit",
+                "witnesses": 12
+              },
+              "elapsed_us": 305700,
+              "evaluation": {
+                "options": [
+                  [
+                    4,
+                    "61",
+                    "160"
+                  ],
+                  [
+                    7,
+                    "59",
+                    "160"
+                  ],
+                  [
+                    14,
+                    "46",
+                    "160"
+                  ],
+                  [
+                    16,
+                    "53",
+                    "160"
+                  ]
+                ],
+                "outer_worlds": 160
+              },
+              "inactive": 2,
+              "inner_belief": "void-consistent",
+              "leader": 3,
+              "legal": [
+                4,
+                7,
+                14,
+                16
+              ],
+              "metrics": {
+                "nodes": 822376,
+                "pruned": 16039
+              },
+              "over_budget": false,
+              "phases": [
+                {
+                  "name": "baseline",
+                  "status": "completed",
+                  "worlds": 160
+                }
+              ],
+              "player_version": "walt-table-v3",
+              "points": [
+                0,
+                18
+              ],
+              "profile": {
+                "delta": 1,
+                "level": 2,
+                "samples": [
+                  24,
+                  160
+                ]
+              },
+              "requested_profile": {
+                "samples": [
+                  24,
+                  160
+                ]
+              },
+              "route": "baseline-counterexamples",
+              "schema": "partnership-decision-v1",
+              "trick": 4
+            },
+            "wall_ms": 316
+          }
+        ],
+        "cancelled": true
+      },
+      {
+        "browser": "webkit",
+        "version": "26.6",
+        "mode": "dev-client",
+        "values": [
+          {
+            "request": {
+              "decl": 3,
+              "bid": 30,
+              "bidder": 1,
+              "seat": 1,
+              "seed": 57,
+              "hand": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "plays": []
+            },
+            "value": {
+              "budget_ms": 20000,
+              "choice": 5,
+              "elapsed_us": 2152000,
+              "evaluation": {
+                "options": [
+                  [
+                    0,
+                    "66",
+                    "160"
+                  ],
+                  [
+                    1,
+                    "49",
+                    "160"
+                  ],
+                  [
+                    2,
+                    "70",
+                    "160"
+                  ],
+                  [
+                    3,
+                    "58",
+                    "160"
+                  ],
+                  [
+                    4,
+                    "54",
+                    "160"
+                  ],
+                  [
+                    5,
+                    "75",
+                    "160"
+                  ],
+                  [
+                    6,
+                    "45",
+                    "160"
+                  ]
+                ],
+                "outer_worlds": 160
+              },
+              "inner_belief": "void-consistent",
+              "leader": 1,
+              "legal": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "metrics": {
+                "nodes": 76772180,
+                "pruned": 1537772
+              },
+              "over_budget": false,
+              "phases": [
+                {
+                  "name": "baseline",
+                  "status": "completed",
+                  "worlds": 160
+                }
+              ],
+              "player_version": "walt-table-v3",
+              "points": [
+                0,
+                0
+              ],
+              "profile": {
+                "delta": 1,
+                "level": 2,
+                "samples": [
+                  24,
+                  160
+                ]
+              },
+              "requested_profile": {
+                "samples": [
+                  24,
+                  160
+                ]
+              },
+              "route": "baseline",
+              "schema": "partnership-decision-v1",
+              "trick": 1
+            },
+            "wall_ms": 2166
+          },
+          {
+            "request": {
+              "contract": "nello",
+              "decl": 8,
+              "bid": 1,
+              "bidder": 0,
+              "seat": 3,
+              "seed": 1,
+              "hand": [
+                4,
+                7,
+                12,
+                14,
+                16,
+                25,
+                27
+              ],
+              "plays": [
+                0,
+                3,
+                1,
+                23,
+                3,
+                12,
+                1,
+                11,
+                3,
+                25,
+                0,
+                13,
+                3,
+                27,
+                0,
+                9,
+                1,
+                2
+              ]
+            },
+            "value": {
+              "budget_ms": 20000,
+              "choice": 16,
+              "contract": "nello",
+              "counterexample_result": {
+                "baseline": 14,
+                "choice": 16,
+                "options": [
+                  [
+                    4,
+                    "18",
+                    "43"
+                  ],
+                  [
+                    7,
+                    "51",
+                    "172"
+                  ],
+                  [
+                    14,
+                    "13",
+                    "43"
+                  ],
+                  [
+                    16,
+                    "25",
+                    "86"
+                  ]
+                ],
+                "ordinary_worlds": 160,
+                "rounds": 3,
+                "schema": "nello-counterexamples-v1",
+                "score_kind": "witness-mixture",
+                "status": "completed",
+                "stop": "round-limit",
+                "witnesses": 12
+              },
+              "elapsed_us": 267000,
+              "evaluation": {
+                "options": [
+                  [
+                    4,
+                    "61",
+                    "160"
+                  ],
+                  [
+                    7,
+                    "59",
+                    "160"
+                  ],
+                  [
+                    14,
+                    "46",
+                    "160"
+                  ],
+                  [
+                    16,
+                    "53",
+                    "160"
+                  ]
+                ],
+                "outer_worlds": 160
+              },
+              "inactive": 2,
+              "inner_belief": "void-consistent",
+              "leader": 3,
+              "legal": [
+                4,
+                7,
+                14,
+                16
+              ],
+              "metrics": {
+                "nodes": 822376,
+                "pruned": 16039
+              },
+              "over_budget": false,
+              "phases": [
+                {
+                  "name": "baseline",
+                  "status": "completed",
+                  "worlds": 160
+                }
+              ],
+              "player_version": "walt-table-v3",
+              "points": [
+                0,
+                18
+              ],
+              "profile": {
+                "delta": 1,
+                "level": 2,
+                "samples": [
+                  24,
+                  160
+                ]
+              },
+              "requested_profile": {
+                "samples": [
+                  24,
+                  160
+                ]
+              },
+              "route": "baseline-counterexamples",
+              "schema": "partnership-decision-v1",
+              "trick": 4
+            },
+            "wall_ms": 283
+          }
+        ],
+        "cancelled": true
+      }
+    ]
+  }
+}

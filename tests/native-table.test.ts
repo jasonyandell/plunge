@@ -15,20 +15,20 @@ function receipt(g: GameState, session = 'test'): NativeReceipt {
   const choice = legalActions(g).find((a) => a.type === 'play')!;
   if (choice.type !== 'play') throw new Error('no play');
   return { schema: 'plunge-decision-v1', id: 'a'.repeat(64), created: 'test',
-    identity: { request: requestOf(g, g.turn!, session), player: { name: 'l1-partner-rollout' },
+    identity: { request: requestOf(g, g.turn!, session), player: { name: 'walt-l2', profile: [24,160] },
       implementation: {}, game_id: session, hand_number: g.handNumber },
     response: { choice: tileOfId(choice.domino), legal: [], route: 'test', leader: g.leader!, points: [...g.points], elapsed_us: 100 } };
 }
 afterEach(() => vi.unstubAllGlobals());
 
 describe('native table boundary', () => {
-  it('deepens only the bidder opening and leaves later partner play at the normal profile', () => {
+  it('uses a fixed L2 profile at the opening and every later seat', () => {
     const g=opening(), openingRequest=requestOf(g,g.turn!,'test');
     expect(openingRequest.seat).toBe(openingRequest.bidder);expect(openingRequest.plays).toEqual([]);
-    expect(livePlayerCall(openingRequest,'native-partner')).toEqual({request:openingRequest,worlds:160,partner:false,budget_ms:20000});
+    expect(livePlayerCall(openingRequest,'native-partner')).toEqual({request:openingRequest,worlds:160,profile:[24,160],partner:false,budget_ms:20000});
     expect(livePlayerCall({...openingRequest,seat:(openingRequest.seat+1)%4},'native-partner')).toEqual({
-      request:{...openingRequest,seat:(openingRequest.seat+1)%4},worlds:40,partner:true});
-    expect(livePlayerCall({...openingRequest,plays:[openingRequest.seat,openingRequest.hand[0]!]},'native-l1')).toMatchObject({worlds:40,partner:false});
+      request:{...openingRequest,seat:(openingRequest.seat+1)%4},worlds:160,profile:[24,160],partner:false,budget_ms:20000});
+    expect(livePlayerCall({...openingRequest,plays:[openingRequest.seat,openingRequest.hand[0]!]},'native-l1')).toMatchObject({worlds:160,profile:[160],partner:false});
   });
 
   it('can deepen every later seat with either computer setting', () => {
@@ -36,18 +36,19 @@ describe('native table boundary', () => {
     const req=requestOf(g,g.turn!,'test');
     for (const seat of [0,1,2,3]) for (const difficulty of ['native-l1','native-partner'] as const) {
       const later={...req,seat,plays:[req.seat,req.hand[0]!]};
-      expect(livePlayerCall(later,difficulty,true)).toEqual({request:later,worlds:160,partner:false,budget_ms:20000});
-      expect(livePlayerCall(later,difficulty,false)).toMatchObject({worlds:40,partner:difficulty==='native-partner'});
+      expect(livePlayerCall(later,difficulty,true)).toEqual({request:later,worlds:350,profile:difficulty==='native-l1'?[350]:[24,350],partner:false,budget_ms:20000});
+      expect(livePlayerCall(later,difficulty,false)).toMatchObject({worlds:160,profile:difficulty==='native-l1'?[160]:[24,160],partner:false});
     }
   });
 
   it('sends the opt-in deeper profile to the Mac without extra game information', async () => {
     const g=opening();
-    const fetcher=vi.fn(async () => new Response(JSON.stringify(receipt(g)),{status:200}));
+    const deepReceipt=receipt(g);deepReceipt.identity.player.profile=[24,350];
+    const fetcher=vi.fn(async () => new Response(JSON.stringify(deepReceipt),{status:200}));
     vi.stubGlobal('fetch',fetcher);
     await nativeMove(g,g.turn!,'native-partner','test',undefined,true);
     const body=JSON.parse((fetcher.mock.calls[0] as unknown as [string,RequestInit])[1].body as string);
-    expect(body).toEqual({request:requestOf(g,g.turn!,'test'),player:'l1-partner-rollout',game_id:'test',hand_number:g.handNumber,think_deeper:true});
+    expect(body).toEqual({request:requestOf(g,g.turn!,'test'),player:'walt-l2',game_id:'test',hand_number:g.handNumber,think_deeper:true});
   });
 
   it('sends only own hand and public history, independent of hidden holdings', async () => {

@@ -12,7 +12,7 @@
 import type { Difficulty } from '../ai';
 import { chooseAction } from '../ai/table';
 import { catalogueDeal } from '../ai/catalogue';
-import { NATIVE_TABLE, isNative, requestOf, requestKey, checkedAction, type NativeReceipt, type FlagRecord } from '../ai/native';
+import { NATIVE_TABLE, isNative, livePlayerCall, requestOf, requestKey, checkedAction, type NativeReceipt, type FlagRecord } from '../ai/native';
 import { auctionKey, type AuctionDecision, type AuctionEvidence } from '../ai/auction';
 import {
   type Action,
@@ -253,9 +253,11 @@ export function reducer(s: AppState, e: AppEvent): AppState {
       const seat = pendingAiSeat(s);
       if (seat === null || !s.game || s.game.phase !== 'playing' || !isNative(s.settings.difficulty)) return s;
       const req = requestOf(s.game, seat, s.sessionId);
-      const wanted = s.settings.difficulty === 'native-l1' ? 'l1-default' : 'l1-partner-rollout';
+      const wanted = s.settings.difficulty === 'native-l1' ? 'walt-l1' : 'walt-l2';
+      const profile = livePlayerCall(req, s.settings.difficulty, s.settings.thinkDeeper).profile;
       if (requestKey(req) !== requestKey(e.receipt.identity.request) || e.receipt.identity.game_id !== s.sessionId
-        || e.receipt.identity.hand_number !== s.game.handNumber || e.receipt.identity.player.name !== wanted) return s;
+        || e.receipt.identity.hand_number !== s.game.handNumber || e.receipt.identity.player.name !== wanted
+        || JSON.stringify(e.receipt.identity.player.profile) !== JSON.stringify(profile)) return s;
       const game = applyAction(s.game, checkedAction(s.game, req, e.receipt));
       const key = `${s.game.handNumber}:${req.plays.length / 2}`;
       return { ...s, game, aiMoves: s.aiMoves + 1, showTrick: trickJustCompleted(s.game, game),

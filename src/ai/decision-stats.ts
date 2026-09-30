@@ -15,7 +15,7 @@ export function decisionStats(response: NativeDecision, request: NativeRequest, 
   if (!response.phases?.some((p) => p.name === phase && p.status === 'completed')) return null;
   const evaluation = fallback ? response.fallback_evaluation : response.evaluation;
   if (!evaluation || !Number.isSafeInteger(evaluation.outer_worlds) || evaluation.outer_worlds < 1) return null;
-  return comparisonStats(evaluation, request, legal, fallback);
+  return comparisonStats(evaluation, request, legal, fallback || !!response.interruption);
 }
 
 function comparisonStats(evaluation: NonNullable<NativeDecision['evaluation']>, request: NativeRequest, legal: number[], fallback = false): MoveStats | null {

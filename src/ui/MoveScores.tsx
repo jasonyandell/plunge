@@ -14,7 +14,7 @@ export function MoveScores({ stats, selected, selectionLabel }: { stats: MoveSta
     <details class="disclosure sample-details">
       <summary>Sample details</summary>
       <p>{stats.worlds} sampled worlds: possible deals based on this player’s own hand and the public plays.
-        {stats.fallback ? ' A smaller fallback comparison was used.' : ''}
+        {stats.fallback ? ' A completed fallback comparison was used.' : ''}
         {' '}The fractions show successful outcomes out of the deals compared.</p>
     </details>
   </>;

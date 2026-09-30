@@ -100,13 +100,15 @@ for (const name of ['walt_in_prepare','walt_call','walt_out_ptr']) assert.equal(
 assert.equal(exports.get('memory'),'memory');
 ''', str(wasm)], check=True)
         data = wasm.read_bytes()
-    manifest = dict(player='walt-table-v2', source_repository='jasonyandell/texas-42',
+    manifest = dict(player='walt-table-v3', source_repository='jasonyandell/texas-42',
                     source_commit=identity[0], source_sha256=identity[1],
                     source_hash_schema='walt-player-source-v2',
                     wasm_sha256=hashlib.sha256(data).hexdigest(), rustc=rustc,
                     build=dict(target=TARGET, default_features=False, features=FEATURES,
                                profile=PROFILE, rustflags=[], locked=True),
-                    worlds=40, inner_worlds=8, budget_ms=14000, partner_ms=500,
+                    worlds=160, inner_worlds=24, budget_ms=20000, profile=[24,160],
+                    l1_profile=[160], fallback_profiles=[[8],[160]], delta=1,
+                    nello=True, nello_counterexample_budget_ms=4200,
                     auction_worlds=160, auction_budget_ms=20000,
                     opening_worlds=160, opening_budget_ms=20000, opening_partner=False)
     text = json.dumps(manifest, indent=2) + '\n'

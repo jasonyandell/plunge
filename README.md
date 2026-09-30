@@ -11,7 +11,7 @@ Each player bids once or passes, starting left of the shaker; the winner calls
 trump and leads. Four passes throw the hand in. First team to seven marks wins.
 
 **Deal me in** starts the game with the saved computer player. **Advanced settings**
-keeps the L1 and partner-check choices available. After a hand, **See how it went**
+selects **Walt L2** (default) or **Walt L1**. After a hand, **See how it went**
 opens the move scores; **Think deeper** requests a larger comparison. Sample and
 decision details expand separately, and **Save or share this move** holds notes,
 portable links, and the native Mac gym tools. Original scores remain separate
@@ -59,23 +59,26 @@ anonymously, and private hand details stay off shared links until the hand finis
 
 **Get a hint** is available during your turn to play. It suggests a legal domino
 without playing it, shows the sampled make/set comparison, and describes the
-public effect on the current trick. The first comparison uses 40 worlds;
-**Think deeper** can request 160. Closing the hint cancels pending work. Hints
+public effect on the current trick. The first comparison uses 40 outer worlds;
+**Think deeper** can request 350. Closing the hint cancels pending work. Hints
 use only your hand and public history, with no separate partner review, and
 never label an unscored emergency fallback as a measured recommendation.
 
 ## What's inside
 
 - **Walt** is one shared Rust player, native on the Mac and WebAssembly on the
-  phone. It chooses plays from its own hand and public history with fixed L1
-  40/8 and an optional bounded partner count-offer check. The bidder's opening
-  lead asks deeper L1 for 160 worlds with 20 seconds, retaining a complete
-  40-world comparison first; later play keeps 40 worlds and 14 seconds. The
-  **Think deeper** switch in Home → Advanced settings applies that 160-world,
-  20-second profile to every computer move. It defaults off and persists across
-  reloads; turn it off to restore normal later play. Deeper play skips the
-  40/8-only partner check, and does not change the empirical bid book. No hidden
-  hands cross the live decision boundary.
+  phone. Walt L2 uses 160 outer deals and an L1 opponent model with 24 inner
+  deals; Walt L1 uses 160 deals against uniform random legal moves. Both run at
+  delta 1 and choose from only the acting hand and public history. Each public
+  continuation has one shared decision across indistinguishable deals.
+  **Think deeper** in Home → Advanced settings raises the outer count to 350
+  for every computer move. It defaults off and persists across reloads.
+  Every move has a 20-second budget and retains complete L1(8), L1(160), then
+  L2 comparisons when selected (L1(350) when deeper is on). Receipts and move
+  details identify the completed level and any interruption. Nel-O uses the
+  same Rust ladder with three active seats and four physical hidden hands;
+  its existing defender counterexample review is retained. The empirical bid
+  book is unchanged. See the [release evidence](docs/walt-rust-release.md).
 - **Bidding** compares all nine declarations at the cheapest legal raise. Each
   computer has 20 seconds for complete 4/12/40/160-world surveys. It bids when the
   best sampled make estimate is at least 75%, otherwise passes, and passes over
@@ -92,7 +95,7 @@ never label an unscored emergency fallback as a measured recommendation.
   starts immediately while bids retain their readable presentation pace.
   Early-pass screening is an experiment, not an enabled playing rule.
 - **The table** saves games and original move scores on the device. After a hand,
-  inspect a move, ask Walt to think deeper with 160 worlds, or copy a portable
+  inspect a move, ask Walt to think deeper with 350 worlds, or copy a portable
   observation link for the Mac gym. Leaving a position cancels its worker.
 - **The rules engine** is an independent pure state machine, with legal actions,
   replayable hands, points/marks scoring, and property tests. Historical variants
