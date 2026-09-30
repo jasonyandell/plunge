@@ -13,7 +13,7 @@ import {
 } from './store';
 import { Tally } from './Tally';
 import { BiddingHint } from './BiddingHint';
-import { RemainingHands } from './RemainingHands';
+import { StartingHands } from './StartingHands';
 import './sheets.css';
 
 interface SheetProps {
@@ -204,7 +204,7 @@ export function HandOverSheet({ g, dispatch, onReview, scenario }: EndSheetProps
           <Tally marks={g.marks[0] ?? 0} label="Us" />
           <Tally marks={g.marks[1] ?? 0} label="Them" />
         </div>
-        <RemainingHands g={g} />
+        <StartingHands g={g} />
         {scenario ? (
           <button type="button" class="big-btn" onClick={() => dispatch({ type: 'go', screen: 'home' })}>
             Back home
@@ -241,7 +241,7 @@ export function GameOverSheet({ g, dispatch, onReview }: EndSheetProps) {
           <Tally marks={g.marks[0] ?? 0} label="Us" />
           <Tally marks={g.marks[1] ?? 0} label="Them" />
         </div>
-        <RemainingHands g={g} />
+        <StartingHands g={g} />
         <button
           type="button"
           class="big-btn"

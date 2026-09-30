@@ -1,0 +1,59 @@
+.starting-hands {
+  margin: 0 0 18px;
+  padding: 14px 0 4px;
+  border-top: 1px solid #a98c6240;
+  text-align: left;
+}
+
+.starting-hands h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.starting-note {
+  margin: 0 0 12px;
+  color: #6e5638;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.starting-seat + .starting-seat { margin-top: 12px; }
+
+.starting-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin-bottom: 5px;
+  font-size: 13px;
+}
+
+.starting-name span { color: #6e5638; font-size: 12px; }
+.starting-count { margin-left: auto; }
+
+.starting-tiles {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 32px));
+  gap: 4px;
+}
+
+.starting-tiles .dom { width: 100%; opacity: 1; }
+.starting-tile { min-width: 0; }
+.starting-tile.is-played .dom { opacity: 0.6; }
+
+.starting-tile-status {
+  display: block;
+  margin-top: 4px;
+  padding: 2px 0;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1.3;
+  text-align: center;
+  color: #6e5638;
+}
+
+.is-held .starting-tile-status {
+  background: var(--teal);
+  color: #fff;
+  font-weight: 700;
+}
