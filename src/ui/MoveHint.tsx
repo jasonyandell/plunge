@@ -69,6 +69,8 @@ export function MoveHint({ g, sessionId, onQuestion }: { g: GameState; sessionId
         <div class="hint-pick"><Domino id={requestTile(tile)} orientation="h" />
           <strong>{hint?.forced ? 'The only legal play' : `Walt suggests ${requestTile(tile).split('').join('–')}`}</strong></div>
         <p>{hintExplanation(hint!)}</p>
+        {hint?.estimate?.response.profile && <p class="setting-hint">Walt L{hint.estimate.response.profile.level} · {hint.estimate.response.profile.samples.join(' / ')} sampled deals.</p>}
+        {hint?.estimate?.response.interruption && <p class="setting-hint">{hint.estimate.response.interruption}</p>}
         {hint?.stats && hint.stats.worlds < hint.requestedWorlds && <p class="setting-hint">
           The full comparison didn’t finish. Showing the completed {hint.stats.worlds}-deal comparison.
         </p>}
@@ -77,7 +79,7 @@ export function MoveHint({ g, sessionId, onQuestion }: { g: GameState; sessionId
           <p class="setting-hint">This compares the whole hand, beyond the current trick. It’s a sampled estimate; small differences can come down to the sample.</p>
           <details class="disclosure"><summary>Compare your choices</summary>
             <MoveScores stats={hint.stats} selected={tile} selectionLabel="Suggested" />
-            <p class="setting-hint">Hints use your hand and public plays. They compare the baseline player’s outcomes without the separate partner check.</p>
+            <p class="setting-hint">Hints use your hand and public plays to compare the choices.</p>
           </details>
         </>}
         {hint && <SaveHint g={g} sessionId={sessionId} disabled={busy} evidence={{ kind: 'move',

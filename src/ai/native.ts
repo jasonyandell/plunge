@@ -8,14 +8,13 @@ import manifest from './phone/manifest.json';
 import { BUILD_ID } from '../ui/update';
 
 export const NATIVE_TABLE = import.meta.env.VITE_NATIVE_TABLE === '1';
-// The Mac research transport still exposes its existing 160-world profile.
-export const DEEP_WORLDS = NATIVE_TABLE ? 160 : 350;
+export const DEEP_WORLDS = 350;
 export type AnalysisWorlds = 40 | 160 | 350 | 500; // retain old saved estimates
 export type NativeDifficulty = 'native-l1' | 'native-partner';
 export function isNative(value: string): value is NativeDifficulty {
   return value === 'native-l1' || value === 'native-partner';
 }
-export const nativeLabel = (d: NativeDifficulty): string => d === 'native-l1' ? 'L1' : 'L1 + partner check';
+export const nativeLabel = (d: NativeDifficulty): string => d === 'native-l1' ? 'Walt L1' : 'Walt L2';
 
 export interface NativeRequest {
   contract?: 'nello';
@@ -30,6 +29,8 @@ export interface CounterexampleReview {
   score_kind: 'witness-mixture'; options: [number, string, string][];
 }
 export interface NativeDecision {
+  profile?: { delta: number; level: number; samples: number[] };
+  requested_profile?: { samples: number[] };
   counterexample_result?: CounterexampleReview;
 
   contract?: 'nello'; inactive?: number;
@@ -43,12 +44,12 @@ export interface NativeDecision {
 export interface NativeReceipt {
   storage?: 'session';
   schema: 'plunge-decision-v1'; id: string; created: string;
-  identity: { request: NativeRequest; player: { name: string }; implementation: unknown; game_id: string; hand_number: number };
+  identity: { request: NativeRequest; player: { name: string; profile?: number[] }; implementation: unknown; game_id: string; hand_number: number };
   response: NativeDecision;
 }
 export interface NativeEstimate {
   schema: 'plunge-estimate-v1'; id: string; created: string;
-  identity: { request: NativeRequest; player: { n: number; nello_counterexamples?: boolean }; implementation?: unknown };
+  identity: { request: NativeRequest; player: { n: number; profile?: number[]; nello_counterexamples?: boolean }; implementation?: unknown };
   response: NativeDecision;
 }
 export interface FlagRecord {
@@ -79,13 +80,14 @@ export async function api<T>(path: string, body?: unknown, milliseconds = 18000,
   if (!NATIVE_TABLE) {
     if (path.startsWith('receipts/') && body === undefined) return await getReceipt(path.slice(9)) as T;
     if (path === 'estimates') {
-      const { request, worlds } = body as { request: NativeRequest; worlds: AnalysisWorlds };
+      const { request, worlds, level = 2 } = body as { request: NativeRequest; worlds: AnalysisWorlds; level?: number };
+      const profile = level === 1 ? [worlds] : [24, worlds];
       const nello_counterexamples = isNelloDefender(request);
-      const response = await runPlayer({ request, worlds, partner: false,
+      const response = await runPlayer({ request, worlds, partner: false, profile,
         ...(nello_counterexamples ? { nello_counterexamples: true } : {}),
         ...(worlds > 40 ? { budget_ms: 20000 } : {}) }, signal);
       return { schema: 'plunge-estimate-v1', id: await digest({ request, worlds, response }),
-        created: new Date().toISOString(), identity: { request, player: { n: worlds, ...(nello_counterexamples ? { nello_counterexamples: true } : {}) }, implementation: { ...manifest, app: BUILD_ID } }, response } as T;
+        created: new Date().toISOString(), identity: { request, player: { n: worlds, profile, ...(nello_counterexamples ? { nello_counterexamples: true } : {}) }, implementation: { ...manifest, app: BUILD_ID } }, response } as T;
     }
     throw new Error('This operation needs the Mac gym. Copy an observation link to bring the hand back.');
   }
@@ -130,17 +132,15 @@ export function isNelloDefender(request: NativeRequest): boolean {
 }
 
 export function livePlayerCall(request: NativeRequest, difficulty: NativeDifficulty, thinkDeeper = false) {
-  const call = thinkDeeper
-    ? { request, worlds: DEEP_WORLDS, partner: false, budget_ms: 20000 }
-    : request.seat === request.bidder && request.plays.length === 0
-    ? { request, worlds: 160, partner: false, budget_ms: 20000 }
-    : { request, worlds: 40, partner: difficulty === 'native-partner' };
-  return isNelloDefender(request) ? { ...call, nello_counterexamples: true } : call;
+  const worlds = thinkDeeper ? DEEP_WORLDS : 160;
+  const profile = difficulty === 'native-l1' ? [worlds] : [24, worlds];
+  return { request, worlds, profile, partner: false, budget_ms: 20000,
+    ...(isNelloDefender(request) ? { nello_counterexamples: true } : {}) };
 }
 
 export async function nativeMove(g: GameState, seat: Seat, difficulty: NativeDifficulty, gameId: string, signal?: AbortSignal, thinkDeeper = false): Promise<NativeReceipt> {
   const request = requestOf(g, seat, gameId);
-  const player = difficulty === 'native-l1' ? 'l1-default' : 'l1-partner-rollout';
+  const player = difficulty === 'native-l1' ? 'walt-l1' : 'walt-l2';
   const call = livePlayerCall(request, difficulty, thinkDeeper);
   const deeper = call.worlds > 40;
   let receipt: NativeReceipt;
@@ -149,12 +149,12 @@ export async function nativeMove(g: GameState, seat: Seat, difficulty: NativeDif
       ...(thinkDeeper ? { think_deeper: true } : {}) }, deeper ? 24000 : 18000, signal);
   } else {
     const response = await runPlayer(call, signal);
-    const identity = { request, player: { name: player }, implementation: { ...manifest, app: BUILD_ID }, game_id: gameId, hand_number: g.handNumber };
+    const identity = { request, player: { name: player, profile: call.profile }, implementation: { ...manifest, app: BUILD_ID }, game_id: gameId, hand_number: g.handNumber };
     receipt = { schema: 'plunge-decision-v1', id: await digest({ identity, response }), created: new Date().toISOString(), identity, response };
     checkedAction(g, request, receipt);
     if (!await putReceipt(receipt)) receipt.storage = 'session';
   }
-  if (receipt.identity.player.name !== player || receipt.identity.game_id !== gameId || receipt.identity.hand_number !== g.handNumber) {
+  if (receipt.identity.player.name !== player || JSON.stringify(receipt.identity.player.profile) !== JSON.stringify(call.profile) || receipt.identity.game_id !== gameId || receipt.identity.hand_number !== g.handNumber) {
     throw new Error('The native player returned a receipt for a different game.');
   }
   checkedAction(g, request, receipt);

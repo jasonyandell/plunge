@@ -1,10 +1,10 @@
 {
-  "player": "walt-table-v2",
+  "player": "walt-table-v3",
   "source_repository": "jasonyandell/texas-42",
-  "source_commit": "cb1ef3b23072e4c268f31f625f2b61d5facc1929",
-  "source_sha256": "5bedf14af0e5a5ef354acca4765f67843469d074d163e8e4786631aa23436e32",
+  "source_commit": "fd5ce00f9371b5c2d43a0554e9c9e06555f8e4cf",
+  "source_sha256": "b0a62ea4606fbde4aa2b2509b07de7f5fe4f1e7e77f67d103b26660218afc467",
   "source_hash_schema": "walt-player-source-v2",
-  "wasm_sha256": "40d7a1eea658627f7bab37d3c1888ad3bf00216fb23a5d2ceeb7d2d1f4219119",
+  "wasm_sha256": "77345fed54159f03bcc17932b33a3a2886e78c5b681d0a348f34ca5b2a00174a",
   "rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
   "build": {
     "target": "wasm32-unknown-unknown",
@@ -25,10 +25,27 @@
     "rustflags": [],
     "locked": true
   },
-  "worlds": 40,
-  "inner_worlds": 8,
-  "budget_ms": 14000,
-  "partner_ms": 500,
+  "worlds": 160,
+  "inner_worlds": 24,
+  "budget_ms": 20000,
+  "profile": [
+    24,
+    160
+  ],
+  "l1_profile": [
+    160
+  ],
+  "fallback_profiles": [
+    [
+      8
+    ],
+    [
+      160
+    ]
+  ],
+  "delta": 1,
+  "nello": true,
+  "nello_counterexample_budget_ms": 4200,
   "auction_worlds": 160,
   "auction_budget_ms": 20000,
   "opening_worlds": 160,

@@ -71,7 +71,7 @@ export function Home({ app, dispatch, onQuestions }: HomeProps) {
           <summary>Advanced settings</summary>
           <div class="setting">
             <span class="setting-label">Computer player</span>
-            <p class="setting-hint">Walt plays the three computer seats. Choose which version to use.</p>
+            <p class="setting-hint">Walt plays the three computer seats. Choose how it models the other players.</p>
             <div class="seg" role="radiogroup" aria-label="Computer player">
               {DIFFS.map((d) => (
                 <button
@@ -96,7 +96,7 @@ export function Home({ app, dispatch, onQuestions }: HomeProps) {
             </button>
             <p id="thinking-hint" class="setting-hint">
               {DEEP_WORLDS} sampled deals for every computer move. May take longer. Bidding stays instant.
-              {app.settings.difficulty === 'native-partner' && ' Uses deeper analysis in place of the regular partner check.'}
+              {app.settings.difficulty === 'native-partner' && ' L2 models the other players with L1.'}
             </p>
           </div>
           {!NATIVE_TABLE && <div class="setting">
