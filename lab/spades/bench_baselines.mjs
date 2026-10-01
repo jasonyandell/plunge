@@ -1,3 +1,4 @@
+// Baseline ms/move benchmark: node lab/spades/bench_baselines.mjs '[{"kind":"flat","n":64},{"n":24,"depthTricks":1,"exactTricks":5}]'
 import * as E from '../../public/lab/spades/engine.js';
 import { pimcPlayer, flatMcPlayer } from './baselines.js';
 const cfgs = JSON.parse(process.argv[2]);

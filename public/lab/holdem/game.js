@@ -39,8 +39,8 @@ export function play(pub, a) {
   if (a === FOLD) {
     return { street, c0, c1, bets, acted: acted + 1, actor: o, folded: s, done: true, fresh: false, hist: pub.hist + ch };
   }
-  const mine = s === 0 ? c0 : c1, theirs = s === 0 ? c1 : c0;
-  let next = a === CALL ? theirs : theirs + BET_SIZE[street];
+  const theirs = s === 0 ? c1 : c0;
+  const next = a === CALL ? theirs : theirs + BET_SIZE[street];
   if (a === RAISE) bets++;
   if (s === 0) c0 = next; else c1 = next;
   acted++;
@@ -48,7 +48,6 @@ export function play(pub, a) {
     if (street === 3) return { street: 4, c0, c1, bets, acted, actor: -1, folded: -1, done: true, fresh: false, hist: pub.hist + ch };
     return { street: street + 1, c0, c1, bets: 0, acted: 0, actor: 1, folded: -1, done: false, fresh: true, hist: pub.hist + ch + '/' };
   }
-  void mine;
   return { street, c0, c1, bets, acted, actor: o, folded: -1, done: false, fresh: false, hist: pub.hist + ch };
 }
 
@@ -113,7 +112,7 @@ export function sample(seat, priv, pub, n, horizon, branch, rng) {
   for (let i = 0; i < priv.board.length; i++) base[4 + i] = priv.board[i];
   const out = [];
   const draw = () => { let x; do { x = rng.int(52); } while (used[x]); used[x] = 1; return x; };
-  const rec = (st, lvl, cards, fresh) => {
+  const rec = (st, lvl, cards) => {
     if (lvl === levels) {
       for (let h = 0; h < leaves; h++) {
         const c = Int8Array.from(cards), got = [];
@@ -128,12 +127,11 @@ export function sample(seat, priv, pub, n, horizon, branch, rng) {
     for (let b = 0; b < branch; b++) {
       const c = Int8Array.from(cards), got = [];
       for (let i = 4 + BOARD_VISIBLE[st]; i < 4 + BOARD_VISIBLE[st + 1]; i++) { c[i] = draw(); got.push(c[i]); }
-      rec(st + 1, lvl + 1, c, true);
+      rec(st + 1, lvl + 1, c);
       for (const x of got) used[x] = 0;
     }
-    void fresh;
   };
-  rec(street, 0, base, false);
+  rec(street, 0, base);
   return out;
 }
 

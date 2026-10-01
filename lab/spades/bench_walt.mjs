@@ -1,3 +1,5 @@
+// Walt ms/move benchmark: node lab/spades/bench_walt.mjs '[{"n":64,"n0":4,"horizon":4}]' [deals]
+// Walt (seats 0,2) vs rule bots on fixed deals; prints mean/max ms per Walt move.
 import * as E from '../../public/lab/spades/engine.js';
 import { waltMove } from '../../public/lab/spades/walt.js';
 const cfgs = JSON.parse(process.argv[2]);
