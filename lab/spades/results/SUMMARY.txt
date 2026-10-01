@@ -1,0 +1,57 @@
+lab/spades/results/rule_vs_random.jsonl
+  A=rule  B=random  seed=2026 deals=200 (x2 tables)
+  dup diff per deal (A minus B, both tables): mean 149.74  95% CI [137.51, 161.97]  sd 88.2
+  deals A ahead / level / behind: 179 / 3 / 18
+  contracts made: A 382/400  B 94/400  (same cards: A-only 290, B-only 2)
+  bags (overtricks when made): A 808  B 40;  tricks A 3306 B 1894
+  ms/move (mean of per-table means): A 0.0  B 0.0
+lab/spades/results/flatmc_vs_rule.jsonl
+  A=flatmc:n=64  B=rule  seed=2026 deals=200 (x2 tables)
+  dup diff per deal (A minus B, both tables): mean 46.74  95% CI [31.99, 61.50]  sd 106.5
+  deals A ahead / level / behind: 133 / 42 / 25
+  contracts made: A 318/400  B 249/400  (same cards: A-only 96, B-only 27)
+  bags (overtricks when made): A 223  B 304;  tricks A 2549 B 2651
+  ms/move (mean of per-table means): A 0.4  B 0.0
+lab/spades/results/pimc_vs_rule.jsonl
+  A=pimc:n=24,depthTricks=1,exactTricks=5  B=rule  seed=2026 deals=100 (x2 tables)
+  dup diff per deal (A minus B, both tables): mean 12.89  95% CI [-6.59, 32.37]  sd 99.4
+  deals A ahead / level / behind: 54 / 27 / 19
+  contracts made: A 148/200  B 141/200  (same cards: A-only 26, B-only 19)
+  bags (overtricks when made): A 81  B 162;  tricks A 1238 B 1362
+  ms/move (mean of per-table means): A 13.6  B 0.0
+lab/spades/results/walt_vs_random.jsonl
+  A=walt:n=64,n0=4,horizon=4  B=random  seed=2026 deals=50 (x2 tables)
+  dup diff per deal (A minus B, both tables): mean 165.36  95% CI [139.51, 191.21]  sd 93.2
+  deals A ahead / level / behind: 47 / 2 / 1
+  contracts made: A 96/100  B 19/100  (same cards: A-only 78, B-only 1)
+  bags (overtricks when made): A 157  B 9;  tricks A 779 B 521
+  ms/move (mean of per-table means): A 28.8  B 0.0
+lab/spades/results/walt_vs_rule.jsonl
+  A=walt:n=64,n0=4,horizon=4  B=rule  seed=2026 deals=200 (x2 tables)
+  dup diff per deal (A minus B, both tables): mean 8.75  95% CI [-5.21, 22.71]  sd 100.7
+  deals A ahead / level / behind: 90 / 66 / 44
+  contracts made: A 295/400  B 291/400  (same cards: A-only 53, B-only 49)
+  bags (overtricks when made): A 166  B 316;  tricks A 2483 B 2717
+  ms/move (mean of per-table means): A 33.7  B 0.0
+lab/spades/results/walt_vs_flatmc.jsonl
+  A=walt:n=64,n0=4,horizon=4  B=flatmc:n=64  seed=2026 deals=100 (x2 tables)
+  dup diff per deal (A minus B, both tables): mean 1.87  95% CI [-20.09, 23.83]  sd 112.0
+  deals A ahead / level / behind: 28 / 37 / 35
+  contracts made: A 144/200  B 144/200  (same cards: A-only 28, B-only 28)
+  bags (overtricks when made): A 116  B 99;  tricks A 1311 B 1289
+  ms/move (mean of per-table means): A 32.0  B 0.7
+lab/spades/results/walt_vs_pimc.jsonl
+  A=walt:n=64,n0=4,horizon=4  B=pimc:n=24,depthTricks=1,exactTricks=5  seed=2026 deals=100 (x2 tables)
+  dup diff per deal (A minus B, both tables): mean 2.35  95% CI [-18.83, 23.53]  sd 108.1
+  deals A ahead / level / behind: 30 / 38 / 32
+  contracts made: A 147/200  B 146/200  (same cards: A-only 26, B-only 25)
+  bags (overtricks when made): A 125  B 100;  tricks A 1314 B 1286
+  ms/move (mean of per-table means): A 32.3  B 18.0
+lab/spades/results/flatmc_vs_pimc.jsonl
+  A=flatmc:n=64  B=pimc:n=24,depthTricks=1,exactTricks=5  seed=2026 deals=100 (x2 tables)
+  dup diff per deal (A minus B, both tables): mean -7.80  95% CI [-29.17, 13.57]  sd 109.0
+  deals A ahead / level / behind: 30 / 32 / 38
+  contracts made: A 144/200  B 149/200  (same cards: A-only 26, B-only 31)
+  bags (overtricks when made): A 109  B 109;  tricks A 1302 B 1298
+  ms/move (mean of per-table means): A 0.7  B 18.5
+common deals 200: X mean 8.75  Y mean 46.74  X-Y -37.99 95% CI [-57.42, -18.57]

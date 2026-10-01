@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Bridge vs Walt</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<main>
+  <header class="top">
+    <a class="back" href="../">← Walt Lab</a>
+    <h1>Bridge card play <span class="vs">vs Walt</span></h1>
+  </header>
+
+  <section class="bar" id="bar">
+    <div class="contract" id="contract">—</div>
+    <div class="score"><span id="ns">N/S 0</span> · <span id="ew">E/W 0</span></div>
+  </section>
+  <div class="status" id="status" role="status" aria-live="polite">Loading…</div>
+
+  <section class="table" id="table">
+    <div class="seat north" id="seat-0"></div>
+    <div class="seat west" id="seat-3"></div>
+    <div class="trick" id="trick">
+      <div class="slot s0" id="slot-0"></div>
+      <div class="slot s3" id="slot-3"></div>
+      <div class="slot s1" id="slot-1"></div>
+      <div class="slot s2" id="slot-2"></div>
+    </div>
+    <div class="seat east" id="seat-1"></div>
+    <div class="seat south" id="seat-2"></div>
+  </section>
+
+  <section class="controls">
+    <button id="newDeal" class="primary">New deal</button>
+    <label>Seat
+      <select id="mode">
+        <option value="declare">You declare (South &amp; dummy)</option>
+        <option value="defend">You defend (South)</option>
+      </select>
+    </label>
+    <label>Walt
+      <select id="strength">
+        <option value="quick">Quick</option>
+        <option value="standard" selected>Standard</option>
+        <option value="deep">Deep</option>
+      </select>
+    </label>
+  </section>
+
+  <section class="panel">
+    <div><b>Last trick:</b> <span id="lastTrick">—</span></div>
+    <div><b>Walt's last move:</b> <span id="waltInfo">—</span></div>
+    <div class="dealno" id="dealNo"></div>
+  </section>
+
+  <details class="about">
+    <summary>About this table</summary>
+    <p>Play phase only. Each deal is random; a fixed rule stands in for the auction: the side with more high-card points declares, in an 8+ card major fit, else no-trump with 25+ points, else an 8+ card minor fit, else no-trump, at a level set by the combined points. The seats are turned so that you always sit South. Making the contract is all that counts (no scoring of overtricks).</p>
+    <p>Walt decides each card by sampling the deals it cannot rule out (respecting the dummy, the cards played and the voids shown) and choosing one card across all of them: the one that makes (or defeats) the contract in the most sampled deals. It models every other seat as a simpler player deciding from its own chair, for the next couple of tricks, and lets a cheap rule-based player finish each sampled deal. Declarer's Walt decides for dummy too, reading declarer's hand, dummy and the table only.</p>
+    <p>Exploratory experiment. Report: <code>lab/bridge/REPORT.md</code> in the Plunge repository.</p>
+  </details>
+</main>
+<script type="module" src="./main.js"></script>
+</body>
+</html>
