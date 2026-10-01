@@ -82,3 +82,5 @@ deal 75: B-A per seat 8-8 0-0 4-4 14-14  delta 0
 deal 76: B-A per seat 3-1 22-21 0-0 1-15  delta -2.75
 deal 77: B-A per seat 0-2 4-0 21-25 1-0  delta -0.25
 deal 78: B-A per seat 21-4 0-0 0-2 5-4  delta 4
+deal 79: B-A per seat 0-0 20-13 4-4 2-6  delta 0.75
+deal 80: B-A per seat 0-0 2-2 7-7 17-3  delta 3.5
