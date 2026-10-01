@@ -335,3 +335,38 @@ Total head-to-head CPU was about 20 minutes, plus about 5 minutes for the Leduc 
   card ("what the rule does not buy: correct beliefs"). With level-0 models it would
   not help anyway, because a maniac's bets carry no information. Level 2 and up would
   need it to matter, at a large cost. Not attempted.
+
+## Rerun: Walt with 4× root samples (n = 512)
+
+EXPLORATORY tier. Walt L1 = the live config from `public/lab/holdem/config.js` with only `n` changed from 128 to 512 (harness spec `walt1n512`; level 1, horizon 1, branch 8, n0 32, horizon0 0 unchanged). The shipped page keeps n = 128. Duplicate format, seed 1. mbb/h is A's milli-big-blinds per hand, with a 95% normal interval over deal pairs.
+
+Commands, run from `lab/holdem/`, single process, foreground (`h2h.mjs`'s `runMatch` now takes a `from` deal index; chunks reproduce a single run because deals and per-deal RNGs are keyed by deal index):
+```
+node chunk_n512.mjs walt1n512 equity 0 100 1   >> results/walt1n512_vs_equity_chunks.jsonl   # ~5.5 min
+node chunk_n512.mjs walt1n512 equity 100 200 1 >> results/walt1n512_vs_equity_chunks.jsonl   # ~5.5 min
+node chunk_n512.mjs walt1n512 equity 200 300 1 >> results/walt1n512_vs_equity_chunks.jsonl   # ~5.5 min
+node merge_n512.mjs results/walt1n512_vs_equity_chunks.jsonl | tee results/walt1n512_vs_equity_behavior.txt
+node h2h.mjs walt1n512 exploit 150 1 | tee results/walt1n512_vs_exploit.txt                   # ~2.5 min
+```
+Single-call equivalent for the equity match: `node h2h.mjs walt1n512 equity 300 1` (about 16 minutes).
+
+| match | n | deals (hands) | mbb/h | 95% CI | pairs W/L/T | ms/move mean | ms/move max |
+|---|---|---|---|---|---|---|---|
+| Walt L1 vs equity | 128 | 300 (600) | −593 | [−867, −320] | 81/129/90 | 115.5 | 902 |
+| Walt L1 vs equity | 512 | 300 (600) | **−634** | [−895, −373] | 69/124/107 | 416.3 | 1791 |
+| Walt L1 vs exploit | 128 | 150 (300) | −217 | [−686, +253] | 85/44/21 | 71.3 | 205 |
+| Walt L1 vs exploit | 512 | 150 (300) | **−253** | [−740, +234] | 78/48/24 | 286.0 | 789 |
+
+- The n = 128 exploit row is a fresh rerun that reproduced −217 exactly.
+- Same-load timing check (first 30 equity deals back to back): n = 128 gave 83 ms mean / 191 max, n = 512 gave 340 ms mean / 767 max, about 4× in the mean. Max ms is noisy under load; compare the means.
+
+**Bluff table at n = 512** (live L1 vs equity, 300 deals; cells are fold/call/raise when facing a bet, check/bet otherwise; columns are equity-vs-random quintiles). The probe's equity-bucket RNG restarts per chunk, which shifts pre-river bucket boundaries slightly; Walt's play and the mbb/h are unaffected.
+
+| situation | 0–20% | 20–40% | 40–60% | 60–80% | 80–100% |
+|---|---|---|---|---|---|
+| river, first to act or checked to | 53 / **0** | 59 / **0** | 23 / 26 | 0 / 35 | 0 / 53 |
+| turn, first to act or checked to | 41 / 0 | 93 / 4 | 47 / 33 | 2 / 57 | 1 / 40 |
+| flop, first to act or checked to | 10 / 0 | 143 / 1 | 85 / 49 | 11 / 67 | 1 / 38 |
+| river, facing a bet | 13 f / 4 c / 0 r | 3 / 22 / 0 | 0 / 21 / 16 | 0 / 14 / 55 | 0 / 22 / 64 |
+
+**What changed:** nothing but the cost. Against the equity bot Walt still loses by the same margin (−634 vs −593, a 41 mbb/h difference far inside the intervals); against the exploiter it is still not significant. River bluffs with under 40% equity: 0 of 112 chances (0 of 118 at n = 128). This is consistent with the diagnosis above: the losses come from the bet-blind belief model and the level-0 maniac opponent model, not from Monte Carlo sampling noise. Caveats: 300 deals cannot rule out a difference of a few hundred mbb/h, and only `n` was varied.
