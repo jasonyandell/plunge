@@ -147,3 +147,38 @@ Page check: `python3 -m http.server` from `public/`, then open `/lab/euchre/` (`
 - **Cost:** the full L1 ladder over the *whole hand, auction included* costs about 0.3 s per bid and 0.03 s per card in the browser.
 - **Strength:** at that budget Walt L1 plays even with PIMC with exact per-world solves and with a standard rule bot (both within ±0.1 points per hand). It is not demonstrably stronger.
 - **Height:** L2 is affordable only for card play (up to about 4 s per move) and showed no gain in a light test.
+
+## Rerun: Walt with 4× root samples (n = 96)
+
+EXPLORATORY tier. The only change from the shipped Walt L1 is `n` 24 → 96 (`level=1`, `n0=8` unchanged). Same seed (2026) and the same deal sets as the n=24 rows, so the rows are paired deal by deal. The shipped page keeps "Normal" (n = 24).
+
+```sh
+cd /home/user/plunge
+W96="walt:level=1,n=96,n0=8"; R=lab/euchre/results
+# vs rule, 200 deals (chunks 0..29, 30..74, 75..129, 130..184, 185..199)
+node lab/euchre/h2h.mjs --a $W96 --b rule --deals 30 --seed 2026 --out $R/walt1n96_vs_rule.jsonl
+node lab/euchre/h2h.mjs --a $W96 --b rule --deals 45 --start 30  --seed 2026 --out $R/walt1n96_vs_rule.jsonl
+node lab/euchre/h2h.mjs --a $W96 --b rule --deals 55 --start 75  --seed 2026 --out $R/walt1n96_vs_rule.jsonl
+node lab/euchre/h2h.mjs --a $W96 --b rule --deals 55 --start 130 --seed 2026 --out $R/walt1n96_vs_rule.jsonl
+node lab/euchre/h2h.mjs --a $W96 --b rule --deals 15 --start 185 --seed 2026 --out $R/walt1n96_vs_rule.jsonl
+# vs pimc:n=40, 150 deals
+node lab/euchre/h2h.mjs --a $W96 --b pimc:n=40 --deals 50 --seed 2026 --out $R/walt1n96_vs_pimc.jsonl
+node lab/euchre/h2h.mjs --a $W96 --b pimc:n=40 --deals 50 --start 50  --seed 2026 --out $R/walt1n96_vs_pimc.jsonl
+node lab/euchre/h2h.mjs --a $W96 --b pimc:n=40 --deals 50 --start 100 --seed 2026 --out $R/walt1n96_vs_pimc.jsonl
+node lab/euchre/summarize.mjs $R/walt1n96_vs_rule.jsonl $R/walt1n96_vs_pimc.jsonl
+node lab/euchre/bench.mjs walt:level=1,n=96,n0=8 8   # ms/move
+```
+
+| Match (seed 2026) | n | pts/hand ± 95% | deals A ahead / tied / behind | maker side A / B | Walt ms/move bid (h2h) | Walt ms/move play (h2h) |
+|---|---|---|---|---|---|---|
+| Walt L1 vs rule, 200 deals | 24 | +0.015 ± 0.092 | 41 / 122 / 37 | 208 / 192 | 406 | 46 |
+| Walt L1 vs rule, 200 deals | **96** | **+0.125 ± 0.091** | 50 / 126 / 24 | 203 / 197 | 1477 | 165 |
+| Walt L1 vs pimc:n=40, 150 deals | 24 | 0.000 ± 0.104 | 27 / 96 / 27 | 127 / 173 | 324 | 35 |
+| Walt L1 vs pimc:n=40, 150 deals | **96** | **+0.093 ± 0.104** | 37 / 95 / 18 | 124 / 176 | 1173 | 123 |
+| *ref:* PIMC-play (`pimc:n=40,bid=1`) vs rule, 200 deals | – | +0.122 ± 0.069 | 31 / 157 / 12 | 200 / 200 | – | – |
+
+Paired per-deal differences (n=96 minus n=24, same deals, per hand, 95% CI): vs rule **+0.110 ± 0.079** (60 of 200 deals scored differently); vs pimc **+0.093 ± 0.102** (49 of 150).
+
+`bench.mjs` at n=96 (8 reps, load about 1): bid mean 1163 ms (median 1049, p90 2020, max 2893); play mean 118 ms (median 31, p90 445, max 565), about 3.8× the n=24 bench. Worst single h2h move at n=96: 4.9 s (bid), 1.7 s (play).
+
+**What changed:** at n=96 Walt L1 moved from level with the rule bot to +0.125 ± 0.091 per hand, an interval that just excludes zero, and the paired gain over n=24 against the rule bot (+0.110 ± 0.079) is also just clear of zero. Against PIMC it moved from 0.000 to +0.093 ± 0.104, which does not exclude zero, and the paired gain there is unresolved. The n=96 point against the rule bot now matches PIMC-play's +0.122, but the intervals are ±0.07–0.09 and the rows share deals. Cost rose about 3.6–3.8×: about 1.2 s per bid on this CPU, so roughly 4–5 s on a phone, at the edge of the brief's budget. Treat as suggestive: no multiple-comparison correction, and the samples were not extended.
