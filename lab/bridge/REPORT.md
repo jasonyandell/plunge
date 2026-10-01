@@ -292,3 +292,46 @@ configurations.
   What remains is mostly "two tricks of reasoning + a heuristic playout". To compete with
   PIMC, it would need a much better post-horizon model: a stronger rule bot, or a
   bounded-depth lawful search.
+
+## Rerun: Walt with 4× root samples (n = 128)
+
+EXPLORATORY tier. The same 60 boards were played at n = 32 and at n = 128. Only `n` changed (32 → 128); `n0=8`, `horizon=8`, PIMC `W=20`, `deals-test.json` and `--seed 1` are identical. The shipped page keeps its settings. All 60 boards finished (about 34 min single-process, 6 chunks).
+
+```sh
+python3 -m venv /tmp/bridge-venv && /tmp/bridge-venv/bin/pip install endplay==0.5.12
+export DDS_PYTHON=/tmp/bridge-venv/bin/python
+# AB and BA only; BB (PIMC vs PIMC) is reused from the n=32 file
+for r in "0 5" "5 15" "15 28" "28 41" "41 52" "52 60"; do set -- $r
+  node lab/bridge/h2h.mjs --deals lab/bridge/deals-test.json --a walt --b pimc \
+    --walt '{"n":128,"n0":8,"horizon":8}' --W 20 --tables AB,BA --seed 1 \
+    --from $1 --to $2 --out lab/bridge/results/walt128-vs-pimc.jsonl; done
+# copy the BB table from walt-vs-pimc.jsonl into each row, then summarize
+node -e "
+const fs=require('fs');const L=f=>fs.readFileSync(f,'utf8').trim().split('\n').map(JSON.parse);
+const old=L('lab/bridge/results/walt-vs-pimc.jsonl'),nw=L('lab/bridge/results/walt128-vs-pimc.jsonl');
+fs.writeFileSync('lab/bridge/results/walt128-vs-pimc.jsonl',nw.map((r,i)=>{if(r.board!==old[i].board)throw 1;r.tables.BB=old[i].tables.BB;return JSON.stringify(r)}).join('\n')+'\n')"
+node lab/bridge/summarize.mjs lab/bridge/results/walt-vs-pimc.jsonl lab/bridge/results/walt128-vs-pimc.jsonl
+```
+
+BB (PIMC vs PIMC) seeds depend only on (seed, board, table), so it does not depend on the Walt config and is reused. After the merge, the PIMC ms/move line in the n = 128 summary mixes the old BB timings with the new AB/BA ones. The run is deterministic: a partial earlier run matched this one on all 82 tables it covered.
+
+**Walt − PIMC, make-rate per board, 60 boards, 95% CI**
+
+| | n = 32 | n = 128 |
+|---|---|---|
+| **Duplicate, both seats** (made(AB) − made(BA)) | −0.133 [−0.261, −0.006] | **−0.183 [−0.302, −0.065]** |
+| Declarer play (AB − BB, vs PIMC defence) | −0.083 [−0.217, +0.051] | −0.033 [−0.156, +0.090] |
+| Defence (BB − BA, vs PIMC declarer) | −0.050 [−0.168, +0.068] | **−0.150 [−0.262, −0.038]** |
+| Boards better / same / worse, duplicate | 4 / 44 / 12 | 2 / 45 / 13 |
+| Boards better / same / worse, declarer | 6 / 43 / 11 | 6 / 46 / 8 |
+| Boards better / same / worse, defence | 5 / 47 / 8 | 2 / 47 / 11 |
+
+| contracts made | n = 32 | n = 128 |
+|---|---|---|
+| Walt declares vs PIMC defence (AB) | 43/60 (72%) | 46/60 (77%) |
+| PIMC declares vs Walt defence (BA) | 51/60 (85%) | 57/60 (95%) |
+| PIMC declares vs PIMC defence (BB, reused) | 48/60 (80%) | 48/60 (80%) |
+
+**Walt ms/move** (Walt moves only, 60 boards): n = 32 mean 148 / median 38 / p90 458 / max 3,499 ms; n = 128 mean **643** / median 150 / p90 2,025 / max **19,416** ms. PIMC averaged 75–77 ms/move in both runs.
+
+**What changed:** 4× root samples did not improve Walt against PIMC. The duplicate gap went from −0.133 to −0.183 (now clearly below 0), within noise of the n = 32 result (the intervals overlap heavily on the same boards). Declarer play moved slightly toward PIMC (−0.083 → −0.033, CI spans 0); defence got worse (−0.050 → −0.150; PIMC made 57/60 against Walt's defence, up from 51). Cost rose about 4.3× in mean ms/move, with a 19 s worst move, outside the phone budget. Consistent with the caveat above that Walt's bridge strength is limited by its weak opponent model and post-horizon rule-bot playout rather than by sampling noise, though this single run does not isolate the cause.
