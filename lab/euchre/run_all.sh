@@ -17,5 +17,6 @@ node lab/euchre/h2h.mjs --a $W1 --b rule      --deals 100 --start 100 --seed 202
 node lab/euchre/h2h.mjs --a $W1 --b pimc:n=40 --deals 75  --seed 2026 --out $R/walt1_vs_pimc.jsonl
 node lab/euchre/h2h.mjs --a $W1 --b pimc:n=40 --deals 75  --start 75 --seed 2026 --out $R/walt1_vs_pimc.jsonl
 node lab/euchre/h2h.mjs --a $W2 --b $W1       --deals 10  --seed 2026 --out $R/walt2play_vs_walt1.jsonl
-node lab/euchre/h2h.mjs --a $W2 --b $W1       --deals 10  --start 10 --seed 2026 --out $R/walt2play_vs_walt1.jsonl
+node lab/euchre/h2h.mjs --a $W2 --b $W1       --deals 25  --start 10 --seed 2026 --out $R/walt2play_vs_walt1.jsonl
+node lab/euchre/h2h.mjs --a $W2 --b $W1       --deals 25  --start 35 --seed 2026 --out $R/walt2play_vs_walt1.jsonl
 node lab/euchre/summarize.mjs $R/*.jsonl

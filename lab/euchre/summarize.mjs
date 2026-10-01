@@ -16,5 +16,5 @@ for (const f of process.argv.slice(2)) {
   console.log(`${f}: ${n} deals (${2 * n} hands). A net points ${sum} (sum over deals).`);
   console.log(`  per deal (both seatings): mean ${mean.toFixed(3)} +/- ${half.toFixed(3)} (95% CI [${(mean - half).toFixed(3)}, ${(mean + half).toFixed(3)}])`);
   console.log(`  per hand: ${(mean / 2).toFixed(3)} +/- ${(half / 2).toFixed(3)}`);
-  console.log(`  deals A ahead / tied / behind: ${won} / ${n - won - lost} / ${lost}; contracts made by A ${makes('A')}, by B ${makes('B')}, passed out ${makes('-')}`);
+  console.log(`  deals A ahead / tied / behind: ${won} / ${n - won - lost} / ${lost}; maker side: A ${makes("A")} hands, B ${makes("B")}, passed out ${makes("-")}`);
 }

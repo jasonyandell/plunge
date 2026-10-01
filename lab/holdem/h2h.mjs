@@ -2,7 +2,7 @@
 // with the bots swapping seats (and so swapping both hole cards and position);
 // the pair total cancels card luck. Usage:
 //   node h2h.mjs <botA> <botB> <deals> [seed] [--track]
-// Bot specs: random | station | maniac | equity | exploit | flatmc | walt0 | walt1 | walt1h0 | walt2h0
+// Bot specs: random | station | maniac | equity | exploit | flatmc | walt0 | walt1 | walt1n512 | walt1h0 | walt2h0
 import { Rng } from '../../public/lab/holdem/cards.js';
 import * as G from '../../public/lab/holdem/game.js';
 import * as B from './bots.mjs';
@@ -20,6 +20,7 @@ export function makeBot(spec) {
     case 'exploit': return { ...B.equityBot({ bet: 50, raise: 60, call: 60 }), name: 'exploiter(50/60/60)' };
     case 'walt0': return B.waltBot(0, WALT_L0, 'walt-L0(n1024,full)');
     case 'walt1': return B.waltBot(LIVE_LEVEL, LIVE_CFG, 'walt-L1(live)');
+    case 'walt1n512': return B.waltBot(LIVE_LEVEL, { ...LIVE_CFG, n: 512 }, 'walt-L1(live,n512)'); // 4x root deals; all else = live config
     case 'walt1h0': return B.waltBot(1, WALT_FAST, 'walt-L1(street)');
     case 'walt2h0': return B.waltBot(2, { n: 64, horizon: 0, branch: 4, n0: 16, horizon0: 0, branch0: 1 }, 'walt-L2(street)');
     default: throw new Error('unknown bot ' + spec);
@@ -50,13 +51,14 @@ export function playHand(cards, bots, rngs, timing, track) {
   return G.payoff(pub, 0, sd);
 }
 
-export function runMatch(specA, specB, deals, seed, trackA) {
+export function runMatch(specA, specB, deals, seed, trackA, from = 0) {
   const A = makeBot(specA), Bb = makeBot(specB);
   const dealRng = new Rng(seed);
   const res = [];
   const tA = { ms: 0, n: 0, max: 0 }, tB = { ms: 0, n: 0, max: 0 };
   for (let i = 0; i < deals; i++) {
     const cards = dealCards(dealRng);
+    if (i < from) continue; // chunked runs: deal sequence and per-deal RNGs are index-keyed, so chunks reproduce the full run
     const r1 = [new Rng(seed * 1000003 + i * 4 + 1), new Rng(seed * 1000003 + i * 4 + 2)];
     const r2 = [new Rng(seed * 1000003 + i * 4 + 3), new Rng(seed * 1000003 + i * 4 + 4)];
     const g1 = playHand(cards, [A, Bb], r1, [tA, tB], trackA && { seat: 0, log: trackA });

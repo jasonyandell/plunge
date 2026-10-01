@@ -33,6 +33,7 @@ const rand32 = () => crypto.getRandomValues(new Uint32Array(1))[0];
 
 let game, hand, gen = 0; // gen invalidates stale loops after "New game"
 let humanResolve = null;
+const aiTimes = []; // per-move Walt timings (shown in footer, read by tests)
 
 function newGame() {
   gen++;
@@ -67,6 +68,7 @@ async function loop(g) {
         const r = await askWalt(seat, priv, pub);
         a = r.action;
         $('timing').textContent = `last Walt move: ${r.ms} ms`;
+        aiTimes.push({ ms: r.ms, phase: pub.phase });
         const left = AI_PAUSE - (performance.now() - t0);
         if (left > 0) await sleep(left);
       }
@@ -265,4 +267,4 @@ $('newGame').onclick = newGame;
 newGame();
 
 // test hook for automated end-to-end checks
-window.__euchre = { get state() { return { game, pub: hand.pub, waiting: !!humanResolve }; } };
+window.__euchre = { aiTimes, get state() { return { game, pub: hand.pub, waiting: !!humanResolve }; } };
