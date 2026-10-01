@@ -16,4 +16,4 @@ const m = runMatch(a, b, +t, +(sd || 1), (view, act) => {
   tab[key] = tab[key] || Array.from({ length: 5 }, () => [0, 0, 0]);
   tab[key][bucket][act]++;
 }, +f);
-console.log(JSON.stringify({ A: m.A, B: m.B, from: +f, to: +t, seed: +(sd || 1), res: m.res.slice(+f), tab, tA: m.tA, wallSec: Math.round((Date.now() - t0) / 1000) }));
+console.log(JSON.stringify({ A: m.A, B: m.B, from: +f, to: +t, seed: +(sd || 1), res: m.res, tab, tA: m.tA, wallSec: Math.round((Date.now() - t0) / 1000) }));

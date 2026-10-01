@@ -191,3 +191,25 @@ deal 80: B-A per seat 4-0 18-2 4-4 0-3  delta 4.25
 deal 81: B-A per seat 15-0 8-10 0-0 3-8  delta 2
 deal 82: B-A per seat 2-13 0-0 22-4 2-13  delta -1
 deal 83: B-A per seat 0-0 20-8 0-13 6-4  delta 0.25
+deal 84: B-A per seat 15-6 0-0 5-4 6-3  delta 3.25
+deal 85: B-A per seat 11-3 14-0 1-0 0-0  delta 5.75
+deal 86: B-A per seat 3-16 0-0 19-0 4-4  delta 1.5
+deal 87: B-A per seat 14-14 3-5 2-0 7-2  delta 1.25
+deal 88: B-A per seat 14-0 5-0 0-1 7-7  delta 4.5
+deal 89: B-A per seat 1-1 25-9 0-7 0-1  delta 2
+deal 90: B-A per seat 2-1 20-5 3-3 1-1  delta 4
+deal 91: B-A per seat 6-4 0-0 0-0 20-21  delta 0.25
+deal 92: B-A per seat 4-5 2-1 0-0 20-1  delta 4.75
+deal 93: B-A per seat 10-18 2-7 14-14 0-0  delta -3.25
+deal 94: B-A per seat 26-2 26-4 26-26 0-0  delta 11.5
+deal 95: B-A per seat 26-0 26-1 0-0 26-2  delta 18.75
+deal 96: B-A per seat 1-1 0-0 0-0 25-22  delta 0.75
+deal 97: B-A per seat 0-16 0-0 21-19 5-4  delta -3.25
+deal 98: B-A per seat 10-20 14-0 2-0 0-0  delta 1.5
+deal 99: B-A per seat 14-0 0-0 3-6 9-7  delta 3.25
+walt:n=192,n0=6,h=4,r=rule vs rule 1v3 seed=11 deals=50: B-A = 1.940 [0.885, 2.995]  A better/worse/tied 41/7/2  moons 6  A ms/move 126.6 max 1395  wall 323s
+
+
+# COMBINED (computed from per-deal deltas of the chunks above; deal-level mean +/- 1.96 sd/sqrt(n))
+mcr deals 100 B-A -0.083 [-0.733, 0.568] 40/51/9 moons 0 ms/move NaN max 0 wall 0s
+rule deals 100 B-A 1.978 [1.342, 2.613] 81/16/3 moons 0 ms/move NaN max 0 wall 0s
