@@ -136,3 +136,47 @@ No console errors or page errors. No horizontal overflow at 360 px (scrollWidth 
 - **Cost fits.** Walt runs well inside the browser budget (tens of ms per move) and plays sound spades: +165 per deal against random, and a tie with the standard samplers. The card's interface maps cleanly once the outcome is generalized to an integer, zero-sum hand payoff.
 - **No added strength.** At affordable settings the ladder adds nothing measurable over flat Monte Carlo with the same rollout policy. It is clearly worse when that rollout policy *is* the opponent. In spades, the random bottom rung is a poor model of real players, and a 13-trick hand forces a short horizon. So most of Walt's strength comes from the rollout policy beyond the horizon and the root sample size, not from the ladder.
 - **Untested.** Whether a deeper horizon or level 2 would change this is untested.
+
+## Rerun: Walt with 4× root samples (n = 256)
+
+EXPLORATORY tier. One variable changed: root deals n=64 → n=256. n0=4, horizon=4, the rule-player rollouts, the seed, the deals and the duplicate protocol are all unchanged. The shipped page keeps its n=64 setting.
+
+Commands (repo root, Node 22, single process, foreground, chunked under about 9 minutes; `h2h.mjs` appends to `--out`):
+```
+W=walt:n=256,n0=4,horizon=4; R=lab/spades/results
+node lab/spades/h2h.mjs $W rule        --seed 2026 --from 0   --to 10  --out $R/walt256_vs_rule.jsonl    # timing probe, kept
+node lab/spades/h2h.mjs $W rule        --seed 2026 --from 10  --to 60  --out $R/walt256_vs_rule.jsonl
+node lab/spades/h2h.mjs $W rule        --seed 2026 --from 60  --to 115 --out $R/walt256_vs_rule.jsonl
+node lab/spades/h2h.mjs $W rule        --seed 2026 --from 115 --to 160 --out $R/walt256_vs_rule.jsonl
+node lab/spades/h2h.mjs $W rule        --seed 2026 --from 160 --to 200 --out $R/walt256_vs_rule.jsonl
+node lab/spades/h2h.mjs $W flatmc:n=64 --seed 2026 --from 0   --to 50  --out $R/walt256_vs_flatmc.jsonl
+node lab/spades/h2h.mjs $W flatmc:n=64 --seed 2026 --from 50  --to 100 --out $R/walt256_vs_flatmc.jsonl
+node lab/spades/summarize.mjs $R/walt256_vs_rule.jsonl
+node lab/spades/compare.mjs   $R/walt256_vs_rule.jsonl $R/flatmc_vs_rule.jsonl   # paired walt256 - flatmc
+node lab/spades/compare.mjs   $R/walt256_vs_rule.jsonl $R/walt_vs_rule.jsonl     # paired walt256 - walt64
+node lab/spades/summarize.mjs $R/walt256_vs_flatmc.jsonl
+node lab/spades/bench_walt.mjs '[{"n":64,"n0":4,"horizon":4},{"n":256,"n0":4,"horizon":4}]' 10
+```
+
+| | Walt n=64 (existing) | Walt n=256 (new) |
+|---|---|---|
+| vs rule, 200 deals: mean diff per deal [95% CI] | +8.8 [−5.2, +22.7] | **+37.2 [+22.4, +52.0]** |
+| vs rule: deals ahead / level / behind | 90 / 66 / 44 | 114 / 57 / 29 |
+| vs rule: contracts made, Walt / rule (Walt-only, rule-only) | 295 / 291 (53, 49) | 320 / 265 (83, 28) |
+| Paired walt − flatmc (flatmc n=64 is +46.7 [+32.0, +61.5] vs rule), 200 deals | −38.0 [−57.4, −18.6] | **−9.5 [−30.2, +11.1]** |
+| Paired walt256 − walt64, 200 deals | n/a | +28.5 [+12.2, +44.7] |
+| vs flatmc n=64, 100 deals: mean diff [95% CI] | +1.9 [−20.1, +23.8] | **+38.9 [+16.6, +61.1]** |
+| vs flatmc: deals ahead / level / behind | 28 / 37 / 35 | 42 / 38 / 20 |
+| vs flatmc: contracts made, Walt / flatmc (Walt-only, flatmc-only) | 144 / 144 (28, 28) | 157 / 127 (45, 15) |
+| ms/move from jsonl (mean of per-table means), vs rule run | 33.7 | 124.9 |
+| ms/move from jsonl, vs flatmc run | 32.0 | 111.2 |
+| `bench_walt.mjs` ms/move, mean (max) | 32.6 (419) | 118.5 (1686) |
+| `bench_walt.mjs` rollouts/move | about 6,500 | about 25,000 |
+
+Timing caveat: the machine was shared (load about 5.7 on 4 cores), and the `bench_walt.mjs` runs covered 10 deals. The jsonl files store only per-table means, so the max comes from the benchmark. Mean cost scaled about 3.6× for 4× the samples.
+
+What changed: with 4× root samples Walt moves from tied with rule (+8.8) to clearly ahead (+37.2). The paired gap to flat MC (n=64) against rule shrinks from −38.0 to −9.5, and its CI now includes 0. Against flat MC (n=64) head to head, Walt n=256 is ahead by +38.9 [+16.6, +61.1], where n=64 was a tie. Caveats:
+- Walt n=256 uses about 4× the compute of flat MC n=64. Flat MC at n=256 was not run, so this does not show that the ladder adds value at equal samples. The earlier horizon-1 tuning data (seed 7) already showed root n dominating, with +33 at n=64 and +50 at n=128.
+- The paired −9.5 against flat MC is unresolved: the CI spans ±20, and the other comparisons have CIs of a similar width.
+- The 100-deal vs-flatmc comparison and the 200-deal vs-rule comparison share their first deals (0–99), so they are not independent.
+- At about 120 ms mean and 1.7 s max on this loaded machine, n=256 is roughly 4× the shipped page's cost.
