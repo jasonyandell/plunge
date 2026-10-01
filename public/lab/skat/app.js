@@ -98,7 +98,7 @@ async function loop(token) {
     const pub = st.pub;
     if (pub.nPlayed === 30) break;
     const seat = pub.turn;
-    if (seat === st.human) { render(); return; } // wait for a click
+    if (seat === st.human) { st.waitingHuman = true; render(); return; } // wait for a click
     render();
     const priv = S.privateOf(st.deal, seat, pub);
     const t0 = performance.now();
@@ -140,12 +140,12 @@ function onCardClick(c) {
     else if (S.popcount(st.pick.discard) < 2) st.pick.discard |= bit;
     showPickup(); render(); return;
   }
-  if (st.phase !== 'play' || st.pub.turn !== st.human || st.busy) return;
+  if (st.phase !== 'play' || st.pub.turn !== st.human || !st.waitingHuman) return;
   const L = S.legalMask(st.deal.h[st.human] & ~st.pub.played, st.pub);
   if (!((L >> c) & 1)) return;
-  st.busy = true;
+  st.waitingHuman = false;
   const token = gameToken;
-  applyMove(c, token).then(() => { if (token === gameToken) { st.busy = false; loop(token); } });
+  applyMove(c, token).then(() => { if (token === gameToken) loop(token); });
 }
 
 function finish() {
@@ -196,7 +196,7 @@ function render() {
     cards = S.bits(st.pick.h12);
   } else {
     cards = S.bits(st.deal.h[st.human] & ~pub.played);
-    if (st.phase === 'play' && pub.turn === st.human) legal = S.legalMask(st.deal.h[st.human] & ~pub.played, pub);
+    if (st.phase === 'play' && st.waitingHuman) legal = S.legalMask(st.deal.h[st.human] & ~pub.played, pub);
   }
   cards.sort((a, b) => sortKey(a, g === null ? 4 : g) - sortKey(b, g === null ? 4 : g));
   for (const c of cards) {
@@ -210,7 +210,7 @@ function render() {
   // message
   const msg = $('msg'); msg.className = 'msg';
   if (st.phase === 'pickup') msg.textContent = 'Choose your game and 2 cards to discard.';
-  else if (st.phase === 'play') msg.textContent = pub.turn === st.human ? 'Your turn — tap a highlighted card.' : `${seatName(pub.turn)} is thinking…`;
+  else if (st.phase === 'play') msg.textContent = st.waitingHuman ? 'Your turn — tap a highlighted card.' : pub.turn === st.human ? '…' : `${seatName(pub.turn)} is thinking…`;
   else {
     const total = pub.declPts + st.deal.sp;
     const made = total >= 61;
