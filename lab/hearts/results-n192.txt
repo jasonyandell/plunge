@@ -72,3 +72,13 @@ deal 67: B-A per seat 11-12 0-4 14-13 1-0  delta -0.75
 deal 68: B-A per seat 2-0 3-3 8-8 13-18  delta -0.75
 deal 69: B-A per seat 4-4 3-3 18-18 1-1  delta 0
 deal 70: B-A per seat 5-17 4-1 2-2 15-16  delta -2.5
+deal 71: B-A per seat 9-12 0-0 4-1 13-16  delta -0.75
+deal 72: B-A per seat 1-2 13-14 0-0 12-12  delta -0.5
+deal 73: B-A per seat 2-1 3-13 4-7 17-5  delta 0
+deal 74: B-A per seat 5-7 15-14 6-20 0-0  delta -3.75
+walt:n=192,n0=6,h=4,r=rule vs mcr:n=200 1v3 seed=11 deals=50: B-A = -0.300 [-1.079, 0.479]  A better/worse/tied 18/26/6  moons 7  A ms/move 111.5 max 2255  wall 306s
+# mcr chunk first=75 deals=25
+deal 75: B-A per seat 8-8 0-0 4-4 14-14  delta 0
+deal 76: B-A per seat 3-1 22-21 0-0 1-15  delta -2.75
+deal 77: B-A per seat 0-2 4-0 21-25 1-0  delta -0.25
+deal 78: B-A per seat 21-4 0-0 0-2 5-4  delta 4
