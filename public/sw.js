@@ -34,6 +34,9 @@ self.addEventListener('fetch', (e) => {
   if (['localhost', '127.0.0.1'].includes(url.hostname) || url.pathname.startsWith('/api/')) return;
   // The deploy beacon must always come from the network (deploy-aware reload).
   if (url.pathname === '/version.json') return;
+  // The /lab/ game pages are separate experiments: never cached, and their
+  // navigations must not overwrite the Plunge shell held as /index.html.
+  if (url.pathname.startsWith('/lab/')) return;
 
   // Navigations: network-first, shell fallback (offline play).
   if (req.mode === 'navigate') {
