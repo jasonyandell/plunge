@@ -158,3 +158,22 @@ deal 49: B-A per seat 16-14 5-7 4-4 1-1  delta 0
 walt:n=192,n0=6,h=4,r=rule vs rule 1v3 seed=11 deals=50: B-A = 2.015 [1.296, 2.734]  A better/worse/tied 40/9/1  moons 4  A ms/move 117.5 max 1792  wall 302s
 # rule chunk first=50 deals=50
 deal 50: B-A per seat 24-0 0-0 2-26 0-0  delta 0
+deal 51: B-A per seat 2-2 1-1 21-5 2-13  delta 1.25
+deal 52: B-A per seat 1-1 25-12 0-14 0-13  delta -3.5
+deal 53: B-A per seat 0-0 20-8 3-15 3-0  delta 0.75
+deal 54: B-A per seat 4-4 18-16 0-0 4-5  delta 0.25
+deal 55: B-A per seat 10-11 16-13 0-0 0-0  delta 0.5
+deal 56: B-A per seat 0-0 2-14 4-3 20-8  delta 0.25
+deal 57: B-A per seat 1-1 1-1 16-18 8-6  delta 0
+deal 58: B-A per seat 5-15 0-3 6-1 15-13  delta -1.5
+deal 59: B-A per seat 4-8 17-15 0-0 5-1  delta 0.5
+deal 60: B-A per seat 3-2 23-9 0-0 0-0  delta 3.75
+deal 61: B-A per seat 19-1 1-1 1-0 5-17  delta 1.75
+deal 62: B-A per seat 12-22 0-0 13-0 1-1  delta 0.75
+deal 63: B-A per seat 1-4 22-21 0-0 3-16  delta -3.75
+deal 64: B-A per seat 4-3 13-13 5-0 4-1  delta 2.25
+deal 65: B-A per seat 1-5 4-5 17-0 4-4  delta 3
+deal 66: B-A per seat 17-0 3-0 6-4 0-0  delta 5.5
+deal 67: B-A per seat 10-7 2-1 13-13 1-0  delta 1.25
+deal 68: B-A per seat 15-0 3-3 7-4 1-0  delta 4.75
+deal 69: B-A per seat 12-9 0-2 14-14 0-0  delta 0.25
