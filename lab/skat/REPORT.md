@@ -117,3 +117,28 @@ Walt vs PIMC took about 12 min wall (run as two 50-deal chunks, `--from 0 --to 5
 - The exact uniform sampler handles voids and the unknown skat.
 
 The full level-1 ladder does not fit in a phone budget at full depth, so the result depends on a horizon (6 plies live, 3 for modeled minds) with a cheap lawful rollout, plus an endgame full search. With those, Walt runs at about 70–140 ms/move on average (worst moves ~1–5 s in Node). Under that budget it plays level with PIMC with exact double-dummy solving on duplicate deals: −0.04, CI [−0.13, +0.05]. Both beat a rule bot by about +0.2–0.3.
+
+## Rerun: Walt with 4× root samples (n = 128)
+
+EXPLORATORY tier. Same harness, seed, deals and PIMC baseline as the n = 32 row above. Only Walt's root sample count `n` changed (32 to 128); `n0`, horizon and endgame are unchanged. The shipped page keeps "std" (n = 32).
+
+**Commands** (repo root, single process, foreground, 6 chunks, about 33.5 min wall in total):
+```sh
+A='walt:{"n":128,"n0":6,"horizon":[3,6],"endgame":15}'
+node lab/skat/h2h.mjs --a "$A" --b pimc:20 --seed 2 --from 0  --to 5   --out lab/skat/results/walt128-vs-pimc.jsonl
+node lab/skat/h2h.mjs --a "$A" --b pimc:20 --seed 2 --from 5  --to 25  --out lab/skat/results/walt128-vs-pimc.jsonl
+node lab/skat/h2h.mjs --a "$A" --b pimc:20 --seed 2 --from 25 --to 45  --out lab/skat/results/walt128-vs-pimc.jsonl
+node lab/skat/h2h.mjs --a "$A" --b pimc:20 --seed 2 --from 45 --to 67  --out lab/skat/results/walt128-vs-pimc.jsonl
+node lab/skat/h2h.mjs --a "$A" --b pimc:20 --seed 2 --from 67 --to 87  --out lab/skat/results/walt128-vs-pimc.jsonl
+node lab/skat/h2h.mjs --a "$A" --b pimc:20 --seed 2 --from 87 --to 100 --out lab/skat/results/walt128-vs-pimc.jsonl
+node lab/skat/h2h.mjs --summary lab/skat/results/walt128-vs-pimc.jsonl
+```
+
+| Walt config (A) vs PIMC(n=20) | deals | A-decl made | B-decl made | both / neither / A-only / B-only | mean diff (A − B) | 95% CI | Walt ms/move mean / max | PIMC ms/move mean / max |
+|---|---|---|---|---|---|---|---|---|
+| std, n = 32 (`walt-vs-pimc.jsonl`) | 100 | 55 | 59 | 47 / 33 / 8 / 12 | −0.040 | [−0.128, +0.048] | 136.7 / 4,889 | 102.6 / 21,632 |
+| n = 128 (`walt128-vs-pimc.jsonl`) | 100 | 57 | 58 | 48 / 33 / 9 / 10 | −0.010 | [−0.096, +0.076] | 579.9 / 16,558 | 89.0 / 19,509 |
+
+Each ms/move figure is over 3000 moves on the shared 4-core box.
+
+**What changed.** Walt's mean cost per move rose about 4.2× (137 → 580 ms) and its worst move about 3.4× (4.9 s → 16.6 s). The point estimate moved from −0.040 to −0.010 (A-only/B-only 8/12 → 9/10). The CI is still about ±0.09 wide and contains both 0 and the old estimate, so the two configurations cannot be separated on these 100 deals. Individual games did change (16 A-declarer and 17 B-declarer outcomes flipped; 21 per-deal duplicate scores changed), but the flips roughly cancelled. There is no evidence that 4× root samples improves Walt against PIMC(n=20) at this horizon/endgame setting, and n = 128 is no longer compute-matched: Walt now uses about 6.5× PIMC's mean ms/move (n = 32 was about 1.3×), and a 16.6 s worst move is outside the phone budget.
