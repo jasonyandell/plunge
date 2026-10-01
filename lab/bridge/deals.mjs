@@ -1,7 +1,7 @@
 // Generate the h2h deal set: seeded random deals, contract by the engine's
 // deterministic rule, screened by double dummy to "tight" contracts
 // (DD declarer tricks within one of the target). EXPLORATORY tier.
-//   DDS_PYTHON=<venv>/bin/python node lab/bridge/deals.mjs --seed 2026 --count 120 > lab/bridge/deals.json
+//   DDS_PYTHON=<venv>/bin/python node lab/bridge/deals.mjs --seed 7 --count 60 > lab/bridge/deals-test.json
 import { Rng, randomDeal, contractFor, toPBN, contractText } from '../../public/lab/bridge/engine.js';
 import { DDS } from './dds.mjs';
 

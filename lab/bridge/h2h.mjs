@@ -14,7 +14,7 @@ import { waltPlayer, rulePlayer, randomPlayer, pimcPlayer } from './players.mjs'
 import { DDS } from './dds.mjs';
 
 const arg = (k, dflt) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : dflt; };
-const dealsFile = arg('deals', new URL('./deals.json', import.meta.url).pathname);
+const dealsFile = arg('deals', new URL('./deals-test.json', import.meta.url).pathname);
 const from = Number(arg('from', 0)), to = Number(arg('to', 10));
 const seed = Number(arg('seed', 1));
 const waltCfg = JSON.parse(arg('walt', '{"level":1,"n":16,"n0":4,"horizon":8,"rollout":0}'));
