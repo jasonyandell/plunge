@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Euchre vs Walt</title>
+<meta name="description" content="Play euchre as South with a Walt partner against Walt opponents (Plunge lab experiment).">
+<style>
+  :root {
+    --felt: #1f5f3f; --felt-dark: #174a31; --ink: #f4f1e8; --muted: #b9d3c3;
+    --card: #fffdf7; --card-ink: #1d1d1f; --red: #c62828; --accent: #ffd54f;
+    --btn: #2e7d55; --btn-ink: #fff; --shadow: rgba(0,0,0,.35);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--felt-dark); color: var(--ink);
+    font: 15px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 8px 16px 24px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 4px 0; }
+  .score { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .score span { padding: 2px 8px; border-radius: 6px; background: var(--felt); margin-left: 4px; }
+  #info { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; color: var(--muted); margin: 6px 0; min-height: 20px; }
+  #info b { color: var(--ink); }
+  #table { position: relative; background: var(--felt); border-radius: 14px; box-shadow: inset 0 0 30px var(--shadow);
+    height: 300px; margin: 6px 0; }
+  .seat { position: absolute; text-align: center; font-size: 13px; color: var(--muted); }
+  .seat .name { font-weight: 600; color: var(--ink); }
+  .seat .bubble:empty { visibility: hidden; }
+  .seat .bubble { display: inline-block; margin-top: 2px; padding: 1px 7px; border-radius: 10px; background: rgba(0,0,0,.25);
+    color: var(--accent); font-weight: 600; min-height: 1.3em; }
+  .seat.turn .name { color: var(--accent); }
+  .seat.turn .name::after { content: ' \25CF'; }
+  #seat2 { top: 6px; left: 50%; transform: translateX(-50%); }
+  #seat1 { top: 50%; left: 6px; transform: translateY(-50%); width: 76px; }
+  #seat3 { top: 50%; right: 6px; transform: translateY(-50%); width: 76px; }
+  #seat0 { bottom: 6px; left: 50%; transform: translateX(-50%); }
+  .backs { display: flex; justify-content: center; gap: 2px; margin-top: 3px; }
+  .backs i { width: 9px; height: 14px; border-radius: 2px; background: #8e2b2b; border: 1px solid #f0d0d0; display: block; }
+  #center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 170px; height: 170px; }
+  #center .slot { position: absolute; }
+  #center .s2 { top: 0; left: 50%; transform: translateX(-50%); }
+  #center .s0 { bottom: 0; left: 50%; transform: translateX(-50%); }
+  #center .s1 { left: 0; top: 50%; transform: translateY(-50%); }
+  #center .s3 { right: 0; top: 50%; transform: translateY(-50%); }
+  #center .mid { left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; font-size: 12px; color: var(--muted); }
+  .card { display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 44px; height: 62px; border-radius: 6px; background: var(--card); color: var(--card-ink);
+    box-shadow: 0 1px 3px var(--shadow); font-weight: 700; font-size: 17px; line-height: 1.05; user-select: none; }
+  .card .su { font-size: 20px; }
+  .card.red { color: var(--red); }
+  .card.win { outline: 3px solid var(--accent); }
+  .card.down { background: repeating-linear-gradient(45deg, #8e2b2b 0 4px, #a33 4px 8px); color: transparent; }
+  #hand { display: flex; justify-content: center; gap: 5px; flex-wrap: nowrap; min-height: 70px; margin: 8px 0 4px; }
+  #hand .card { width: 50px; height: 70px; font-size: 19px; cursor: default; }
+  #hand .card .su { font-size: 23px; }
+  #hand .card.legal { cursor: pointer; transform: translateY(-6px); box-shadow: 0 4px 8px var(--shadow); }
+  #hand .card.dim { opacity: .55; }
+  #prompt { text-align: center; min-height: 22px; margin: 4px 0; }
+  #actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; min-height: 44px; }
+  button { font: inherit; font-weight: 600; padding: 9px 14px; border-radius: 9px; border: 0; background: var(--btn); color: var(--btn-ink);
+    min-height: 40px; cursor: pointer; box-shadow: 0 1px 3px var(--shadow); }
+  button.secondary { background: rgba(255,255,255,.12); }
+  button:disabled { opacity: .5; cursor: default; }
+  #log { margin-top: 10px; font-size: 13px; color: var(--muted); max-height: 140px; overflow-y: auto; border-top: 1px solid rgba(255,255,255,.1); padding-top: 6px; }
+  #log div { padding: 1px 0; }
+  footer { margin-top: 10px; font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  select { font: inherit; padding: 4px; border-radius: 6px; }
+  @media (max-width: 380px) {
+    main { padding: 6px 10px 20px; }
+    #hand .card { width: 44px; height: 64px; font-size: 17px; }
+    #table { height: 280px; }
+    #center { width: 150px; height: 160px; }
+    .card { width: 40px; height: 56px; font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Euchre vs Walt</h1>
+    <div class="score">Us <span id="scoreUs">0</span> Them <span id="scoreThem">0</span> <small style="font-weight:400;color:var(--muted)">to 10</small></div>
+  </header>
+  <div id="info"></div>
+  <div id="table">
+    <div class="seat" id="seat2"><div class="name">North (Walt, partner)</div><div class="backs"></div><div class="bubble"></div></div>
+    <div class="seat" id="seat1"><div class="name">West (Walt)</div><div class="backs"></div><div class="bubble"></div></div>
+    <div class="seat" id="seat3"><div class="name">East (Walt)</div><div class="backs"></div><div class="bubble"></div></div>
+    <div class="seat" id="seat0"><div class="name">South (you)</div><div class="bubble"></div></div>
+    <div id="center"></div>
+  </div>
+  <div id="prompt"></div>
+  <div id="hand"></div>
+  <div id="actions"></div>
+  <div id="log"></div>
+  <footer>
+    <label>Walt strength
+      <select id="strength">
+        <option value="fast">Fast (n=12, n0=6)</option>
+        <option value="normal" selected>Normal (n=24, n0=8)</option>
+        <option value="strong">Strong (n=40, n0=10)</option>
+      </select>
+    </label>
+    <button class="secondary" id="newGame">New game</button>
+    <span id="timing"></span>
+  </footer>
+  <footer>Straight euchre: 24 cards, turned-up card, right/left bowers, no going alone, all-pass redeals.
+    Make 3–4 tricks = 1, march = 2, euchred = 2 to the defenders. Every AI seat is Walt level 1 (a best response to
+    random play, sampling the deals it cannot rule out). Experimental lab page.</footer>
+</main>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

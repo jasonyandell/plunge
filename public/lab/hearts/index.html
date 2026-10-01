@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hearts vs Walt</title>
+<style>
+  :root {
+    --felt: #1f5d3a; --felt2: #17482d; --ink: #f3f1ea; --muted: #b9cbbd;
+    --card: #fdfcf8; --cardInk: #1b1b1b; --red: #c0262d; --gold: #f2c14e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--felt2); color: var(--ink);
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 10px 12px 24px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  h1 { font-size: 1.15rem; margin: 4px 0; }
+  h1 small { color: var(--muted); font-weight: 400; font-size: .8rem; }
+  button {
+    font: inherit; border: 0; border-radius: 8px; padding: 7px 12px; cursor: pointer;
+    background: var(--gold); color: #222; font-weight: 600;
+  }
+  button:disabled { opacity: .45; cursor: default; }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid #6f9a7d; font-weight: 500; }
+  table.scores { width: 100%; border-collapse: collapse; font-size: .9rem; margin: 6px 0; }
+  .scores th, .scores td { padding: 3px 4px; text-align: center; border-bottom: 1px solid #2f6e48; }
+  .scores th:first-child, .scores td:first-child { text-align: left; }
+  .scores tr.lead td { color: var(--gold); }
+  .info { display: flex; gap: 10px; flex-wrap: wrap; font-size: .85rem; color: var(--muted); margin: 4px 0 8px; }
+  .info b { color: var(--ink); }
+  .pill { padding: 2px 8px; border-radius: 999px; background: #2a6a45; }
+  .pill.on { background: var(--red); color: #fff; }
+  .table {
+    position: relative; background: radial-gradient(ellipse at center, #2c7a4d 0%, var(--felt) 70%);
+    border-radius: 18px; height: 300px; margin: 6px 0 10px; box-shadow: inset 0 0 30px rgba(0,0,0,.35);
+  }
+  .seat { position: absolute; font-size: .8rem; color: var(--muted); text-align: center; line-height: 1.2; }
+  .seat b { color: var(--ink); display: block; font-size: .85rem; }
+  .seat.turn b { color: var(--gold); }
+  .seat.n { top: 6px; left: 50%; transform: translateX(-50%); }
+  .seat.w { left: 10px; top: 6px; text-align: left; }
+  .seat.e { right: 10px; top: 6px; text-align: right; }
+  .seat.s { bottom: 6px; left: 50%; transform: translateX(-50%); }
+  .slot { position: absolute; }
+  .slot.n { top: 50px; left: 50%; transform: translateX(-50%); }
+  .slot.w { left: calc(50% - 110px); top: 50%; transform: translateY(-50%); }
+  .slot.e { right: calc(50% - 110px); top: 50%; transform: translateY(-50%); }
+  .slot.s { bottom: 34px; left: 50%; transform: translateX(-50%); }
+  .card {
+    display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 46px; height: 64px; border-radius: 7px; background: var(--card); color: var(--cardInk);
+    font-weight: 700; font-size: 1.05rem; line-height: 1; box-shadow: 0 1px 3px rgba(0,0,0,.4);
+    border: 2px solid transparent; user-select: none;
+  }
+  .card .s { font-size: 1.15rem; margin-top: 2px; }
+  .card.red { color: var(--red); }
+  .card.win { border-color: var(--gold); }
+  .hand { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; min-height: 70px; }
+  .hand .card { cursor: default; opacity: .5; }
+  .hand .card.legal { opacity: 1; cursor: pointer; }
+  .hand .card.legal:hover { transform: translateY(-4px); }
+  .hand .card.sel { transform: translateY(-9px); border-color: var(--gold); opacity: 1; }
+  .hand .card.recv { box-shadow: 0 0 0 2px #7fc3ff, 0 1px 3px rgba(0,0,0,.4); }
+  .status { min-height: 1.6em; text-align: center; margin: 8px 0; font-size: .95rem; }
+  .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 6px 0; }
+  .last { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); }
+  .last .card { width: 34px; height: 46px; font-size: .85rem; }
+  .last .card .s { font-size: .9rem; }
+  details { font-size: .82rem; color: var(--muted); margin-top: 14px; }
+  details p { margin: 6px 0; }
+  @media (max-width: 420px) {
+    .table { height: 270px; }
+    .card { width: 38px; height: 54px; font-size: .92rem; }
+    .slot.w { left: calc(50% - 92px); } .slot.e { right: calc(50% - 92px); }
+    .slot.n { top: 46px; } .slot.s { bottom: 30px; }
+    .hand { gap: 3px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Hearts <small>you (South) vs three Walt players</small></h1>
+    <button class="ghost" id="newGame">New game</button>
+  </header>
+  <table class="scores" id="scores"></table>
+  <div class="info" id="info"></div>
+  <div class="table" id="table">
+    <div class="seat n" id="seat2"></div><div class="seat w" id="seat1"></div>
+    <div class="seat e" id="seat3"></div><div class="seat s" id="seat0"></div>
+    <div class="slot n" id="slot2"></div><div class="slot w" id="slot1"></div>
+    <div class="slot e" id="slot3"></div><div class="slot s" id="slot0"></div>
+  </div>
+  <div class="status" id="status"></div>
+  <div class="row" id="actions"></div>
+  <div class="hand" id="hand"></div>
+  <div class="last" id="last"></div>
+  <details>
+    <summary>About this experiment</summary>
+    <p>Rules: 4 players, no partners, 13 tricks. 2♣ leads trick one; follow suit if you can;
+      no hearts or Q♠ on trick one unless you hold nothing else; hearts can't be led until a heart
+      has been played (unless you hold only hearts). Each heart is 1 point, Q♠ is 13. Take all
+      26 and you shoot the moon: you score 0, everyone else 26. Passing rotates
+      left, right, across, hold. A hand ends once every point card has been taken. Game ends when
+      someone reaches 100; lowest total wins.</p>
+    <p>Walt (EXPLORATORY): each Walt seat samples deals consistent with its own hand, the public
+      record and the cards it passed, then picks one card for all of them, modeling the other
+      seats as players who answer the same question from their own chairs one rung lower
+      (bottom rung: random legal). Objective: minimize its own hand score, summed over sampled
+      deals (exact integers). Modeled minds look a few plays ahead; beyond that a quick rule-based
+      playout finishes the hand. Walt seats pass with a fixed heuristic, not by search.</p>
+    <p id="settings"></p>
+  </details>
+</main>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

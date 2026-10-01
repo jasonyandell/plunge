@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Walt Hold'em</title>
+<style>
+  :root { --bg:#f6efe1; --ink:#2b1d12; --muted:#6b5643; --card:#fffaf0; --line:#e2d3b8; --accent:#46291a; --chip:#efe2c8;
+          --felt:#1f5a3c; --felt2:#174730; --feltink:#f1f7ef; --red:#b3261e; --pc:#ffffff; --pcink:#1b1b1b; --gold:#e0a84f; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1d140d; --ink:#f4ead4; --muted:#c3ad92; --card:#2a1d13; --line:#4a3523; --accent:#e0a84f; --chip:#3a2a1c;
+          --felt:#173f2b; --felt2:#102e1f; --pc:#f4efe6; --red:#c0392b; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.4 Georgia, serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 14px 16px 40px; }
+  header { display:flex; align-items:baseline; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+  h1 { font-size:1.45rem; margin:0; }
+  header a { color:var(--muted); font-size:.9rem; }
+  .sub { color:var(--muted); font-size:.88rem; margin:2px 0 12px; }
+  .table { background: radial-gradient(ellipse at center, var(--felt) 0%, var(--felt2) 100%); color:var(--feltink);
+           border-radius:22px; padding:14px 12px; display:grid; gap:12px; box-shadow: inset 0 0 0 3px rgba(0,0,0,.25); }
+  .seat { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+  .who { display:flex; flex-direction:column; min-width:120px; }
+  .name { font-weight:bold; }
+  .stack { font-size:.9rem; opacity:.9; }
+  .badge { display:inline-block; font-size:.72rem; padding:0 6px; border-radius:999px; background:var(--gold); color:#2b1d12; margin-left:6px; vertical-align:2px; }
+  .cards { display:flex; gap:6px; min-height:64px; }
+  .pc { width:44px; height:62px; border-radius:6px; background:var(--pc); color:var(--pcink); display:flex; flex-direction:column;
+        align-items:center; justify-content:center; font:bold 1.15rem/1 system-ui, sans-serif; box-shadow:0 1px 3px rgba(0,0,0,.4); }
+  .pc .s { font-size:1.2rem; margin-top:2px; }
+  .pc.red { color:var(--red); }
+  .pc.back { background: repeating-linear-gradient(45deg, #7a2e1d, #7a2e1d 5px, #8f3a26 5px, #8f3a26 10px); border:2px solid #f4ead4; }
+  .pc.empty { background: transparent; box-shadow: inset 0 0 0 2px rgba(255,255,255,.18); }
+  .pc.win { outline: 3px solid var(--gold); }
+  .mid { display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .pot { font-size:.95rem; }
+  .bet { font-size:.85rem; opacity:.9; min-height:1.2em; }
+  .msg { text-align:center; min-height:1.4em; font-size:.98rem; }
+  .controls { display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; margin-top:12px; }
+  button { font: inherit; padding:12px 8px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--ink); cursor:pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity:.4; cursor: default; }
+  button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .row2 { display:flex; gap:8px; margin-top:8px; }
+  .row2 button { flex:1; }
+  .panel { margin-top:14px; border:1px solid var(--line); border-radius:14px; background:var(--card); padding:10px 12px; }
+  .panel h2 { font-size:1rem; margin:0 0 6px; }
+  #log { font: .86rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; max-height: 220px; overflow:auto; white-space:pre-wrap; margin:0; }
+  #why { font-size:.88rem; color:var(--muted); }
+  .note { color:var(--muted); font-size:.85rem; }
+  .thinking::after { content:' …'; }
+  @media (max-width: 420px) { .pc { width:38px; height:54px; font-size:1rem; } .cards { gap:4px; min-height:56px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Hold'em vs Walt</h1>
+    <a href="../">Walt Lab</a>
+  </header>
+  <p class="sub">Heads-up limit Texas hold'em. Blinds 1/2, bets 2 (preflop, flop) and 4 (turn, river), at most 4 bets a street. The button posts the small blind and alternates each hand.</p>
+
+  <section class="table" aria-label="table">
+    <div class="seat">
+      <div class="who"><span class="name">Walt<span id="waltBtn"></span></span><span class="stack" id="waltStack"></span></div>
+      <div class="cards" id="waltCards"></div>
+    </div>
+    <div class="bet" id="waltBet"></div>
+    <div class="mid">
+      <div class="cards" id="board"></div>
+      <div class="pot" id="pot"></div>
+    </div>
+    <div class="bet" id="youBet"></div>
+    <div class="seat">
+      <div class="who"><span class="name">You<span id="youBtn"></span></span><span class="stack" id="youStack"></span></div>
+      <div class="cards" id="youCards"></div>
+    </div>
+    <div class="msg" id="msg"></div>
+  </section>
+
+  <div class="controls">
+    <button id="bFold" disabled>Fold</button>
+    <button id="bCall" disabled>Check</button>
+    <button id="bRaise" disabled>Bet</button>
+  </div>
+  <div class="row2">
+    <button id="bNext" class="primary">Deal</button>
+    <button id="bNew">New match</button>
+  </div>
+
+  <div class="panel">
+    <h2>Walt's last decision</h2>
+    <div id="why">Walt samples deals it can't rule out, models you as a player who best-responds to random play, and picks one action for all of them. Values are its average chips per sampled deal.</div>
+  </div>
+  <div class="panel">
+    <h2>Hand log</h2>
+    <pre id="log"></pre>
+  </div>
+  <p class="note">Each player starts with 200 chips; the match ends when a stack can no longer cover a full hand (48 chips). Exploratory experiment: Walt almost never bluffs and reads nothing into your bets (see <code>lab/holdem/REPORT.md</code>).</p>
+</main>
+<script type="module" src="./main.js"></script>
+</body>
+</html>
