@@ -3,8 +3,8 @@
 //
 // Mapping onto the card's interface:
 //   to_move(public)     agentOf(pub, pub.toMove()) — dummy's turn belongs to declarer
-//   outcome(public)     pub.outcome(): 1 contract made, 0 defeated, -1 undecided (early exit
-//                       as soon as either side has enough tricks)
+//   outcome(public)     decided(): the per-deal payoff once the record settles it (made /
+//                       defeated, plus the margin tie-break terms when margin is on), else -1
 //   private(deal, a)    remaining hands of the seats `a` can see (visibleSeats): declarer
 //                       sees declarer+dummy; a defender sees its hand (+dummy after the lead)
 //   legal               legalReduced (touching-equivalent cards collapsed)
@@ -18,10 +18,10 @@
 // bot (or random, rollout=1) to the end. All values are exact integer counts of deals.
 
 import {
-  Pub, Rng, Sim, SUIT, legalCards, legalReduced, canon, ruleCard, sampleDeals, visibleSeats,
+  Pub, Rng, Sim, legalCards, legalReduced, canon, ruleCard, sampleDeals, visibleSeats,
 } from './engine.js';
 
-export const DEFAULTS = Object.freeze({ level: 1, n: 16, n0: 4, horizon: 4, rollout: 0, margin: true, seed: 1 });
+export const DEFAULTS = Object.freeze({ level: 1, n: 32, n0: 8, horizon: 8, rollout: 0, margin: true, seed: 1 });
 
 // Per-deal payoff. Binary (margin off): 1 if the contract makes. With margin on, the
 // payoff is MBIG*[made] + [made with an overtrick] + [not down two]: the make count stays
@@ -172,4 +172,3 @@ export function pubFrom(ct, plays) {
   return p;
 }
 
-export { SUIT };
