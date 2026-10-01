@@ -1,0 +1,1 @@
+deals 0..29 294.8 s | B/bid: 135 moves, mean 0.0 ms, max 0 ms; A/bid: 136 moves, mean 1672.0 ms, max 4236 ms; B/play: 345 moves, mean 0.0 ms, max 0 ms; A/play: 352 moves, mean 191.4 ms, max 1335 ms

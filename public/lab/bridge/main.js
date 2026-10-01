@@ -10,7 +10,7 @@ import { agentOf } from './walt.js';
 const STRENGTH = {
   quick: { n: 16, n0: 4, horizon: 8 },
   standard: { n: 32, n0: 8, horizon: 8 },
-  deep: { n: 48, n0: 8, horizon: 12 },
+  deep: { n: 64, n0: 8, horizon: 8 },
 };
 const DISPLAY_SUITS = [3, 2, 0, 1]; // ♠ ♥ ♣ ♦ (alternating colours)
 const HUMAN = SOUTH;
@@ -96,6 +96,7 @@ function play(c) {
     const leader = p.seatOf[p.n - 4];
     G.hold = { cards, leader, winner: p.leader };
     G.last = G.hold;
+    if (!G.announced) setStatus(`${SEAT_NAMES[p.leader]} wins the trick.`);
     render();
     setTimeout(() => { G.hold = null; step(); }, 950);
     return;
