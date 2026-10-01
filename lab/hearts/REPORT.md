@@ -243,3 +243,31 @@ It loads `/lab/hearts/?fast` at phone width (390×844). `?fast` only removes the
   - `e2e.mjs`: Playwright end-to-end check.
   - `results.txt`: raw output of the final runs.
   - `REPORT.md`: this report.
+
+## Rerun: Walt with 4× root samples (n = 192)
+
+EXPLORATORY tier. Probe record only; not a result, not adjudicated.
+
+Only the root deal count changed: n 48 → 192, with n0=6, h=4, r=rule unchanged. Same seed (11), same hold-hands deals 0–99, 1v3. The shipped page keeps n = 48.
+
+```sh
+# from lab/hearts/ ; run in chunks with --first because one 100-deal run exceeds ~9 min
+W4=walt:n=192,n0=6,h=4,r=rule
+node h2h.mjs --a $W4 --b mcr:n=200 --deals 25 --first 0  --seed 11 --verbose
+node h2h.mjs --a $W4 --b mcr:n=200 --deals 50 --first 25 --seed 11 --verbose
+node h2h.mjs --a $W4 --b mcr:n=200 --deals 25 --first 75 --seed 11 --verbose
+node h2h.mjs --a $W4 --b rule      --deals 50 --first 0  --seed 11 --verbose
+node h2h.mjs --a $W4 --b rule      --deals 50 --first 50 --seed 11 --verbose
+# equivalent single run: node h2h.mjs --a $W4 --b mcr:n=200 --deals 100 --seed 11
+```
+
+Chunks are merged from the per-deal deltas (`--verbose`) with the harness's own formula (deal-level mean ± 1.96·sd/√n). Raw output: `lab/hearts/results-n192.txt`. ms/move at n=192 is the deal-weighted mean of the chunk summaries (approximate; shared box, load ~6–7).
+
+| A | B | n | B − A, points/hand [95%] | deals A better / worse / tied | Walt ms/move (max) |
+|---|---|---|---|---|---|
+| Walt-R | mcr:200 | 48 | −0.63 [−1.27, +0.01] | 36 / 55 / 9 | 30.3 (868) |
+| Walt-R | mcr:200 | **192** | **−0.08 [−0.73, +0.57]** | 40 / 51 / 9 | ~109 (2385) |
+| Walt-R | rule | 48 | +1.42 [+0.75, +2.08] | 72 / 24 / 4 | 32.3 (604) |
+| Walt-R | rule | **192** | **+1.98 [+1.34, +2.61]** | 81 / 16 / 3 | ~122 (1792) |
+
+Walt moves took about 3.6–3.8× longer at n=192, roughly tracking the 4× sample count; the worst single move reached 2.4 s in Node under load. Against mcr:200 the point estimate moved from −0.63 to −0.08 (now near parity, interval spans 0); against the rule bot from +1.42 to +1.98. Both changes are within sampling noise on 100 shared deals (the rows are not independent paired n=48-vs-n=192 comparisons). The data are consistent with part of the n=48 gap to mcr:200 being root-sampling noise, but they do not show Walt-R overtaking mcr:200, and they do not test the model-of-opponents explanation in the Reading section.

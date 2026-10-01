@@ -210,6 +210,8 @@ deal 99: B-A per seat 14-0 0-0 3-6 9-7  delta 3.25
 walt:n=192,n0=6,h=4,r=rule vs rule 1v3 seed=11 deals=50: B-A = 1.940 [0.885, 2.995]  A better/worse/tied 41/7/2  moons 6  A ms/move 126.6 max 1395  wall 323s
 
 
-# COMBINED (computed from per-deal deltas of the chunks above; deal-level mean +/- 1.96 sd/sqrt(n))
-mcr deals 100 B-A -0.083 [-0.733, 0.568] 40/51/9 moons 0 ms/move NaN max 0 wall 0s
-rule deals 100 B-A 1.978 [1.342, 2.613] 81/16/3 moons 0 ms/move NaN max 0 wall 0s
+# COMBINED (B-A mean, 95% CI and better/worse/tied recomputed from the per-deal deltas above;
+# deal-level mean +/- 1.96*sd/sqrt(100). Chunked with --first because one 100-deal run would exceed ~9 min.
+# ms/move = deal-weighted mean of the chunk summaries (--json was passed without a value, so no JSON record).)
+walt:n=192,n0=6,h=4,r=rule vs mcr:n=200 1v3 seed=11 deals=100: B-A = -0.083 [-0.733, 0.568]  A better/worse/tied 40/51/9  A ms/move ~109 max 2385  wall 601s
+walt:n=192,n0=6,h=4,r=rule vs rule 1v3 seed=11 deals=100: B-A = 1.978 [1.342, 2.613]  A better/worse/tied 81/16/3  A ms/move ~122 max 1792  wall 625s
