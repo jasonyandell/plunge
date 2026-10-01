@@ -12,7 +12,7 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 page.on('pageerror', (e) => errors.push(String(e)));
 await page.goto(url);
 await page.waitForSelector('#hand .card');
-await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + '/pass.png' : '/dev/null' });
+if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + '/pass.png' });
 const t0 = Date.now();
 let hands = 0, shot = false;
 while (Date.now() - t0 < 540000) {
