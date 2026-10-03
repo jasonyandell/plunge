@@ -82,7 +82,8 @@ export async function listHistory(): Promise<unknown[]> {
   });
 }
 export async function exportHistory(): Promise<string> {
-  await retryHistory().catch(() => {});
+  const unavailableStores: string[] = [];
+  await retryHistory().catch(() => unavailableStores.push('pending-write'));
   // Walt receipts already have their own append-only-by-content-id local store.
   const receipts = await new Promise<Array<{ id: string }>>((resolve, reject) => {
     const r = indexedDB.open('plunge-walt', 1);
@@ -93,14 +94,14 @@ export async function exportHistory(): Promise<string> {
       get.onsuccess = () => resolve(get.result); get.onerror = () => reject(get.error);
       tx.oncomplete = tx.onabort = () => db.close();
     };
-  }).catch(() => []);
+  }).catch(() => { unavailableStores.push('receipts'); return []; });
   const unique = <T extends { id: string }>(values: T[]) => [...new Map(values.map(value => [value.id, value])).values()];
   return JSON.stringify({ schema: 'plunge-history-export-v1', exportedAt: new Date().toISOString(),
-    build: BUILD_ID, events: await listHistory().catch(() => []), pending: [...pending.values()].map(snapshotOf),
-    hands: await listHands().catch(() => []), receipts: unique([...receipts, ...sessionReceipts()]),
-    estimates: unique([...(await listEstimates().catch(() => [])), ...sessionEstimates()]),
+    build: BUILD_ID, events: await listHistory().catch(() => { unavailableStores.push('events'); return []; }), pending: [...pending.values()].map(snapshotOf),
+    hands: await listHands().catch(() => { unavailableStores.push('hands'); return []; }), receipts: unique([...receipts, ...sessionReceipts()]),
+    estimates: unique([...(await listEstimates().catch(() => { unavailableStores.push('estimates'); return []; })), ...sessionEstimates()]),
     rescuedJournal: await readExistingDatabase('plunge-records'),
-    legacyStats: await readExistingDatabase('plunge-stats') }, null, 2);
+    legacyStats: await readExistingDatabase('plunge-stats'), unavailableStores }, null, 2);
 }
 
 /** Export prior recorder stores verbatim; never migrate, delete or upload them. */
