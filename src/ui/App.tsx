@@ -9,7 +9,7 @@
 import { useEffect, useReducer, useRef, useState } from 'preact/hooks';
 import type { Seat } from '../engine';
 import {
-  HUMAN_SEAT, TRICK_SHOW_MS, nelloAvailable, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
+  type AppEvent, type AppState, HUMAN_SEAT, TRICK_SHOW_MS, nelloAvailable, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
 } from './store';
 import {
   BUILD_ID, UPDATE_POLL_MS, fetchRemoteVersion, updateAvailable,
@@ -22,13 +22,38 @@ import { api, isNative, nativeMove, NATIVE_TABLE, type FlagRecord } from '../ai/
 import { anticipatedAuctions, auctionMove } from '../ai/auction';
 import { AuctionPreparation } from '../ai/auction-preparation';
 import './app.css';
+import { recordHistory, retryHistory, exportHistory } from '../history/recorder';
 import { Questions } from './Questions';
 import { attachGame, syncQuestions } from '../questions/client';
 
 export function App() {
-  const [app, dispatch] = useReducer(reducer, undefined, () =>
+  const [app, dispatch] = useReducer((state: AppState, event: AppEvent) => {
+    const next = reducer(state, event);
+    if (next.game !== state.game || next.settings !== state.settings) {
+      void recordHistory(next).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
+    }
+    return next;
+  }, undefined, () =>
     initialApp(typeof localStorage !== 'undefined' ? loadApp(localStorage) : null, location.search),
   );
+
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const retryRecording = () => void retryHistory().then(() => setHistoryError(null)).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
+  useEffect(() => {
+    void recordHistory(app).then(() => setHistoryError(null)).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
+  }, [app.game, app.sessionId, app.nativeReceipts, app.auctionSurveys, app.settings]);
+  useEffect(() => {
+    const evidenceFailure = () => setHistoryError('A Walt result is only in this tab. Device storage is unavailable; keep the tab open and export your history.');
+    window.addEventListener('plunge-history-storage-error', evidenceFailure);
+    retryRecording();
+    window.addEventListener('focus', retryRecording);
+    return () => { window.removeEventListener('focus', retryRecording); window.removeEventListener('plunge-history-storage-error', evidenceFailure); };
+  }, []);
+  const downloadHistory = () => void exportHistory().then(data => {
+    const url = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+    const a = document.createElement('a'); a.href = url; a.download = `plunge-history-${new Date().toISOString().slice(0,10)}.json`; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }).catch(() => setHistoryError('History export failed. Keep this tab open and retry.'));
 
   const [questions, setQuestions] = useState<{ id: string | null } | null>(null);
   const openQuestion = (id: string) => setQuestions({ id });
@@ -200,7 +225,7 @@ export function App() {
   const screen = (() => {
     switch (app.screen) {
       case 'home':
-        return <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} />;
+        return <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} />;
       case 'how':
         return <HowTo dispatch={dispatch} />;
       case 'about':
@@ -209,7 +234,7 @@ export function App() {
         return app.game || app.scenarioGame ? (
           <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} />
         ) : (
-          <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} />
+          <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} />
         );
     }
   })();
@@ -224,6 +249,7 @@ export function App() {
           <button type="button" onClick={() => setRetry((n) => n + 1)}>Retry</button>
         </div>
       )}
+      {historyError && <div class="native-error" role="alert"><span>{historyError}</span><button type="button" onClick={retryRecording}>Retry saving</button></div>}
       {updateBanner}
     </>
   );

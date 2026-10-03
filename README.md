@@ -152,3 +152,22 @@ Public domain under [CC0 1.0](LICENSE). Steal anything. Built for the love of th
 
 New Walt matches use the audited 125-deal catalogue and empirical score tails
 from 305,440 complete games. [Bid-book behavior, evidence and updates](docs-bid-book.md).
+
+## Local history recorder
+
+Every live hand transition is saved on the device, including unfinished hands,
+replayable bids/trump/plays, marks and outcomes, settings, auction evidence and
+links to actual Walt move receipts. Hint/deeper run responses are also kept.
+Home → **Export history** downloads a JSON backup with those receipts and results.
+History is never uploaded or automatically evicted. Clearing browser data still
+removes local history; export a backup first. A storage failure displays a warning
+and retains pending captures in the tab; a localStorage outbox recovers unfinished
+IndexedDB writes after reload when storage is available. Simultaneous tabs append
+content-addressed captures without overwriting each other's branches; the existing
+single resume slot still belongs to the last tab that saved it.
+
+The finished-hand store was rescued from PR #7 / commit
+`03970be4ae9888e8e36b1ced6a2b9bca5cd4fb9a`. The staged-outbox design was checked
+against Claude's richer journal on `claude/in-flight-prs-planning-vlkhi2`
+(`f2b8fb02f1f8fde152f07803069d5d45593b6100`). Dashboard, derived reviews and remote
+hand synchronization remain deferred. Existing databases are preserved.
