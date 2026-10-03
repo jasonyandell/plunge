@@ -1,6 +1,7 @@
 /** Local evidence, retained across reloads without a server. */
 import type { NativeReceipt, NativeEstimate } from '../native';
 const session = new Map<string, NativeReceipt>();
+const unsavedReceipts = new Map<string, NativeReceipt>();
 let database: Promise<IDBDatabase> | undefined;
 function db(): Promise<IDBDatabase> {
   return database ??= new Promise((resolve, reject) => {
@@ -21,8 +22,9 @@ export async function putReceipt(value: NativeReceipt): Promise<boolean> {
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error);
   });
+  unsavedReceipts.delete(value.id);
   return true;
-  } catch { database = undefined; return false; }
+  } catch { unsavedReceipts.set(value.id, value); database = undefined; return false; }
 }
 export async function getReceipt(id: string): Promise<NativeReceipt> {
   const saved = session.get(id);
@@ -51,7 +53,7 @@ export async function putEstimate(value: NativeEstimate): Promise<boolean> {
       const tx = db.transaction('results', 'readwrite'); tx.objectStore('results').put(value);
       tx.oncomplete = () => resolve(); tx.onerror = tx.onabort = () => reject(tx.error);
     });
-    db.close(); return true;
+    db.close(); estimates.delete(value.id); return true;
   } catch { return false; }
 }
 function estimateDb(): Promise<IDBDatabase> {
@@ -68,4 +70,11 @@ export async function listEstimates(): Promise<NativeEstimate[]> {
     r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error);
     tx.oncomplete = tx.onabort = () => db.close();
   });
+}
+
+export async function retryEvidence(): Promise<void> {
+  let failed = false;
+  for (const value of [...unsavedReceipts.values()]) if (!await putReceipt(value)) failed = true;
+  for (const value of [...estimates.values()]) if (!await putEstimate(value)) failed = true;
+  if (failed) throw new Error('Walt results could not be saved.');
 }

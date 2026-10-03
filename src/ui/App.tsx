@@ -22,6 +22,7 @@ import { api, isNative, nativeMove, NATIVE_TABLE, type FlagRecord } from '../ai/
 import { anticipatedAuctions, auctionMove } from '../ai/auction';
 import { AuctionPreparation } from '../ai/auction-preparation';
 import './app.css';
+import { retryEvidence } from '../ai/phone/records';
 import { recordHistory, retryHistory, exportHistory } from '../history/recorder';
 import { Questions } from './Questions';
 import { attachGame, syncQuestions } from '../questions/client';
@@ -38,12 +39,13 @@ export function App() {
   );
 
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [evidenceError, setEvidenceError] = useState<string | null>(null);
   const retryRecording = () => void retryHistory().then(() => setHistoryError(null)).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
   useEffect(() => {
     void recordHistory(app).then(() => setHistoryError(null)).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
   }, [app.game, app.sessionId, app.nativeReceipts, app.auctionSurveys, app.settings]);
   useEffect(() => {
-    const evidenceFailure = () => setHistoryError('A Walt result is only in this tab. Device storage is unavailable; keep the tab open and export your history.');
+    const evidenceFailure = () => setEvidenceError('A Walt result is only in this tab. Device storage is unavailable; keep the tab open and export your history.');
     window.addEventListener('plunge-history-storage-error', evidenceFailure);
     retryRecording();
     window.addEventListener('focus', retryRecording);
@@ -249,6 +251,7 @@ export function App() {
           <button type="button" onClick={() => setRetry((n) => n + 1)}>Retry</button>
         </div>
       )}
+      {evidenceError && <div class="native-error" role="alert"><span>{evidenceError}</span><button type="button" onClick={() => void retryEvidence().then(() => setEvidenceError(null)).catch(() => {})}>Retry saving</button><button type="button" onClick={downloadHistory}>Export</button></div>}
       {historyError && <div class="native-error" role="alert"><span>{historyError}</span><button type="button" onClick={retryRecording}>Retry saving</button></div>}
       {updateBanner}
     </>
