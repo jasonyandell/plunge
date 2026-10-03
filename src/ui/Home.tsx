@@ -12,11 +12,12 @@ interface HomeProps {
   app: AppState;
   dispatch: (e: AppEvent) => void;
   onQuestions?: () => void;
+  onHistory?: () => void;
 }
 
 const DIFFS: readonly Difficulty[] = ['native-partner', 'native-l1'];
 
-export function Home({ app, dispatch, onQuestions }: HomeProps) {
+export function Home({ app, dispatch, onQuestions, onHistory }: HomeProps) {
   const paused = nelloPaused(app);
   const resumable = app.game !== null && (app.game.phase !== 'game-over' || app.showTrick);
   return (
@@ -45,7 +46,9 @@ export function Home({ app, dispatch, onQuestions }: HomeProps) {
         </button>
 
         {nelloAvailable(app.settings) && <p class="setting-hint">Nel-O Preview is on. Change it in Advanced settings.</p>}
+        <p class="setting-hint">Game history and Walt results stay on this device. Export a backup before clearing browser data.</p>
         <div class="link-row">
+          {onHistory && <button type="button" class="text-btn" onClick={onHistory}>Export history</button>}
           {onQuestions && <button type="button" class="text-btn" onClick={onQuestions}>Your questions</button>}
           <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'how' })}>
             How to play

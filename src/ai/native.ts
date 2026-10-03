@@ -3,7 +3,7 @@ import { type GameState, type Seat, type Action, legalActions, toSeed } from '..
 import { observe } from './observation';
 import { playRequestOf } from './walt/requests';
 import { runPlayer } from './phone/client';
-import { digest, getReceipt, putReceipt } from './phone/records';
+import { digest, getReceipt, putReceipt, putEstimate } from './phone/records';
 import manifest from './phone/manifest.json';
 import { BUILD_ID } from '../ui/update';
 
@@ -84,8 +84,10 @@ export async function api<T>(path: string, body?: unknown, milliseconds = 18000,
       const response = await runPlayer({ request, worlds, partner: false,
         ...(nello_counterexamples ? { nello_counterexamples: true } : {}),
         ...(worlds > 40 ? { budget_ms: 20000 } : {}) }, signal);
-      return { schema: 'plunge-estimate-v1', id: await digest({ request, worlds, response }),
-        created: new Date().toISOString(), identity: { request, player: { n: worlds, ...(nello_counterexamples ? { nello_counterexamples: true } : {}) }, implementation: { ...manifest, app: BUILD_ID } }, response } as T;
+      const estimate: NativeEstimate = { schema: 'plunge-estimate-v1', id: await digest({ request, worlds, response }),
+        created: new Date().toISOString(), identity: { request, player: { n: worlds, ...(nello_counterexamples ? { nello_counterexamples: true } : {}) }, implementation: { ...manifest, app: BUILD_ID } }, response };
+      if (!await putEstimate(estimate)) typeof window !== 'undefined' && window.dispatchEvent(new Event('plunge-history-storage-error'));
+      return estimate as T;
     }
     throw new Error('This operation needs the Mac gym. Copy an observation link to bring the hand back.');
   }
@@ -152,7 +154,7 @@ export async function nativeMove(g: GameState, seat: Seat, difficulty: NativeDif
     const identity = { request, player: { name: player }, implementation: { ...manifest, app: BUILD_ID }, game_id: gameId, hand_number: g.handNumber };
     receipt = { schema: 'plunge-decision-v1', id: await digest({ identity, response }), created: new Date().toISOString(), identity, response };
     checkedAction(g, request, receipt);
-    if (!await putReceipt(receipt)) receipt.storage = 'session';
+    if (!await putReceipt(receipt)) { receipt.storage = 'session'; typeof window !== 'undefined' && window.dispatchEvent(new Event('plunge-history-storage-error')); }
   }
   if (receipt.identity.player.name !== player || receipt.identity.game_id !== gameId || receipt.identity.hand_number !== g.handNumber) {
     throw new Error('The native player returned a receipt for a different game.');
