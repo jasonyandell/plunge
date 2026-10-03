@@ -17,6 +17,7 @@ import {
 import { Home, HowTo, About } from './Home';
 import { Table } from './Table';
 import { codeFromHash, decodeHand } from './share';
+import { droppedBidGame, parseDrop } from './drop-in';
 import { decodeObservation } from './observation-link';
 import { api, isNative, nativeMove, NATIVE_TABLE, type FlagRecord } from '../ai/native';
 import { anticipatedAuctions, auctionMove } from '../ai/auction';
@@ -123,6 +124,20 @@ export function App() {
     let generation = 0;
     const open = (): void => {
       const request = ++generation;
+      // Scratch: #drop deals a chosen hand (default: the kitchen-table one)
+      // and forces the bid on you. See parseDrop for the payload formats.
+      const drop = /^#drop(?:=(.*))?$/.exec(location.hash);
+      if (drop) {
+        history.replaceState(null, '', location.pathname + location.search);
+        const spec = parseDrop(drop[1]);
+        if (!spec) { setNativeError('This dropped hand could not be read.'); return; }
+        dispatch({
+          type: 'drop-in',
+          game: droppedBidGame(spec.seed, spec.hand),
+          sessionId: `drop-${spec.hand.join('')}-${spec.seed}`.slice(0, 80),
+        });
+        return;
+      }
       const questionId = /^#question=([a-f0-9]{32})$/.exec(location.hash)?.[1];
       if (questionId) {
         history.replaceState(null, '', location.pathname + location.search);
