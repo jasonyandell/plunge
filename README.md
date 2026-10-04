@@ -150,8 +150,8 @@ Public domain under [CC0 1.0](LICENSE). Steal anything. Built for the love of th
 
 ## Instant bidding from recorded games
 
-New Walt matches use the audited 125-deal catalogue and empirical score tails
-from 305,440 complete games. [Bid-book behavior, evidence and updates](docs-bid-book.md).
+New Walt matches use the audited 130-deal catalogue and empirical score tails
+from 318,472 complete games. [Bid-book behavior, evidence and updates](docs-bid-book.md).
 
 ## Local history recorder
 
