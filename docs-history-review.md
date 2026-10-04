@@ -56,6 +56,10 @@ branch; timeline chips jump to any decision; **‹ Hands** or system back return
 to the list. Examples are generated in memory by the practice player and never
 saved.
 
+Review makes no network requests, so it behaves the same in a database-free PR
+preview ([preview guide](docs-previews.md)). There it reads that preview origin's
+own browser history; production history on the same phone is a separate origin.
+
 ## Limits
 
 - The practice player is a deterministic heuristic, not Walt; Walt hints and

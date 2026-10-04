@@ -102,7 +102,7 @@ never label an unscored emergency fallback as a measured recommendation.
 ## How it ships
 
 Every same-repository pull request, including drafts, gets a stable phone-accessible
-preview link and an isolated question database. Pushes update that preview; closing
+preview link. Previews have no database: questions stay on the device. Pushes update that preview; closing
 the PR cleans it up. Open **View deployment** on the PR. [Preview guide](docs-previews.md).
 
 Every push to `main` runs the full suite (engine invariants, AI legality + strength

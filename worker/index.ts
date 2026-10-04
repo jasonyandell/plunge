@@ -8,7 +8,8 @@ interface Statement {
   all<T>(): Promise<{results:T[]}>;
   run(): Promise<unknown>;
 }
-interface Env { QUESTIONS: { prepare(sql:string):Statement }; ASSETS: { fetch(request:Request):Promise<Response> } }
+// PR previews deploy without QUESTIONS; their app keeps questions on the device.
+interface Env { QUESTIONS?: { prepare(sql:string):Statement }; ASSETS: { fetch(request:Request):Promise<Response> } }
 interface Row { id:string; owner_hash:string; revision:number; payload:string; answer:string|null; answered_at:string|null }
 const json = (value: unknown, status=200) => Response.json(value,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const remote = (r:Row):RemoteQuestion => ({question:JSON.parse(r.payload) as Question,revision:r.revision,
@@ -38,6 +39,7 @@ export default {
     const match=/^\/api\/questions(?:\/([a-f0-9]{32}))?$/.exec(url.pathname);
     if (!match) return json({error:'Not found.'},404);
     const id=match[1];
+    if(!env.QUESTIONS) return json({error:'This preview keeps questions on your device only.',local_only:true},503);
     try {
       if(request.method==='GET' && id) {
         const row=await env.QUESTIONS.prepare('SELECT * FROM questions WHERE id = ?').bind(id).first<Row>();
