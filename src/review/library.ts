@@ -189,3 +189,17 @@ export function failingSources(): LibrarySources {
   const fail = () => Promise.reject(new DOMException('Simulated storage failure', 'UnknownError'));
   return { history: fail, stats: fail, records: fail, pending: fail };
 }
+
+/** The hand still being played at the table, if any. */
+export interface LiveHand {
+  readonly gameId: string;
+  readonly handNumber: number;
+}
+
+/**
+ * True for the record of the hand still in play: replaying it would show
+ * other seats' tiles (or a hindsight finish) mid-game, so review keeps it shut.
+ */
+export function isLiveHand(h: ReviewHand, live: LiveHand | null | undefined): boolean {
+  return !!live && !h.finished && h.gameId === live.gameId && h.handNumber === live.handNumber;
+}

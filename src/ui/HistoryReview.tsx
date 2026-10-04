@@ -5,16 +5,20 @@
  *   - Hindsight: one continuation on the real hands (realized, not proof).
  *   - What they knew: an estimate over guessed hidden hands, built only from
  *     what that seat could see at the time.
+ * A hand replays on the game's own table (ReplayTable over TableFelt), as an
+ * overlay: a game in progress stays paused underneath, untouched.
  * The location hash holds the hand, step and branch, so back and reload land
  * in the same place. Reading history here never writes or deletes anything.
  */
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { type Action, type GameState, type Seat, legalActions, teamOf } from '../engine';
+import { type Action, type GameState, teamOf } from '../engine';
 import {
   type Cursor, type HandStep, type ReviewLocation, START, back, finalState, forward, handSteps,
   parseReviewHash, play, positionAt, resetBranch, reviewHash, sameAction,
 } from '../review/steps';
-import { type Library, type ReviewHand, collectHands, deviceSources, failingSources, loadLibrary } from '../review/library';
+import {
+  type Library, type LiveHand, type ReviewHand, collectHands, deviceSources, failingSources, isLiveHand, loadLibrary,
+} from '../review/library';
 import { exampleRecords } from '../review/fixtures';
 import {
   CONTINUATION_NAME, DEFAULT_SAMPLES, type Estimate, compareOptions, estimateOptions, finishHand, hindsight,
@@ -24,7 +28,9 @@ import {
   actionLabel, comparisonSentence, contractSentence, moveSentence, netSentence, outcomeSentence, seatName,
   stageOf, talkPrompt, teamName, timeline,
 } from '../review/describe';
-import { Domino } from './Domino';
+import { InfoBar, StatusStrip } from './TableFelt';
+import { ReplayTable, shownTrick } from './ReplayTable';
+import './sheets.css';
 import './review.css';
 
 const UNAVAILABLE_COPY: Record<string, string> = {
@@ -35,7 +41,13 @@ function currentLocation(): ReviewLocation {
   return parseReviewHash(location.hash) ?? { hand: null, cursor: START };
 }
 
-export function HistoryReview({ onClose, onExport }: { onClose: () => void; onExport?: () => void }) {
+export function HistoryReview({ onClose, onExport, live = null, closeLabel = 'Close' }: {
+  onClose: () => void; onExport?: () => void;
+  /** The hand being played right now; it stays closed to review until it ends. */
+  live?: LiveHand | null;
+  /** What the exit button says, e.g. "Back to game" over a paused table. */
+  closeLabel?: string;
+}) {
   const [loc, setLoc] = useState<ReviewLocation>(currentLocation);
   const [library, setLibrary] = useState<Library | 'loading'>('loading');
   const [attempt, setAttempt] = useState(0);
@@ -83,6 +95,12 @@ export function HistoryReview({ onClose, onExport }: { onClose: () => void; onEx
   const hands = library === 'loading' ? [] : library.hands;
   const hand = loc.hand === null ? null
     : hands.find(h => h.key === loc.hand) ?? examples.hands.find(h => h.key === loc.hand) ?? null;
+  const locked = hand !== null && isLiveHand(hand, live);
+
+  if (hand && !locked) {
+    return <HandReview key={hand.key} hand={hand} cursor={loc.cursor} onCursor={cursor => go({ ...loc, cursor }, false)}
+      onList={toList} onClose={close} closeLabel={closeLabel} />;
+  }
 
   return (
     <div class="review-screen" role="dialog" aria-modal="true" aria-label="Review past hands">
@@ -91,7 +109,7 @@ export function HistoryReview({ onClose, onExport }: { onClose: () => void; onEx
           ? <button type="button" class="review-nav" onClick={toList}>‹ Hands</button>
           : <span class="review-nav-spacer" />}
         <h2>{loc.hand === null ? 'Talk it over' : 'Hand review'}</h2>
-        <button type="button" class="review-close" aria-label="Close review" onClick={close}>×</button>
+        <button type="button" class="review-close" aria-label={closeLabel === 'Close' ? 'Close review' : closeLabel} onClick={close}>×</button>
       </header>
       <div class="review-body">
         {library === 'loading' && <p class="review-muted">Reading this device’s history…</p>}
@@ -110,35 +128,31 @@ export function HistoryReview({ onClose, onExport }: { onClose: () => void; onEx
         {loc.hand === null && library !== 'loading' && (
           <HandList
             library={library}
+            live={live}
             examples={showExamples || hands.length === 0 ? examples.hands : []}
             showingExamples={showExamples || hands.length === 0}
             onExamples={() => setShowExamples(s => !s)}
             onOpen={h => go({ hand: h.key, cursor: START, ...(loc.qa ? { qa: loc.qa } : {}) }, true)}
           />
         )}
+        {locked && <p class="review-muted">{LIVE_COPY}</p>}
         {loc.hand !== null && library !== 'loading' && !hand && (
           <p class="review-muted">That hand isn’t in this device’s history. It may have been recorded in another browser.</p>
-        )}
-        {hand && (
-          <HandReview
-            key={hand.key}
-            hand={hand}
-            cursor={loc.cursor}
-            onCursor={cursor => go({ ...loc, cursor }, false)}
-          />
         )}
       </div>
     </div>
   );
 }
 
+const LIVE_COPY = 'This hand is still being played, so it stays closed: replaying it would show other seats’ tiles. Finish it, then talk it over.';
+
 function handTitle(h: ReviewHand): string {
   if (h.key.startsWith('example-')) return `Example: ${h.key.slice(8).replace(/:.*$/, '').replace(/-/g, ' ')}`;
   return `Hand${h.handNumber ? ` ${h.handNumber}` : ''}`;
 }
 
-function HandList({ library, examples, showingExamples, onExamples, onOpen }: {
-  library: Library; examples: readonly ReviewHand[]; showingExamples: boolean;
+function HandList({ library, live, examples, showingExamples, onExamples, onOpen }: {
+  library: Library; live: LiveHand | null; examples: readonly ReviewHand[]; showingExamples: boolean;
   onExamples: () => void; onOpen: (h: ReviewHand) => void;
 }) {
   const unreadable = library.unreadable.reduce((n, u) => n + u.count, 0);
@@ -150,7 +164,7 @@ function HandList({ library, examples, showingExamples, onExamples, onOpen }: {
       </p>
       {library.hands.length === 0 && <p class="review-muted">No recorded hands on this device yet. Play a hand, or try an example below.</p>}
       <div class="review-list">
-        {library.hands.map(h => <HandItem key={h.key} hand={h} onOpen={onOpen} />)}
+        {library.hands.map(h => <HandItem key={h.key} hand={h} locked={isLiveHand(h, live)} onOpen={onOpen} />)}
       </div>
       {unreadable > 0 && (
         <p class="review-muted">
@@ -164,22 +178,22 @@ function HandList({ library, examples, showingExamples, onExamples, onOpen }: {
       {showingExamples && (
         <>
           <h3 class="review-subhead">Example hands <span>(not yours — for trying the review)</span></h3>
-          <div class="review-list">{examples.map(h => <HandItem key={h.key} hand={h} onOpen={onOpen} />)}</div>
+          <div class="review-list">{examples.map(h => <HandItem key={h.key} hand={h} locked={false} onOpen={onOpen} />)}</div>
         </>
       )}
     </>
   );
 }
 
-function HandItem({ hand, onOpen }: { hand: ReviewHand; onOpen: (h: ReviewHand) => void }) {
+function HandItem({ hand, locked, onOpen }: { hand: ReviewHand; locked: boolean; onOpen: (h: ReviewHand) => void }) {
   const g = hand.game;
   const when = hand.recordedAt ? new Date(hand.recordedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
   return (
-    <button type="button" class="review-item" onClick={() => onOpen(hand)}>
+    <button type="button" class="review-item" disabled={locked} onClick={() => onOpen(hand)}>
       <span class="review-item-main">
         <strong>{handTitle(hand)}</strong>
         <span>{contractSentence(g)}</span>
-        <small>{hand.finished ? outcomeSentence(outcomeOf(g)) : 'Unfinished — the record stops partway.'}</small>
+        <small>{locked ? 'Being played now — finish it to review.' : hand.finished ? outcomeSentence(outcomeOf(g)) : 'Unfinished — the record stops partway.'}</small>
       </span>
       <small class="review-item-when">{when}</small>
     </button>
@@ -188,132 +202,105 @@ function HandItem({ hand, onOpen }: { hand: ReviewHand; onOpen: (h: ReviewHand) 
 
 // ---------------------------------------------------------------------------
 
-function HandReview({ hand, cursor, onCursor }: { hand: ReviewHand; cursor: Cursor; onCursor: (c: Cursor) => void }) {
+/**
+ * One hand on the game's own table: replay controls underneath, and the
+ * comparisons and timeline in a sheet that slides up over the felt.
+ */
+function HandReview({ hand, cursor, onCursor, onList, onClose, closeLabel }: {
+  hand: ReviewHand; cursor: Cursor; onCursor: (c: Cursor) => void;
+  onList: () => void; onClose: () => void; closeLabel: string;
+}) {
   const steps = useMemo(() => handSteps(hand.game) ?? [], [hand]);
   const end = useMemo(() => finalState(steps, hand.game), [steps, hand]);
   const pos = positionAt(steps, end, cursor);
+  const [reveal, setReveal] = useState(false);
+  const [sheet, setSheet] = useState(false);
+  const [histOpen, setHistOpen] = useState(false);
   useEffect(() => { if (!pos) onCursor(START); }, [pos === null]);
-  if (!pos) return <p class="review-muted">That position no longer replays. Starting from the beginning.</p>;
 
   const decision: HandStep | null = cursor.at < steps.length ? steps[cursor.at]! : null;
   const branching = cursor.branch.length > 0;
-  const recordedNext = !branching && decision ? decision.action : null;
+  const actual = !branching && decision ? decision.action : null;
   const hinted = !branching && hand.hintsBefore.includes(cursor.at);
+  const move = (c: Cursor) => { setSheet(false); onCursor(c); };
 
   return (
-    <div class="hand-review">
-      <p class="review-contract">{contractSentence(hand.game)} {hand.finished ? outcomeSentence(outcomeOf(hand.game)) : 'Unfinished record.'}</p>
-
-      <div class={`review-where${branching ? ' is-branch' : ''}`}>
-        <span>{branching ? 'What if… (not what happened)' : `Replay · move ${Math.min(cursor.at + 1, steps.length)} of ${steps.length}`}</span>
-        <span>{stageOf(pos)}</span>
+    <div class="review-screen replay-screen" role="dialog" aria-modal="true" aria-label="Replay a past hand">
+      <div class="table-screen">
+        <header class={`replay-bar${branching ? ' is-branch' : ''}`}>
+          <button type="button" class="replay-nav" onClick={onList} aria-label="Back to the hand list">‹ Hands</button>
+          <div class="replay-title" role="status">
+            <strong>{branching ? 'What if…' : handTitle(hand)}</strong>
+            <span>{!pos ? '' : branching
+              ? `Not what happened · from move ${cursor.at + 1}`
+              : `Replay · move ${Math.min(cursor.at + 1, steps.length)}/${steps.length} · ${stageOf(pos)}`}</span>
+          </div>
+          <button type="button" class="replay-nav replay-exit" onClick={onClose}>{closeLabel}</button>
+        </header>
+        {!pos && <p class="review-muted replay-stale">That position no longer replays. Starting from the beginning.</p>}
+        {pos && <StatusStrip g={pos} />}
+        {pos && (pos.phase === 'playing' || pos.tricks.length > 0) && (
+          <InfoBar g={pos} plays={shownTrick(pos).plays} open={histOpen} onToggle={() => setHistOpen(o => !o)} />
+        )}
+        {pos && (
+          <ReplayTable
+            g={pos}
+            actual={actual}
+            reveal={reveal}
+            onReveal={setReveal}
+            onChoose={a => { const c = play(steps, end, cursor, a); if (c) move(c); }}
+            endNote={branching ? 'This branch is finished.' : hand.finished ? 'End of the hand.' : 'The record stops here.'}
+          />
+        )}
+        <div class="replay-controls">
+          <button type="button" class="replay-btn" disabled={cursor.at === 0 && !branching} onClick={() => move(back(cursor))}>
+            ‹ {branching ? 'Undo' : 'Back'}
+          </button>
+          {branching
+            ? <button type="button" class="replay-btn is-actual" aria-label="Back to what actually happened"
+              onClick={() => move(resetBranch(cursor))}>↩ Actual</button>
+            : <button type="button" class="replay-btn" disabled={cursor.at >= steps.length} onClick={() => move(forward(steps, cursor))}>Next ›</button>}
+          <button type="button" class="replay-btn" aria-expanded={sheet} onClick={() => setSheet(o => !o)}>
+            Talk it over {sheet ? '▾' : '▴'}
+          </button>
+        </div>
       </div>
 
-      <Board g={pos} />
-
-      {pos.turn !== null && pos.phase !== 'hand-over' && pos.phase !== 'game-over' ? (
-        <Choices g={pos} recorded={recordedNext} onChoose={a => { const c = play(steps, end, cursor, a); if (c) onCursor(c); }} />
-      ) : (
-        <p class="review-muted">{branching ? 'This branch is finished.' : hand.finished ? 'End of the hand.' : 'The record stops here.'}</p>
+      {sheet && pos && (
+        <section class="replay-sheet" aria-label="Talk it over">
+          <div class="replay-sheet-head">
+            <h3>Talk it over</h3>
+            <button type="button" class="review-link" onClick={() => setSheet(false)}>Back to the table ▾</button>
+          </div>
+          <p class="review-contract">{contractSentence(hand.game)} {hand.finished ? outcomeSentence(outcomeOf(hand.game)) : 'Unfinished record.'}</p>
+          {hinted && <p class="review-hinted">A hint was showing before this move.</p>}
+          <p class="review-talk"><strong>Ask each other:</strong> {talkPrompt(decision?.state ?? pos)}</p>
+          {decision && <WhatIf hand={hand} at={cursor.at} decision={decision} branch={cursor.branch} tip={pos}
+            reveal={reveal} onReveal={on => { setReveal(on); setSheet(false); }} />}
+          {!decision && <HindsightToggle reveal={reveal} onReveal={on => { setReveal(on); setSheet(false); }} />}
+          <Timeline steps={steps} at={branching ? -1 : cursor.at} divergence={branching ? cursor.at : -1}
+            hints={hand.hintsBefore} onJump={i => move({ at: i, branch: [] })} />
+        </section>
       )}
-      {hinted && <p class="review-hinted">A hint was showing before this move.</p>}
-
-      <div class="review-controls">
-        <button type="button" class="review-btn" disabled={cursor.at === 0 && !branching} onClick={() => onCursor(back(cursor))}>
-          ‹ {branching ? 'Undo' : 'Back'}
-        </button>
-        {branching
-          ? <button type="button" class="review-btn" onClick={() => onCursor(resetBranch(cursor))}>Back to what happened</button>
-          : <button type="button" class="review-btn" disabled={cursor.at >= steps.length} onClick={() => onCursor(forward(steps, cursor))}>Next ›</button>}
-      </div>
-
-      {decision && <WhatIf hand={hand} at={cursor.at} decision={decision} branch={cursor.branch} tip={pos} />}
-
-      <p class="review-talk"><strong>Talk it over:</strong> {talkPrompt(decision?.state ?? pos)}</p>
-
-      <Timeline steps={steps} at={branching ? -1 : cursor.at} divergence={branching ? cursor.at : -1}
-        hints={hand.hintsBefore} onJump={i => onCursor({ at: i, branch: [] })} />
     </div>
   );
 }
 
-/** Public table plus one seat's view; all hands only behind a hindsight toggle. */
-function Board({ g }: { g: GameState }) {
-  const [reveal, setReveal] = useState(false);
-  const viewer: Seat = g.turn ?? 0;
-  const trick = g.currentTrick.length ? g.currentTrick : g.tricks[g.tricks.length - 1]?.plays ?? [];
-  const trickLabel = g.currentTrick.length ? 'This trick so far' : g.tricks.length ? `Trick ${g.tricks.length} (done)` : '';
+/** The one switch that turns every hand face up on the replay table. */
+function HindsightToggle({ reveal, onReveal }: { reveal: boolean; onReveal: (on: boolean) => void }) {
   return (
-    <div class="review-board">
-      <p class="review-score">
-        {contractSentence(g)}<br />
-        Points this hand: {teamName(0)} {g.points[0]} · {teamName(1)} {g.points[1]}
-        {g.bids.length > 0 && <><br />Bids: {g.bids.map(b => `${seatName(b.seat)} ${actionLabel({ type: 'bid', bid: b.bid })}`).join(', ')}</>}
-      </p>
-      {trickLabel && (
-        <div class="review-trick" aria-label={trickLabel}>
-          <small>{trickLabel}</small>
-          <div>{trick.map(p => <span key={p.seat}><Domino id={p.domino} /><small>{seatName(p.seat)}</small></span>)}</div>
-        </div>
-      )}
-      {!reveal && (
-        <div class="review-seat">
-          <small>What {viewer === 0 ? 'you' : seatName(viewer)} could see: {viewer === 0 ? 'your' : 'their'} hand</small>
-          <div class="review-hand">{g.hands[viewer]!.map(id => <Domino key={id} id={id} />)}</div>
-        </div>
-      )}
-      {reveal && (
-        <div class="review-hindsight">
-          <small>Hindsight — nobody at the table could see all of these.</small>
-          {([0, 1, 2, 3] as Seat[]).map(s => (
-            <div key={s} class="review-seat">
-              <small>{seatName(s)}{s === g.sittingOut ? ' (sitting out)' : ''}</small>
-              <div class="review-hand">{g.hands[s]!.map(id => <Domino key={id} id={id} />)}</div>
-            </div>
-          ))}
-        </div>
-      )}
-      <button type="button" class="review-link" aria-pressed={reveal} onClick={() => setReveal(r => !r)}>
-        {reveal ? 'Hide other hands' : 'Show all hands (hindsight)'}
-      </button>
-    </div>
-  );
-}
-
-function Choices({ g, recorded, onChoose }: { g: GameState; recorded: Action | null; onChoose: (a: Action) => void }) {
-  const seat = g.turn!;
-  const options = legalActions(g);
-  const who = seat === 0 ? 'You' : seatName(seat);
-  const verb = g.phase === 'bidding' ? 'bid' : g.phase === 'declaring' ? 'call trump' : 'play';
-  return (
-    <div class="review-choices">
-      <p>
-        {who} to {verb}. {recorded ? <>Recorded: <strong>{actionLabel(recorded)}</strong>. Tap it to replay, or tap another legal move to branch.</> : 'Choose a legal move to continue the branch.'}
-      </p>
-      <div class={`review-options ${g.phase === 'playing' ? 'is-dominoes' : ''}`}>
-        {options.map(a => {
-          const isRecorded = recorded !== null && sameAction(a, recorded);
-          return a.type === 'play' ? (
-            <button type="button" key={a.domino} class={`review-option-dom${isRecorded ? ' is-recorded' : ''}`}
-              aria-label={`${actionLabel(a)}${isRecorded ? ' (recorded)' : ''}`} onClick={() => onChoose(a)}>
-              <Domino id={a.domino} />
-            </button>
-          ) : (
-            <button type="button" key={actionLabel(a)} class={`review-chip${isRecorded ? ' is-recorded' : ''}`} onClick={() => onChoose(a)}>
-              {actionLabel(a)}
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    <button type="button" class="review-btn replay-reveal" aria-pressed={reveal} onClick={() => onReveal(!reveal)}>
+      {reveal ? 'Hide the other hands' : 'Show all hands on the table (hindsight)'}
+    </button>
   );
 }
 
 type EstimateState = Estimate | 'loading' | 'error';
 const estimateCache = new Map<string, Estimate>();
 
-function WhatIf({ hand, at, decision, branch, tip }: {
+function WhatIf({ hand, at, decision, branch, tip, reveal, onReveal }: {
   hand: ReviewHand; at: number; decision: HandStep; branch: readonly Action[]; tip: GameState;
+  reveal: boolean; onReveal: (on: boolean) => void;
 }) {
   const seat = decision.state.turn!;
   const team = teamOf(seat);
@@ -361,7 +348,8 @@ function WhatIf({ hand, at, decision, branch, tip }: {
             After your branch ({branch.map(actionLabel).join(' → ')}): {netSentence(branchEnd, team)}. {outcomeSentence(branchEnd)}
           </p>
         )}
-        {!alt && <p class="review-fine">Tap a different legal move above to compare a branch.</p>}
+        {!alt && <p class="review-fine">Tap a different bright tile or choice on the table to compare a branch.</p>}
+        <HindsightToggle reveal={reveal} onReveal={onReveal} />
       </div>
 
       <div class="review-card is-knowledge">
@@ -383,7 +371,7 @@ function WhatIf({ hand, at, decision, branch, tip }: {
                   const isRec = sameAction(o.action, recorded), isAlt = alt !== null && sameAction(o.action, alt);
                   return (
                     <tr key={actionLabel(o.action)} class={isRec ? 'is-recorded' : isAlt ? 'is-alt' : ''}>
-                      <td>{actionLabel(o.action)}{isRec ? ' (played)' : isAlt ? ' (branch)' : ''}</td>
+                      <td>{actionLabel(o.action)}{isRec ? ' (actual)' : isAlt ? ' (branch)' : ''}</td>
                       <td>{o.ahead}/{o.samples}</td>
                       <td>{o.behind}/{o.samples}</td>
                       <td>{o.averageNet >= 0 ? '+' : '−'}{Math.abs(o.averageNet).toFixed(2)}</td>
@@ -411,6 +399,7 @@ function Timeline({ steps, at, divergence, hints, onJump }: {
 }) {
   return (
     <nav class="review-timeline" aria-label="Decisions in this hand">
+      <h3>Every decision</h3>
       {timeline(steps).map(row => (
         <div class="review-timeline-row" key={row.label}>
           <span>{row.label}</span>

@@ -68,3 +68,89 @@
 .review-step.is-here { background: #286f65; color: #fff; }
 .review-step.is-here small { color: #d9efe8; }
 .review-step.is-diverged { background: #f4d9a6; }
+
+/* A hand on the game's own table (ReplayTable): the live felt, a replay
+   ribbon on top, replay controls below, analysis in a sheet. */
+.replay-screen {
+  background-color: #43291a;
+  background-image: radial-gradient(ellipse at 50% 18%, rgba(232, 183, 113, 0.16), transparent 72%),
+    linear-gradient(145deg, #4c3527, #35271f 65%, #2b211b);
+  color: var(--cream);
+}
+.replay-screen > .table-screen { padding-top: env(safe-area-inset-top, 0px); }
+.replay-bar { display: flex; align-items: center; gap: 6px; padding: 4px 6px; min-height: 48px; background: #e9dcc4; color: #3e2d1e;
+  border-bottom: 3px solid #286f65; }
+.replay-bar.is-branch { background: #f4d9a6; color: #5b3b0c; border-bottom-color: #c9861f; }
+.replay-nav { min-height: 40px; padding: 0 10px; border: 0; border-radius: 20px; background: #f8efdd; color: #58422c; font-size: 14px; white-space: nowrap; }
+.replay-exit { background: #286f65; color: #fff8eb; }
+.replay-title { flex: 1; min-width: 0; display: grid; text-align: center; line-height: 1.25; }
+.replay-title strong, .replay-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.replay-title strong { font: 600 15px var(--display); }
+.replay-title span { font-size: 12px; }
+.replay-stale { padding: 16px; color: var(--cream); }
+.replay-screen .status { min-height: 40px; }
+.replay-felt.is-hindsight { outline: 2px dashed #f2d794; outline-offset: -3px; border-radius: 14px; }
+.replay-hindsight { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; padding: 4px 4px 4px 10px; border-radius: 10px;
+  background: #f2d794; color: #3e2d1e; font-size: 12px; line-height: 1.35; }
+.replay-hindsight-off { margin-left: auto; min-height: 36px; padding: 0 12px; border: 1px solid #8a6a2c; border-radius: 18px;
+  background: #fff3d6; color: #3e2d1e; font-size: 13px; }
+.replay-bottom { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px; }
+.replay-bottom .seat-name { font-size: 14px; }
+.replay-bottom-row { display: flex; gap: 2px; }
+.replay-bottom-row .dom { width: 34px; }
+.replay-hand { padding-top: 6px; }
+.replay-hand .hand-heading { margin-bottom: 6px; }
+.replay-hand .hand { min-height: 0; padding-top: 12px; }
+.replay-seat-label { background: #5b4630; border-color: #e9c07a80; }
+.replay-whose { color: #e1cbae; font-weight: 400; }
+.replay-tile { position: relative; display: flex; }
+.replay-tile > .dom { width: clamp(36px, calc((100vw - 36px) / 7), 58px); }
+.replay-tile.is-actual > .dom { outline: 3px solid var(--teal-bright); outline-offset: 2px; border-radius: 8px; }
+.replay-tag { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); padding: 0 4px; border-radius: 4px;
+  background: #286f65; color: #fff8eb; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.replay-tile.is-actual > .dom-legal ~ .replay-tag { top: -20px; }
+.replay-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.replay-calls { display: flex; gap: 6px; overflow-x: auto; padding: 8px 2px 2px; scrollbar-width: thin; }
+.replay-call { flex: none; min-height: 44px; min-width: 52px; padding: 0 12px; border: 2px solid #e9c07a66; border-radius: 22px;
+  background: #f4ead4; color: var(--brown-9); font-size: 14px; }
+.replay-call.is-actual { border-color: var(--teal-bright); box-shadow: 0 0 0 2px #286f65; }
+.replay-call small { margin-left: 4px; color: #286f65; font-weight: 700; text-transform: uppercase; font-size: 10px; }
+.replay-controls { display: flex; gap: 6px; padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)); background: rgba(26, 15, 7, 0.72);
+  border-top: 1px solid rgba(233, 192, 122, 0.25); }
+.replay-btn { flex: 1; min-width: 0; min-height: 44px; padding: 0 6px; border: 1px solid #e9c07a66; border-radius: 12px; background: #e9c07a1f;
+  color: var(--cream); font-size: 14px; white-space: nowrap; }
+.replay-btn:disabled { opacity: .4; }
+.replay-btn.is-actual { border-color: var(--teal-bright); background: #286f65; }
+.replay-sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 40; max-height: 78%; overflow-y: auto; overscroll-behavior: contain;
+  padding: 10px 16px max(20px, env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0; background: #fff8e9; color: #3e2d1e;
+  box-shadow: 0 -8px 28px rgba(10, 5, 2, 0.55); }
+.replay-sheet-head { position: sticky; top: -10px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin: -10px -16px 6px; padding: 8px 16px; background: #fff8e9; border-bottom: 1px solid #e3d4ba; }
+.replay-sheet-head h3 { margin: 0; font: 20px var(--display); }
+.replay-reveal { width: 100%; margin-top: 6px; border-color: #c99b4b; background: #fff3d6; font-weight: 600; }
+.review-timeline h3 { margin: 6px 0 2px; font: 18px var(--display); }
+/* Short phones (568px tall): tighter chrome so the trick keeps its room. */
+@media (max-height: 700px) {
+  .replay-bar { min-height: 42px; padding-block: 2px; }
+  .replay-nav { min-height: 38px; padding: 0 8px; font-size: 13px; }
+  .replay-screen .status { min-height: 34px; padding-block: 0; }
+  .replay-screen .status-tallies { padding-block: 2px; }
+  .replay-screen .info-bar { padding: 4px 8px; }
+  .replay-screen .suit-card { padding: 3px 10px; gap: 0; }
+  .replay-screen .suit-name { font-size: 18px; }
+  .replay-screen .hist-toggle { min-height: 36px; }
+  .replay-felt .mini-col { gap: 2px; }
+  .replay-felt .mini-col .dom { width: 30px; }
+  .replay-felt .seat-top { gap: 2px; }
+  .replay-bottom { margin-top: 2px; }
+  .replay-bottom-row .dom { width: 30px; }
+  .replay-hindsight { margin-bottom: 2px; font-size: 11px; line-height: 1.25; }
+  .replay-hindsight-off { min-height: 32px; }
+  .mini-row.face-up .dom { width: 22px; }
+  .replay-hand { padding-top: 2px; }
+  .replay-hand .hand-caption { min-height: 0; }
+  .replay-hand .you-label { padding: 3px 10px; }
+  .replay-tile > .dom { width: clamp(34px, calc((100vw - 36px) / 7), 40px); }
+  .replay-controls { padding-block: 4px; }
+}
+@media (min-width: 760px) { .replay-sheet { left: 50%; width: 680px; transform: translateX(-50%); } }

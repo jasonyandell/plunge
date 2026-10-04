@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'preact/hooks';
 import type { Seat } from '../engine';
 import {
-  type AppEvent, type AppState, HUMAN_SEAT, TRICK_SHOW_MS, nelloAvailable, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
+  type AppEvent, type AppState, HUMAN_SEAT, TRICK_SHOW_MS, nelloAvailable, aiDelayMs, initialApp, liveHand, loadApp, pendingAiSeat, reducer, saveApp,
 } from './store';
 import {
   BUILD_ID, UPDATE_POLL_MS, fetchRemoteVersion, updateAvailable,
@@ -246,7 +246,7 @@ export function App() {
         return <About dispatch={dispatch} />;
       case 'table':
         return app.game || app.scenarioGame ? (
-          <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} />
+          <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} onPastHands={openReview} />
         ) : (
           <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} onReview={openReview} />
         );
@@ -256,7 +256,8 @@ export function App() {
   return (
     <>
       {screen}
-      {reviewing && <HistoryReview onClose={closeReview} onExport={downloadHistory} />}
+      {reviewing && <HistoryReview onClose={closeReview} onExport={downloadHistory} live={liveHand(app)}
+        closeLabel={app.screen === 'table' && (app.game || app.scenarioGame) ? 'Back to game' : 'Close'} />}
       {questions && <Questions nelloPreview={nelloAvailable(app.settings)} key={questions.id ?? "list"} initialId={questions.id} onClose={() => setQuestions(null)} dispatch={dispatch} />}
       {nativeError && (
         <div class="native-error" role="alert">

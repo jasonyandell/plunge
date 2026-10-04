@@ -1,3 +1,4 @@
+import type { ComponentChildren } from 'preact';
 import { type GameState, teamOf } from '../engine';
 import { Domino } from './Domino';
 import { SEAT_NAMES } from './store';
@@ -7,11 +8,13 @@ export function TrickHistory({
   onTapPlay,
   selected,
   actionLabel = 'ask Walt',
+  footer,
 }: {
   g: GameState;
   actionLabel?: string;
   onTapPlay?: ((trick: number, play: number, target: HTMLButtonElement) => void) | undefined;
   selected?: { trick: number; play: number } | null | undefined;
+  footer?: ComponentChildren;
 }) {
   return (
     <div class="hist-panel" role="region" aria-label="Trick history">
@@ -61,6 +64,7 @@ export function TrickHistory({
           </div>
         );
       })}
+      {footer}
     </div>
   );
 }
