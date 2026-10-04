@@ -25,6 +25,8 @@ interface AuctionSheetProps extends SheetProps { showHints: boolean; sessionId: 
 interface EndSheetProps extends SheetProps {
   /** Swap to the hand-review card (trick-by-trick history). */
   onReview?: (() => void) | undefined;
+  /** Opens past-hand replay without leaving this game. */
+  onPastHands?: (() => void) | undefined;
   /** Viewing a shared hand (view-only) — no next hand to shake. */
   scenario?: boolean | undefined;
 }
@@ -191,7 +193,7 @@ function declTitle(d: Declaration): string {
 // Hand over / game over
 // ---------------------------------------------------------------------------
 
-export function HandOverSheet({ g, dispatch, onReview, scenario }: EndSheetProps) {
+export function HandOverSheet({ g, dispatch, onReview, onPastHands, scenario }: EndSheetProps) {
   const copy = handOverCopy(g);
   return (
     <div class="overlay">
@@ -221,12 +223,17 @@ export function HandOverSheet({ g, dispatch, onReview, scenario }: EndSheetProps
             See how it went
           </button>
         )}
+        {onPastHands && (
+          <button type="button" class="text-btn" onClick={onPastHands}>
+            Replay past hands
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-export function GameOverSheet({ g, dispatch, onReview }: EndSheetProps) {
+export function GameOverSheet({ g, dispatch, onReview, onPastHands }: EndSheetProps) {
   const copy = gameOverCopy(g);
   const won = g.winner === 0;
   return (
@@ -249,6 +256,11 @@ export function GameOverSheet({ g, dispatch, onReview }: EndSheetProps) {
         {onReview && (
           <button type="button" class="text-btn" onClick={onReview}>
             See how it went
+          </button>
+        )}
+        {onPastHands && (
+          <button type="button" class="text-btn" onClick={onPastHands}>
+            Replay past hands
           </button>
         )}
         <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'home' })}>

@@ -500,3 +500,8 @@
 .seat-top .seat-tag { color: #b8e3d7; }
 
 .play-error { margin: 8px 0 0; text-align: center; color: var(--cream); font-size: 14px; }
+
+/* Past-hand replay, offered from the open trick history. */
+.hist-past { display: block; width: 100%; color: var(--teal-bright); font-size: 14px; text-align: right; }
+/* Face-up minis (hand replay only) need a little more room for pips. */
+.mini-row.face-up .dom { width: 24px; }

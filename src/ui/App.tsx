@@ -6,10 +6,10 @@
  * All decisions live in the pure store (src/ui/store.ts).
  */
 
-import { useEffect, useReducer, useRef, useState } from 'preact/hooks';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'preact/hooks';
 import type { Seat } from '../engine';
 import {
-  type AppEvent, type AppState, HUMAN_SEAT, TRICK_SHOW_MS, nelloAvailable, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
+  type AppEvent, type AppState, HUMAN_SEAT, TRICK_SHOW_MS, nelloAvailable, aiDelayMs, initialApp, liveHand, loadApp, pendingAiSeat, reducer, saveApp,
 } from './store';
 import {
   BUILD_ID, UPDATE_POLL_MS, fetchRemoteVersion, updateAvailable,
@@ -25,6 +25,8 @@ import './app.css';
 import { retryEvidence } from '../ai/phone/records';
 import { recordHistory, retryHistory, exportHistory } from '../history/recorder';
 import { Questions } from './Questions';
+import { HistoryReview } from './HistoryReview';
+import { parseReviewHash } from '../review/steps';
 import { attachGame, syncQuestions } from '../questions/client';
 
 export function App() {
@@ -58,6 +60,16 @@ export function App() {
   }).catch(() => setHistoryError('History export failed. Keep this tab open and retry.'));
 
   const [questions, setQuestions] = useState<{ id: string | null } | null>(null);
+  // History review lives in the location hash (#review...), so reload and back keep the place.
+  const [reviewing, setReviewing] = useState(() => typeof location !== 'undefined' && parseReviewHash(location.hash) !== null);
+  useEffect(() => {
+    const sync = () => { if (parseReviewHash(location.hash)) setReviewing(true); };
+    window.addEventListener('hashchange', sync);
+    window.addEventListener('popstate', sync);
+    return () => { window.removeEventListener('hashchange', sync); window.removeEventListener('popstate', sync); };
+  }, []);
+  const openReview = () => { history.pushState(null, '', '#review'); setReviewing(true); };
+  const closeReview = useCallback(() => setReviewing(false), []);
   const openQuestion = (id: string) => setQuestions({ id });
   useEffect(() => {
     const sync = () => void syncQuestions();
@@ -95,7 +107,7 @@ export function App() {
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     setNativeError(null);
-    if (questions) return;
+    if (questions || reviewing) return;
     const seat = pendingAiSeat(app);
     if (seat !== null) {
       let alive = true;
@@ -136,7 +148,7 @@ export function App() {
       return () => clearTimeout(t);
     }
     return undefined;
-  }, [app, retry, questions]);
+  }, [app, retry, questions, reviewing]);
 
   // Persist settings + in-progress game. (A shared hand opened from a link
   // is never part of the save — the player's own game stays underneath.)
@@ -227,16 +239,16 @@ export function App() {
   const screen = (() => {
     switch (app.screen) {
       case 'home':
-        return <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} />;
+        return <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} onReview={openReview} />;
       case 'how':
         return <HowTo dispatch={dispatch} />;
       case 'about':
         return <About dispatch={dispatch} />;
       case 'table':
         return app.game || app.scenarioGame ? (
-          <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} />
+          <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} onPastHands={openReview} />
         ) : (
-          <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} />
+          <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} onReview={openReview} />
         );
     }
   })();
@@ -244,6 +256,8 @@ export function App() {
   return (
     <>
       {screen}
+      {reviewing && <HistoryReview onClose={closeReview} onExport={downloadHistory} live={liveHand(app)}
+        closeLabel={app.screen === 'table' && (app.game || app.scenarioGame) ? 'Back to game' : 'Close'} />}
       {questions && <Questions nelloPreview={nelloAvailable(app.settings)} key={questions.id ?? "list"} initialId={questions.id} onClose={() => setQuestions(null)} dispatch={dispatch} />}
       {nativeError && (
         <div class="native-error" role="alert">

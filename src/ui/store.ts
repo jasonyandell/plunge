@@ -160,6 +160,16 @@ export function trickJustCompleted(prev: GameState, next: GameState): boolean {
 }
 
 /**
+ * The player's own hand still in play (bidding through the last trick), which
+ * history review keeps closed so it cannot show hidden tiles mid-game.
+ */
+export function liveHand(s: AppState): { gameId: string; handNumber: number } | null {
+  const g = s.game;
+  return g && (g.phase === 'bidding' || g.phase === 'declaring' || g.phase === 'playing')
+    ? { gameId: s.sessionId, handNumber: g.handNumber } : null;
+}
+
+/**
  * The AI seat that should act next, or null. Null while the human is up,
  * while a finished trick is on display, off the table screen, and in
  * hand-over / game-over (advancing to the next hand is the human's tap).

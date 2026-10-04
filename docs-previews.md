@@ -7,34 +7,53 @@ Actions run. The URL stays the same across pushes:
 `https://plunge-pr-<number>.<account-subdomain>.workers.dev`.
 It works from a phone without a development machine running.
 
-Each PR owns one Worker (`plunge-pr-N`) and one D1 database
-(`plunge-pr-N-questions`). Its database persists across pushes; migrations apply
-only there. Browser storage also stays separate because each preview has its own
-origin. There is no copy of production questions. Preview questions and links
-are temporary: **closing or merging the PR deletes its Worker and database**.
-Export any evidence worth keeping before closing. Reopening starts afresh.
+Each PR owns one Worker (`plunge-pr-N`) and **no database**. Previews are built
+with `PLUNGE_QUESTIONS=local-only`. In that mode, **Why this move?** and **Why this hint?**
+save to that phone's browser storage only. Your questions says nothing is sent,
+and short links are hidden. The preview Worker answers every `/api/questions`
+request with `503 {"local_only": true}`. No question is uploaded, and none can
+reach production. Game history and **Talk over past hands** were always
+device-only and work unchanged. Each preview has its own origin, so browser
+storage stays separate from production. **Closing or merging the PR deletes its Worker**,
+along with any `plunge-pr-N-questions` database left by an earlier preview.
 
-Production still deploys only from `main`. Even a manual production workflow run
-on another branch skips deployment. PR previews use a generated, separate Wrangler
-configuration with no production bindings or routes. Worker/asset settings in
+Production still deploys only from `main`, with its question database and the
+default `PLUNGE_QUESTIONS=remote` build. Even a manual production workflow run on
+another branch skips deployment. PR previews use a generated, separate Wrangler
+configuration with no bindings or routes. Worker/asset settings in
 `scripts/preview.mjs` must be kept aligned with `wrangler.toml` when those change.
+
+To try a local-only build yourself: `npm run build:local-only`
+(`PLUNGE_QUESTIONS=local-only npm run build`). Any value other than `remote` or
+`local-only` fails the build.
 
 ## Operations
 
 - Existing `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` repository secrets
-  provide Workers Scripts edit and D1 edit access. Credentials are supplied only
-  to resource preparation, migration, deployment and cleanup steps.
+  are reused. Deploying needs only Workers Scripts access. D1 edit is still used by
+  production and by cleanup of legacy preview databases. Credentials are supplied
+  only to configuration, deployment and cleanup steps.
 - Fork PRs run ordinary CI without cloud deployment. Previews are for trusted
   branches in this repository; branch code and workflows can use repository secrets.
+- Deployment tools come from the PR's own head when its `scripts/preview.mjs`
+  declares `PREVIEW_PROTOCOL = 'local-only-v1'`. Otherwise they come from the
+  commit that defines the running workflow. This holds for runs dispatched from
+  `main` too, so a PR is deployed by its own updated tools. Either way, the
+  workflow's own copy then checks the generated configuration
+  (`preview.mjs check-config`): one PR-named Worker, no bindings and no routes.
+  The workflow itself never runs D1 commands. A commit that predates local-only
+  mode fails at the stamp step rather than deploying an app that would offer
+  uploads. Rebase it to get a preview.
 - Deploy and cleanup share a per-PR concurrency group and do not interrupt active
   resource mutations. Each run resolves the current PR state and verifies its
   head again after tests, so superseded builds do not overwrite newer previews.
-- Smoke checks verify the exact commit, app response, and a real authenticated D1
-  notebook query before publishing the GitHub deployment link.
+- Smoke checks verify the exact commit, an app built for local-only questions,
+  and a question service that refuses storage, before publishing the GitHub
+  deployment link.
 - Rerun a failed job, or choose **Actions → PR preview → Run workflow**, keep
   branch `main`, and enter a PR number. Open PRs deploy their current head; closed
   PRs clean up. This also bootstraps existing PRs that predate this workflow.
-- Cleanup is repeatable. It deletes serving code before its database; failures
+- Cleanup is repeatable. It deletes serving code before any legacy database; failures
   remain visible as failed workflow runs. GitHub deployment records are retained
   as history and marked inactive after successful cleanup.
 - Previews are public and send `noindex` headers. They use normal Cloudflare and

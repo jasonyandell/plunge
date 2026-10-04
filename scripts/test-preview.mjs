@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { names, previewConfig, preparePreview, cleanupPreview, cloudflare, smokePreview } from './preview.mjs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { names, previewConfig, checkConfig, preparePreview, cleanupPreview, cloudflare, smokePreview, stampPreview,
+  LOCAL_ONLY_MARKER, PREVIEW_PROTOCOL } from './preview.mjs';
 
 const previewDb = { name: 'plunge-pr-4-questions', uuid: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' };
 const productionDb = { name: 'plunge-questions', uuid: '11111111-2222-3333-4444-555555555555' };
@@ -11,7 +16,6 @@ function fixture({ exists = false, failDelete = false } = {}) {
     calls.push({ path, method, body });
     if (path === '/workers/subdomain') return { subdomain: 'test-account' };
     if (path.startsWith('/d1/database?')) return databases;
-    if (path === '/d1/database' && method === 'POST') { databases.push(previewDb); return previewDb; }
     if (path === '/workers/scripts/plunge-pr-4' && method === 'DELETE') {
       if (failDelete) throw new Error('permission denied');
       return null;
@@ -22,6 +26,27 @@ function fixture({ exists = false, failDelete = false } = {}) {
     throw new Error(`Unexpected API access: ${method} ${path}`);
   } };
 }
+test('preview deploys never touch D1 and always build and check a local-only preview', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/preview.yml', import.meta.url), 'utf8');
+  const deploy = workflow.slice(workflow.indexOf('\n  deploy:'), workflow.indexOf('\n  cleanup:'));
+  assert.ok(deploy.length > 100);
+  const commands = deploy.split('\n').filter(line => !line.trim().startsWith('#')).join('\n');
+  assert.doesNotMatch(commands, /\bd1\b|migrations/i);
+  assert.match(deploy, /PLUNGE_QUESTIONS=local-only npm run build/);
+  assert.match(deploy, /wrangler deploy --config wrangler\.preview\.generated\.json/);
+  assert.match(deploy, /\.\.\/preview-tools\/scripts\/preview\.mjs check-config/);
+  // The workflow's grep must select these tools, and reject tools that predate them.
+  const pattern = /marker="(\^.+)\\\$"/.exec(deploy)?.[1] + '$';
+  assert.equal(pattern, `^export const PREVIEW_PROTOCOL = '${PREVIEW_PROTOCOL}';$`);
+  const grep = text => spawnSync('grep', ['-q', pattern], { input: text }).status;
+  assert.equal(grep(readFileSync(new URL('./preview.mjs', import.meta.url))), 0);
+  assert.equal(grep("export const CONFIG_FILE = 'wrangler.preview.generated.json';\n"), 1);
+  assert.equal(grep("// export const PREVIEW_PROTOCOL = 'local-only-v1';\n"), 1);
+  // Production keeps its database.
+  assert.match(readFileSync(new URL('../.github/workflows/deploy.yml', import.meta.url), 'utf8'),
+    /wrangler d1 migrations apply QUESTIONS --remote\n\s+npx wrangler deploy\n/);
+  assert.doesNotMatch(readFileSync(new URL('../.github/workflows/deploy.yml', import.meta.url), 'utf8'), /PLUNGE_QUESTIONS/);
+});
 test('invalid identities cannot select production or perform API calls', async () => {
   for (const pr of ['', 'main', '0', '-4', '04', '4/../plunge', '4\n', undefined]) {
     assert.throws(() => names(pr));
@@ -30,37 +55,55 @@ test('invalid identities cannot select production or perform API calls', async (
     await assert.rejects(cleanupPreview(pr, f.api));
     assert.equal(f.calls.length, 0);
   }
-  assert.throws(() => previewConfig(4, productionDb), /identity/);
 });
-test('first deployment provisions only this PR; repeat deployment retains its database', async () => {
+test('preparing a preview only reads the subdomain and never creates or binds a database', async () => {
   const f = fixture();
   const first = await preparePreview(4, f.api);
-  const second = await preparePreview(4, f.api);
-  assert.deepEqual(first, second);
+  assert.deepEqual(first, await preparePreview(4, f.api));
   assert.equal(first.url, 'https://plunge-pr-4.test-account.workers.dev');
-  assert.equal(first.config.d1_databases[0].database_id, previewDb.uuid);
   assert.equal(first.config.name, 'plunge-pr-4');
+  assert.equal(first.config.d1_databases, undefined);
   assert.equal(first.config.routes, undefined);
   assert.equal(first.config.preview_urls, false);
-  assert.equal(f.calls.filter(c => c.method === 'POST').length, 1);
+  assert.deepEqual(f.calls.map(c => `${c.method} ${c.path}`), ['GET /workers/subdomain', 'GET /workers/subdomain']);
 });
-test('database lookup follows pagination before provisioning', async () => {
-  const filler = Array.from({ length: 100 }, (_, i) => ({ name: `another-${i}` }));
-  const api = async path => {
-    if (path === '/workers/subdomain') return { subdomain: 'test-account' };
-    if (path.endsWith('page=1')) return filler;
-    if (path.endsWith('page=2')) return [previewDb];
-    throw new Error('Must not create a duplicate database');
-  };
-  assert.equal((await preparePreview(4, api)).config.d1_databases[0].database_id, previewDb.uuid);
+test('generated configuration rejects bindings, routes and other workers', () => {
+  const config = previewConfig(4);
+  assert.equal(checkConfig(4, config), config);
+  for (const bad of [
+    { ...config, d1_databases: [{ binding: 'QUESTIONS', database_name: productionDb.name, database_id: productionDb.uuid }] },
+    { ...config, routes: ['plunge.example/*'] },
+    { ...config, kv_namespaces: [] },
+    { ...config, vars: { QUESTIONS: 'x' } },
+    { ...config, name: 'plunge' },
+    { ...config, workers_dev: false },
+    { ...config, assets: { ...config.assets, binding: 'QUESTIONS' } },
+  ]) assert.throws(() => checkConfig(4, bad), /database-free/);
+  assert.throws(() => checkConfig(5, config));
 });
-test('cleanup removes only this PR, is repeatable, and never deletes production', async () => {
+test('cleanup removes this PR and its legacy database, is repeatable, and never deletes production', async () => {
   const f = fixture({ exists: true });
   await cleanupPreview(4, f.api);
   await cleanupPreview(4, f.api);
   assert.deepEqual(f.calls.filter(c => c.method === 'DELETE').map(c => c.path), [
     '/workers/scripts/plunge-pr-4', `/d1/database/${previewDb.uuid}`, '/workers/scripts/plunge-pr-4',
   ]);
+});
+test('cleanup without a legacy database deletes only the Worker', async () => {
+  const f = fixture();
+  await cleanupPreview(4, f.api);
+  assert.deepEqual(f.calls.filter(c => c.method !== 'GET').map(c => c.path), ['/workers/scripts/plunge-pr-4']);
+});
+test('legacy database lookup follows pagination', async () => {
+  const filler = Array.from({ length: 100 }, (_, i) => ({ name: `another-${i}` }));
+  const deleted = [];
+  await cleanupPreview(4, async (path, method = 'GET') => {
+    if (method === 'DELETE') { deleted.push(path); return null; }
+    if (path.endsWith('page=1')) return filler;
+    if (path.endsWith('page=2')) return [previewDb];
+    throw new Error(`Unexpected API access: ${method} ${path}`);
+  });
+  assert.deepEqual(deleted, ['/workers/scripts/plunge-pr-4', `/d1/database/${previewDb.uuid}`]);
 });
 test('failed Worker cleanup retains its database', async () => {
   const f = fixture({ exists: true, failDelete: true });
@@ -75,17 +118,35 @@ test('API allows missing cleanup targets but does not hide auth/server failures'
     else await assert.rejects(api('/workers/scripts/plunge-pr-4', 'DELETE', undefined, true));
   }
 });
-test('smoke check refuses production and detects stale code or missing database', async () => {
+test('stamping refuses a build that would offer uploads', () => {
+  const home = process.cwd(), dir = mkdtempSync(join(tmpdir(), 'plunge-preview-'));
+  try {
+    process.chdir(dir); mkdirSync('dist');
+    writeFileSync('dist/_headers', '/assets/*\n  Cache-Control: immutable\n');
+    writeFileSync('dist/index.html', '<meta name="plunge-questions" content="remote"><script></script>');
+    assert.throws(() => stampPreview(4, 'a'.repeat(40)), /local-only/);
+    writeFileSync('dist/index.html', `${LOCAL_ONLY_MARKER}<script></script>`);
+    assert.throws(() => stampPreview(4, 'short'), /SHA/);
+    stampPreview(4, 'a'.repeat(40));
+    assert.deepEqual(JSON.parse(readFileSync('dist/version.json', 'utf8')),
+      { build: 'a'.repeat(40), preview_pr: 4, questions: 'local-only' });
+    assert.match(readFileSync('dist/_headers', 'utf8'), /X-Robots-Tag: noindex/);
+  } finally { process.chdir(home); rmSync(dir, { recursive: true, force: true }); }
+});
+test('smoke check refuses production and detects stale code, remote builds, or a question database', async () => {
   const sha = 'a'.repeat(40), url = 'https://plunge-pr-4.test-account.workers.dev';
   const request = async (input, options) => {
     if (input.pathname === '/version.json') return Response.json({ build: sha });
-    if (input.pathname === '/') return new Response('<script src="/app.js"></script>');
+    if (input.pathname === '/') return new Response(`${LOCAL_ONLY_MARKER}<script src="/app.js"></script>`);
     assert.match(options.headers.Authorization, /^Bearer [a-f0-9]{64}$/);
-    return Response.json({ items: [] });
+    return Response.json({ error: 'This preview keeps questions on your device only.', local_only: true }, { status: 503 });
   };
+  const replace = (path, response) => async (input, options) => input.pathname === path ? response() : request(input, options);
   await smokePreview(url, sha, request);
   await assert.rejects(smokePreview('https://plunge.test-account.workers.dev', sha, request), /preview URL/);
   await assert.rejects(smokePreview(url, 'b'.repeat(40), request), /expected commit/);
-  await assert.rejects(smokePreview(url, sha, async (input, options) => input.pathname === '/api/questions'
-    ? Response.json({ error: 'unavailable' }, { status: 503 }) : request(input, options)), /database/);
+  await assert.rejects(smokePreview(url, sha, replace('/', () => new Response('<script></script>'))), /local-only/);
+  await assert.rejects(smokePreview(url, sha, replace('/api/questions', () => Response.json({ items: [] }))), /not local-only/);
+  await assert.rejects(smokePreview(url, sha, replace('/api/questions',
+    () => Response.json({ error: 'Questions are temporarily unavailable.' }, { status: 503 }))), /not local-only/);
 });

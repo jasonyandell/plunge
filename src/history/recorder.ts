@@ -105,7 +105,7 @@ export async function exportHistory(): Promise<string> {
 }
 
 /** Export prior recorder stores verbatim; never migrate, delete or upload them. */
-async function readExistingDatabase(name: string): Promise<Record<string, unknown[]> | null> {
+export async function readExistingDatabase(name: string): Promise<Record<string, unknown[]> | null> {
   if (!indexedDB.databases || !(await indexedDB.databases()).some(db => db.name === name)) return null;
   const db = await new Promise<IDBDatabase>((resolve, reject) => {
     const r = indexedDB.open(name); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error);
