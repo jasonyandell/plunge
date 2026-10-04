@@ -171,3 +171,13 @@ The finished-hand store was rescued from PR #7 / commit
 against Claude's richer journal on `claude/in-flight-prs-planning-vlkhi2`
 (`f2b8fb02f1f8fde152f07803069d5d45593b6100`). Dashboard, derived reviews and remote
 hand synchronization remain deferred. Existing databases are preserved.
+
+## Talk over past hands (prototype)
+
+Home → **Talk over past hands** replays recorded hands one decision at a time.
+Stop at any bid, trump call or play, tap a different legal move to branch, and
+compare two separate answers: **Hindsight** finishes the real hands once with a
+simple practice player (one continuation, not proof), while **What you knew**
+guesses the hidden hands 24 times from that seat's own view (an estimate with
+sampling noise). Review only reads local history; it never writes, migrates or
+deletes it. [Review guide and QA routes](docs-history-review.md).
