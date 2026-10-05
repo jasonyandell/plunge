@@ -1,5 +1,5 @@
 /** Additive local history. No eviction, uploads, or solver reruns. */
-import type { AppState } from '../ui/store';
+import { questionGameId, type AppState } from '../ui/store';
 import { encodeReplay } from '../engine/replay-code';
 import { BUILD_ID } from '../ui/update';
 import { digest, listEstimates, sessionEstimates, sessionReceipts } from '../ai/phone/records';
@@ -17,7 +17,22 @@ export function snapshotOf(app: AppState) {
     // engine state only if a future/custom ruleset cannot be encoded.
     ...(code ? {} : { engineState: g }),
     receipts: Object.fromEntries(Object.entries(app.nativeReceipts).filter(([k]) => k.startsWith(`${g.handNumber}:`))),
-    auctionSurveys: app.auctionSurveys };
+    auctionSurveys: app.auctionSurveys,
+    // Added only when present, so ordinary snapshots keep their earlier content ids.
+    ...retryProvenance(app) };
+}
+/**
+ * A retried hand is the same game and hand as the original (root provenance),
+ * replayed as practice. Saves from tabs predating undo lack these fields.
+ */
+function retryProvenance(app: AppState) {
+  const g = app.game!, retry = app.retry?.handNumber === g.handNumber ? app.retry : null;
+  const practiceHands = app.practiceHands ?? [];
+  return {
+    ...(retry ? { retry: { practice: true as const, root: { gameId: app.sessionId, handNumber: g.handNumber },
+      branch: questionGameId(app), ...retry } } : {}),
+    ...(practiceHands.length ? { practiceHands } : {}),
+  };
 }
 type Snapshot = NonNullable<ReturnType<typeof snapshotOf>>;
 let opened: Promise<IDBDatabase> | undefined;
@@ -57,7 +72,9 @@ export async function recordHistory(app: AppState): Promise<void> {
     catch { /* IndexedDB can still succeed independently. */ }
   }
   await appendSnapshot(snapshot);
-  await recordFinishedHand(app.game!, app.sessionId, app.settings.difficulty);
+  // A retried hand stays in history above, but never enters the finished-hand
+  // log as a fresh result; the original attempt's record is left as written.
+  if (!snapshot.retry) await recordFinishedHand(app.game!, app.sessionId, app.settings.difficulty, app.practiceHands ?? []);
   pending.delete(key);
   const entry = staged.get(key);
   if (entry && typeof localStorage !== 'undefined') localStorage.removeItem(entry);

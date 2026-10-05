@@ -17,8 +17,8 @@ export { reviewLegal } from '../ai/native-analysis';
 type Selection = { trick: number; play: number };
 const pips = (tile: number): string => requestTile(tile).split('').join('–');
 
-export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQuestion, nelloPreview }: {
-  nelloPreview: boolean; g: GameState; onBack: () => void; sessionId: string; receipts: Record<string,string>; initialFlag: FlagRecord | null; onQuestion: (id: string) => void;
+export function NativeReview({ g, onBack, sessionId, questionGameId = sessionId, receipts, initialFlag, onQuestion, nelloPreview }: {
+  nelloPreview: boolean; g: GameState; onBack: () => void; sessionId: string; questionGameId?: string; receipts: Record<string,string>; initialFlag: FlagRecord | null; onQuestion: (id: string) => void;
 }) {
   const [sel, setSel] = useState<Selection | null>(initialFlag ? playLocation(g, initialFlag.ply) : null);
   const [receipt, setReceipt] = useState<NativeReceipt | null>(initialFlag?.original_receipt ?? null);
@@ -154,7 +154,7 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQu
           if (ply === null || !position) return;
           setBusy(true);
           void saveQuestion(g, ply, sessionId, matchedReceipt?.id ?? rid ?? null, note,
-            alternative === '' ? null : Number(alternative), matchedReceipt, position.request.seed)
+            alternative === '' ? null : Number(alternative), matchedReceipt, position.request.seed, questionGameId)
             .then(item => onQuestion(item.question.id)).catch(e => setError(String(e))).finally(() => setBusy(false));
         }}>{busy ? 'Saving…' : 'Save this question'}</button>
         {NATIVE_TABLE && <button type="button" class="big-btn" disabled={locked || Boolean(flag && !flag.portable) || (Boolean(rid) && matchedReceipt === null)} onClick={() => void save()}>

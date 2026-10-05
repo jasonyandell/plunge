@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:local-only": "PLUNGE_QUESTIONS=local-only npm run build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

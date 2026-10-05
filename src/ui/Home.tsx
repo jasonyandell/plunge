@@ -4,7 +4,7 @@
 
 import type { Difficulty } from '../ai';
 import { DEEP_WORLDS, NATIVE_TABLE, isNative, nativeLabel } from '../ai/native';
-import { nelloAvailable, nelloPaused, type AppEvent, type AppState } from './store';
+import { canRestart, canUndo, nelloAvailable, nelloPaused, type AppEvent, type AppState } from './store';
 import { Domino } from './Domino';
 import './home.css';
 
@@ -19,7 +19,9 @@ const DIFFS: readonly Difficulty[] = ['native-partner', 'native-l1'];
 
 export function Home({ app, dispatch, onQuestions, onHistory }: HomeProps) {
   const paused = nelloPaused(app);
-  const resumable = app.game !== null && (app.game.phase !== 'game-over' || app.showTrick);
+  // A finished game stays resumable while its last hand can still be undone or
+  // replayed, so a reload doesn't strand those choices on the result card.
+  const resumable = app.game !== null && (app.game.phase !== 'game-over' || app.showTrick || canUndo(app) || canRestart(app));
   return (
     <div class="home">
       <div class="home-card">

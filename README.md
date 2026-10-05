@@ -27,6 +27,16 @@ legal-domino highlighting. It defaults to on and is saved on this device across
 new games and reloads. With hints off, every tile in your hand has the same play
 styling; an illegal attempt gives a follow-suit reminder without changing the game.
 
+**Undo** (under the score bar) takes back your most recent bid, trump call or play
+in the current hand, together with the computer replies that followed; tap again
+to step back further. A double tap takes back one move. **Play this hand again**
+asks first, then replays the same deal and shaker with the marks the hand began
+with. Both are also on the end-of-hand and game-over cards, and stop at the
+start of the hand: once the next hand is shaken, earlier hands stay as played.
+Retried hands count as practice and show a small **Practice** label: the first attempt's finished record and saved
+moves stay as written, the retry is kept in exported history, and it isn't added
+to finished-hand stats.
+
 Completed tricks stay visible for two seconds before gathering toward the winner,
 including tricks that end the hand or match. The result card waits until the trick
 has been shown, and taps cannot skip the pause.
@@ -102,7 +112,7 @@ never label an unscored emergency fallback as a measured recommendation.
 ## How it ships
 
 Every same-repository pull request, including drafts, gets a stable phone-accessible
-preview link and an isolated question database. Pushes update that preview; closing
+preview link. Previews have no database: questions stay on the device. Pushes update that preview; closing
 the PR cleans it up. Open **View deployment** on the PR. [Preview guide](docs-previews.md).
 
 Every push to `main` runs the full suite (engine invariants, AI legality + strength

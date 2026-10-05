@@ -20,20 +20,51 @@ interface SheetProps {
   dispatch: (e: AppEvent) => void;
 }
 
-interface AuctionSheetProps extends SheetProps { showHints: boolean; sessionId: string; onQuestion: (id: string) => void }
+interface AuctionSheetProps extends SheetProps { showHints: boolean; sessionId: string; questionGameId?: string; onQuestion: (id: string) => void }
 
 interface EndSheetProps extends SheetProps {
   /** Swap to the hand-review card (trick-by-trick history). */
   onReview?: (() => void) | undefined;
   /** Viewing a shared hand (view-only) — no next hand to shake. */
   scenario?: boolean | undefined;
+  /** This hand was undone or replayed (practice, not counted in stats). */
+  practice?: boolean | undefined;
+  /** Take back your last move of this hand, result included. */
+  onUndo?: (() => void) | undefined;
+  /** Ask to replay this hand's deal from the start. */
+  onRestart?: (() => void) | undefined;
+}
+
+/** Optional ways back into the hand that just finished. */
+function RetryLinks({ onUndo, onRestart }: Pick<EndSheetProps, 'onUndo' | 'onRestart'>) {
+  if (!onUndo && !onRestart) return null;
+  return (
+    <div class="retry-links">
+      {onUndo && <button type="button" class="text-btn" onClick={onUndo}>Undo my last move</button>}
+      {onRestart && <button type="button" class="text-btn" onClick={onRestart}>Play this hand again</button>}
+    </div>
+  );
+}
+
+/** Replaying a hand clears it, so it is confirmed; Cancel leaves everything as it was. */
+export function RestartConfirm({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div class="overlay restart-overlay">
+      <div class="card" role="alertdialog" aria-label="Play this hand again?">
+        <h2 class="card-title">Play this hand again?</h2>
+        <p class="card-detail">Same dominoes, same shaker. The bids, tricks and this hand's marks are cleared. It counts as practice, and the first try stays in your history.</p>
+        <button type="button" class="big-btn" onClick={onConfirm}>Play this hand again</button>
+        <button type="button" class="text-btn" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Bidding
 // ---------------------------------------------------------------------------
 
-export function BidSheet({ g, dispatch, sessionId, onQuestion, showHints }: AuctionSheetProps) {
+export function BidSheet({ g, dispatch, sessionId, questionGameId, onQuestion, showHints }: AuctionSheetProps) {
   const bids = legalBids(g);
   const currentBid = highBid(g.bids);
   const canPass = bids.some((b) => b.kind === 'pass');
@@ -59,7 +90,7 @@ export function BidSheet({ g, dispatch, sessionId, onQuestion, showHints }: Auct
     <div class="sheet bid-sheet" role="dialog" aria-label="Your bid">
       <h2 class="sheet-title">Your bid</h2>
       <p class="hint">{isForcedBidTurn(g) ? 'Everyone passed. You must bid at least 30.' : !canPass ? 'Choose your bid.' : currentBid ? `The bid is ${bidLabel(currentBid.bid)}. Raise it or pass.` : 'Bidding starts at 30. Bid or pass.'}</p>
-      {showHints && <BiddingHint g={g} sessionId={sessionId} onQuestion={onQuestion} />}
+      {showHints && <BiddingHint g={g} sessionId={sessionId} questionGameId={questionGameId ?? sessionId} onQuestion={onQuestion} />}
       {pt !== null && minPt !== null && maxPt !== null && (
         <div class="bid-stepper">
           <button
@@ -141,7 +172,7 @@ function specialHint(b: Bid & { kind: 'marks' }): string {
 // Declaring trump
 // ---------------------------------------------------------------------------
 
-export function DeclareSheet({ g, dispatch, sessionId, onQuestion, showHints }: AuctionSheetProps) {
+export function DeclareSheet({ g, dispatch, sessionId, questionGameId, onQuestion, showHints }: AuctionSheetProps) {
   const decls = legalDeclarations(g);
   const forPartner =
     g.contract !== null &&
@@ -157,7 +188,7 @@ export function DeclareSheet({ g, dispatch, sessionId, onQuestion, showHints }: 
     <div class="sheet declare-sheet" role="dialog" aria-label="Declare trump">
       <h2 class="sheet-title">{title}</h2>
       {forPartner && <p class="hint">Pick from your own hand — no hints across the table.</p>}
-      {showHints && <BiddingHint g={g} sessionId={sessionId} onQuestion={onQuestion} />}
+      {showHints && <BiddingHint g={g} sessionId={sessionId} questionGameId={questionGameId ?? sessionId} onQuestion={onQuestion} />}
       <div class="decl-grid">
         {decls.map((d) => (
           <button
@@ -191,12 +222,12 @@ function declTitle(d: Declaration): string {
 // Hand over / game over
 // ---------------------------------------------------------------------------
 
-export function HandOverSheet({ g, dispatch, onReview, scenario }: EndSheetProps) {
+export function HandOverSheet({ g, dispatch, onReview, scenario, practice, onUndo, onRestart }: EndSheetProps) {
   const copy = handOverCopy(g);
   return (
     <div class="overlay">
       <div class="card" role="dialog" aria-label="Hand over">
-        <p class="eyebrow">Hand {g.handNumber}</p>
+        <p class="eyebrow">Hand {g.handNumber}{practice && ' · Practice'}</p>
         <h2 class="card-title">{copy.title}</h2>
         <p class="card-detail">{copy.detail}</p>
         <div class="card-tallies">
@@ -221,18 +252,19 @@ export function HandOverSheet({ g, dispatch, onReview, scenario }: EndSheetProps
             See how it went
           </button>
         )}
+        {!scenario && <RetryLinks onUndo={onUndo} onRestart={onRestart} />}
       </div>
     </div>
   );
 }
 
-export function GameOverSheet({ g, dispatch, onReview }: EndSheetProps) {
+export function GameOverSheet({ g, dispatch, onReview, practice, onUndo, onRestart }: EndSheetProps) {
   const copy = gameOverCopy(g);
   const won = g.winner === 0;
   return (
     <div class="overlay">
       <div class={`card ${won ? 'card-win' : 'card-loss'}`} role="dialog" aria-label="Game over">
-        <p class="eyebrow">{won ? 'A good game' : 'Until the next hand'}</p>
+        <p class="eyebrow">{won ? 'A good game' : 'Until the next hand'}{practice && ' · Practice'}</p>
         <h2 class="card-title">{copy.title}</h2>
         <p class="card-detail">{copy.detail}</p>
         <div class="card-tallies">
@@ -251,6 +283,7 @@ export function GameOverSheet({ g, dispatch, onReview }: EndSheetProps) {
             See how it went
           </button>
         )}
+        <RetryLinks onUndo={onUndo} onRestart={onRestart} />
         <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'home' })}>
           Back home
         </button>

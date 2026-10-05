@@ -47,7 +47,7 @@ describe('anonymous question service',()=>{
     expect(shared.complete).toBe(true);expect(shared.question.replay).toBe(code);expect(shared.question.snapshot).toBe(prefix);
   });
   it('retains a reviewer answer when the submitter edits their note',async()=>{
-    await env.QUESTIONS.prepare('UPDATE questions SET answer=?,answered_at=? WHERE id=?').bind('The six-four is ten count.','2026-09-15T01:00:00Z',id).run();
+    await env.QUESTIONS!.prepare('UPDATE questions SET answer=?,answered_at=? WHERE id=?').bind('The six-four is ten count.','2026-09-15T01:00:00Z',id).run();
     const updated={...question,replay:code,note:'A follow-up'};
     await call(`/${id}`,'PUT',{question:updated,revision:3},token);
     const shared=await (await call(`/${id}`)).json() as {answer:{body:string}};
@@ -57,6 +57,21 @@ describe('anonymous question service',()=>{
     expect((await call(`/${id}`,'PUT',{question:{...question,note:'x'.repeat(100000)},revision:4},token)).status).toBe(400);
     expect((await call(`/${id}`,'PUT',{question:{...question,replay:'garbage'},revision:4},token)).status).toBe(400);
     expect((await call('/admin','GET',undefined,token)).status).toBe(404);
+  });
+});
+
+describe('database-free preview worker',()=>{
+  it('refuses every question request as local-only and still serves the app',async()=>{
+    const preview={ASSETS:env.ASSETS};
+    const send=(path:string,method='GET',body?:unknown,owner?:string)=>worker.fetch(new Request(`https://plunge-pr-4.test.workers.dev/api/questions${path}`,{
+      method,headers:owner ? {Authorization:`Bearer ${owner}`} : {},...(body ? {body:JSON.stringify(body)} : {}),
+    }),preview);
+    for(const response of [await send('','GET',undefined,token),await send(`/${id}`),await send(`/${id}`,'PUT',{question,revision:9},token)]) {
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({error:'This preview keeps questions on your device only.',local_only:true});
+    }
+    expect((await worker.fetch(new Request('https://plunge-pr-4.test.workers.dev/api/elsewhere'),preview)).status).toBe(404);
+    expect(await (await worker.fetch(new Request('https://plunge-pr-4.test.workers.dev/'),preview)).text()).toBe('app');
   });
 });
 

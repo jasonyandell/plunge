@@ -1,13 +1,20 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, vi } from 'vitest';
-import { initialApp, reducer } from '../src/ui/store';
+import { initialApp, pendingAiSeat, reducer, type AppState } from '../src/ui/store';
+import { legalActions } from '../src/engine';
+
+/** Cheap computer seats until it is your turn (the table only accepts your own decisions). */
+function toYourTurn(app: AppState): AppState {
+  while (pendingAiSeat(app) !== null) app = reducer(app, { type: 'ai', choose: (g) => legalActions(g)[0]! });
+  return app;
+}
 import { appendSnapshot, snapshotOf, listHistory, exportHistory, recordHistory, historyDb, retryHistory } from '../src/history/recorder';
 import { decodeReplay } from '../src/engine/replay-code';
 import { putEstimate, listEstimates } from '../src/ai/phone/records';
 
 describe('local history', () => {
   it('retains interrupted hands and deduplicates concurrent writes across connections', async () => {
-    const app = reducer(initialApp(), { type: 'new-game', seed: 'history', sessionId: 'history-test' });
+    const app = toYourTurn(reducer(initialApp(), { type: 'new-game', seed: 'history', sessionId: 'history-test' }));
     const snapshot = snapshotOf(app)!;
     await Promise.all([appendSnapshot(snapshot), appendSnapshot(snapshot)]);
     expect((await listHistory()).length).toBe(1);

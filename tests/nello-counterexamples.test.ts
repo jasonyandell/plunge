@@ -3,7 +3,7 @@ import { counterexampleStats, decisionStats } from '../src/ai/decision-stats';
 import { api, livePlayerCall, type NativeDecision, type NativeRequest } from '../src/ai/native';
 import { initialApp, loadApp, pendingAiSeat, reducer, saveApp, toSaved, STORAGE_KEY } from '../src/ui/store';
 
-import { applyAction, legalActions, newGame, PLUNGE_CONFIG } from '../src/engine';
+import { applyAction, legalActions, newDealtGame, newGame, PLUNGE_CONFIG } from '../src/engine';
 import { runPlayer } from '../src/ai/phone/client';
 vi.mock('../src/ai/phone/client', () => ({ runPlayer: vi.fn() }));
 
@@ -71,7 +71,8 @@ describe('Nel-O counterexample preview',()=>{
   });
   it('gates new and resumed auctions, stale declarations, and the next hand',()=>{
     const declaration={type:'declare',decl:{type:'nello'}} as const;
-    let game=newGame(PLUNGE_CONFIG,'preview-gate');
+    // Ruby shakes, so you bid first and call trump yourself.
+    let game=newDealtGame(PLUNGE_CONFIG,newGame(PLUNGE_CONFIG,'preview-gate').dealt,3);
     game=applyAction(game,{type:'bid',bid:{kind:'marks',value:1}});
     for(let i=0;i<3;i++) game=applyAction(game,{type:'bid',bid:{kind:'pass'}});
     let app=initialApp(toSaved({...initialApp(),game}));
