@@ -17,6 +17,13 @@ decision details expand separately, and **Save or share this move** holds notes,
 portable links, and the native Mac gym tools. Original scores remain separate
 from later estimates.
 
+After the final trick's pause, the result shows everyone's full **Starting hands**,
+including a partner who sat out Nel-O. Played dominoes are dimmed and labeled
+**Played**; dominoes still in hand have a **Held** badge. The same view appears in
+**See how it went**, so you can look back with the original deal and the remaining
+dominoes in view. **Review last hand** on Home reopens the finished match, even
+after a reload, until you deal a new game.
+
 The table keeps **Trump** and **Suit led** in prominent panels, labels your own
 seat **You**, and identifies Gran as your partner. The opening domino is marked
 with who led it. A named thinking indicator and gently animated pips follow

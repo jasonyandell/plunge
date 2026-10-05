@@ -164,6 +164,13 @@
   margin: 0 0 8px;
 }
 
+.result-card {
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .card-win .card-title { color: #2e6b5e; }
 .card-loss .card-title { color: #8a4a2c; }
 
