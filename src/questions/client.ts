@@ -6,12 +6,15 @@ import { digest } from '../ai/phone/records';
 import { BUILD_ID } from '../ui/update';
 import { allPlays, finished, validQuestion, type LocalQuestion, type PublicQuestion, type RemoteQuestion } from './model';
 import { acceptRemote, changeQuestion, insertQuestion, listQuestions, ownerToken, randomHex } from './storage';
+import { QUESTIONS_LOCAL_ONLY } from './mode';
 export { listQuestions } from './storage';
 
 const changed = () => window.dispatchEvent(new Event('plunge-questions-changed'));
 const API = '/api/questions';
 let flushing: Promise<void> | undefined;
 async function request<T>(path: string, init: RequestInit = {}, privateRequest = true): Promise<T> {
+  // Previews have no question service; nothing leaves the device.
+  if (QUESTIONS_LOCAL_ONLY) throw new Error('This preview keeps questions on this device only.');
   const headers = new Headers(init.headers);
   if (privateRequest) headers.set('Authorization', `Bearer ${await ownerToken()}`);
   if (init.body) headers.set('Content-Type','application/json');
@@ -94,7 +97,7 @@ export function syncQuestions(): Promise<void> {
             ? {...old, question:{...old.question,receipt:q.receipt},revision:old.revision+1} : old))!;
         } catch { /* Preserve the receipt id; retry after the local bridge or storage recovers. */ }
       }
-      if (item.revision <= item.syncedRevision) continue;
+      if (QUESTIONS_LOCAL_ONLY || item.revision <= item.syncedRevision) continue;
       try {
         const ack = await request<{revision:number; answer:RemoteQuestion['answer']}>(`/${item.question.id}`, {
           method:'PUT',body:JSON.stringify({question:item.question,revision:item.revision}),
@@ -109,6 +112,7 @@ export function syncQuestions(): Promise<void> {
 }
 export async function refreshQuestions(): Promise<void> {
   await syncQuestions();
+  if (QUESTIONS_LOCAL_ONLY) { changed(); return; }
   let cursor = '';
   do {
     const page = await request<{items:RemoteQuestion[]; next:string|null}>(cursor ? `?before=${cursor}` : '');

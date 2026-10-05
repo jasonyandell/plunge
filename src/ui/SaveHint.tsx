@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { GameState } from '../engine';
 import type { HintEvidence } from '../questions/hint-evidence';
 import { saveHintQuestion } from '../questions/client';
+import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
 
 /** Same notebook as played-domino questions, capturing before an action is taken. */
 export function SaveHint({ g, sessionId, questionGameId = sessionId, evidence, onSaved, disabled = false }: {
@@ -23,7 +24,7 @@ export function SaveHint({ g, sessionId, questionGameId = sessionId, evidence, o
     <button type="button" class="text-btn" disabled={disabled || busy} onClick={() => void save()}>
       {busy ? 'Saving hint…' : 'Why this hint?'}
     </button>
-    <span>Save it, add a note, or share.</span>
+    <span>{QUESTIONS_LOCAL_ONLY ? 'Save it on this device and add a note.' : 'Save it, add a note, or share.'}</span>
     {error && <p role="alert">{error}</p>}
   </div>;
 }
