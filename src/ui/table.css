@@ -500,3 +500,49 @@
 .seat-top .seat-tag { color: #b8e3d7; }
 
 .play-error { margin: 8px 0 0; text-align: center; color: var(--cream); font-size: 14px; }
+
+/* ---------- undo / play this hand again ---------- */
+
+/* Kept at the top, away from the hand, so a quick domino tap can't land here.
+   Layered just above the bid/trump sheets: on short phones their top padding
+   tucks underneath, so Undo stays reachable while you call trump. */
+.hand-tools {
+  position: relative;
+  z-index: 21;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 2px 8px;
+  background: #24170c;
+  border-bottom: 1px solid rgba(233, 192, 122, 0.15);
+}
+.hand-tool {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid rgba(233, 192, 122, 0.35);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--cream);
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.hand-tool:disabled { opacity: 0.4; cursor: default; }
+@media (min-width: 760px) {
+  .hand-tools { padding-inline: max(16px, calc((100vw - 920px) / 2)); }
+}
+/* Small and shrinkable: fits beside both buttons at 320px. */
+.practice-chip {
+  align-self: center;
+  margin-right: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #e0a84f2e;
+  color: var(--butterscotch);
+  font-size: 11px;
+  font-weight: 650;
+}

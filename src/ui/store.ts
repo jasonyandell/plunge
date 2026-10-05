@@ -21,8 +21,11 @@ import {
   type Declaration,
   type GameConfig,
   type GameState,
+  type HandResult,
+  type Phase,
   type PlayRecord,
   type Seat,
+  type Team,
   CALLED_SUIT,
   CASUAL_CONFIG,
   TOURNAMENT_CONFIG,
@@ -33,8 +36,10 @@ import {
   ledSuitOf,
   mulberry32,
   newGame,
+  nextSeat,
   teamOf,
 } from '../engine';
+import { encodeReplay } from '../engine/replay-code';
 
 export const HUMAN_SEAT = 0 as Seat;
 
@@ -111,6 +116,39 @@ export interface AppState {
   readonly nativeReceipts: Record<string, string>;
   readonly scenarioFlag: FlagRecord | null;
   readonly auctionSurveys: Record<string, AuctionEvidence>;
+  /**
+   * Table generation. Undo, restart and new games advance it; computer
+   * responses and the trick pause carry the generation they were started in,
+   * so work begun before a rollback never lands afterward — even when the
+   * restored position (and therefore every request key) is identical.
+   */
+  readonly epoch: number;
+  /** Retry provenance for the current hand; null for an ordinary first attempt. */
+  readonly retry: HandRetry | null;
+  /** Hands of this game that were undone or restarted (practice, not fresh results). */
+  readonly practiceHands: readonly number[];
+}
+
+/** The branch abandoned by an undo or restart, captured before rollback. */
+export interface AbandonedBranch {
+  readonly code: string | null;
+  readonly phase: Phase;
+  readonly marks: readonly [number, number];
+  readonly handResult: HandResult | null;
+  readonly winner: Team | null;
+  readonly thrownIn: boolean;
+}
+
+export interface HandRetry {
+  readonly handNumber: number;
+  /** 1 for the first undo/restart of this hand, then 2, 3, … */
+  readonly attempt: number;
+  readonly kind: 'undo' | 'restart';
+  /** Hand actions (bids, trump call, plays) kept from the deal. 0 = restart. */
+  readonly kept: number;
+  readonly from: AbandonedBranch;
+  /** True once any attempt of this hand reached its result. */
+  readonly sawResult: boolean;
 }
 
 export type ChooseFn = typeof chooseAction;
@@ -124,14 +162,36 @@ export type AppEvent =
   | { readonly type: 'set-show-hints'; readonly enabled: boolean }
   | { readonly type: 'new-game'; readonly seed: string; readonly sessionId?: string }
   | { readonly type: 'resume' }
-  | { readonly type: 'human'; readonly action: Action }
+  /** `epoch` is stamped by the live table (see liveDispatch); tests may omit it. */
+  | { readonly type: 'human'; readonly action: Action; readonly epoch?: number }
   /** Step exactly one AI action (if one is pending). `choose` is injectable for tests. */
-  | { readonly type: 'ai'; readonly choose?: ChooseFn | undefined }
-  | { readonly type: 'trick-shown' }
+  | { readonly type: 'ai'; readonly choose?: ChooseFn | undefined; readonly epoch?: number }
+  | { readonly type: 'trick-shown'; readonly epoch?: number }
   /** Open a shared hand (from a share link) in view-only review. */
   | { readonly type: 'view-scenario'; readonly game: GameState; readonly flag?: FlagRecord }
-  | { readonly type: 'native-ai'; readonly receipt: NativeReceipt }
-  | { readonly type: 'auction-ai'; readonly decision: AuctionDecision };
+  | { readonly type: 'native-ai'; readonly receipt: NativeReceipt; readonly epoch?: number }
+  | { readonly type: 'auction-ai'; readonly decision: AuctionDecision; readonly epoch?: number }
+  /**
+   * Roll back to just before your most recent decision this hand. `epoch` is
+   * the generation the button was rendered in: a duplicate of the same tap is
+   * stale after the first one lands, so it can't step a second checkpoint.
+   */
+  | { readonly type: 'undo'; readonly epoch: number }
+  /** Replay this exact deal from the start, with the marks it began with. */
+  | { readonly type: 'restart-hand'; readonly epoch: number };
+
+/**
+ * The table's dispatch: every human decision carries the generation it was
+ * rendered in, so a callback captured before an undo or replay is rejected.
+ */
+export function liveDispatch(dispatch: (e: AppEvent) => void, epoch: number): (e: AppEvent) => void {
+  return (e) => dispatch(e.type === 'human' ? { ...e, epoch } : e);
+}
+
+/** A computer/timer event from an older generation is dropped. Tests may omit it. */
+function stale(s: AppState, epoch: number | undefined): boolean {
+  return epoch !== undefined && epoch !== s.epoch;
+}
 
 export function initialApp(saved?: SavedState | null, search = ''): AppState {
   if (saved && !isNative(saved.settings.difficulty)) saved = null;
@@ -139,11 +199,12 @@ export function initialApp(saved?: SavedState | null, search = ''): AppState {
   const settings = { ...DEFAULT_SETTINGS, ...saved?.settings,
     ...(experiment === 'preview' || experiment === 'counterexamples' ? { nelloPreview: true }
       : experiment === 'off' || experiment === 'ordinary' ? { nelloPreview: false } : {}) };
+  const game = configureAuction(saved?.game ?? null, settings);
   return {
     screen: 'home',
     settings,
     seed: saved?.seed ?? 'plunge',
-    game: configureAuction(saved?.game ?? null, settings),
+    game,
     aiMoves: saved?.aiMoves ?? 0,
     showTrick: saved?.showTrick ?? false,
     scenarioGame: null,
@@ -151,6 +212,130 @@ export function initialApp(saved?: SavedState | null, search = ''): AppState {
     sessionId: saved?.sessionId ?? 'legacy',
     nativeReceipts: saved?.nativeReceipts ?? {},
     auctionSurveys: saved?.auctionSurveys ?? {},
+    epoch: saved?.epoch ?? 0,
+    retry: saved?.retry && game && saved.retry.handNumber === game.handNumber ? saved.retry : null,
+    practiceHands: saved?.practiceHands ?? [],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Undo and replaying a hand. Checkpoints are derived from the hand itself —
+// the deal plus its ordered bids, trump call and plays — so old saves gain
+// them for free and nothing extra needs to be persisted to stay consistent.
+// ---------------------------------------------------------------------------
+
+/** The current hand as dealt: same dominoes, shaker, RNG and pre-hand marks. */
+export function handStartOf(g: GameState): GameState {
+  const marks: [number, number] = [g.marks[0], g.marks[1]];
+  if (g.handResult) marks[g.handResult.team] -= g.handResult.marks;
+  return {
+    ...g, marks, phase: 'bidding',
+    hands: g.dealt.map((h) => [...h]),
+    bids: [], turn: nextSeat(g.shaker), declarer: null, contract: null, declaration: null, rules: null,
+    sittingOut: null, forcedBid: false, leader: null, currentTrick: [], tricks: [], points: [0, 0],
+    thrownIn: false, handResult: null, winner: null,
+  };
+}
+
+export interface HandStep { readonly seat: Seat; readonly action: Action }
+
+/** Every decision taken this hand, in order, with who took it. */
+export function handSteps(g: GameState): HandStep[] {
+  const steps: HandStep[] = g.bids.map((b) => ({ seat: b.seat, action: { type: 'bid', bid: b.bid } }));
+  if (g.declaration) {
+    // A forced Nel-O fixes its declaration with the bid; only a called trump is a step.
+    let sim = handStartOf(g);
+    for (const s of steps) sim = applyAction(sim, s.action);
+    if (sim.phase === 'declaring' && sim.turn !== null) steps.push({ seat: sim.turn, action: { type: 'declare', decl: g.declaration } });
+  }
+  for (const p of [...g.tricks.flatMap((t) => t.plays), ...g.currentTrick]) steps.push({ seat: p.seat, action: { type: 'play', domino: p.domino } });
+  return steps;
+}
+
+function retryable(s: AppState): GameState | null {
+  return s.game && !s.scenarioGame && !nelloPaused(s) ? s.game : null;
+}
+
+/**
+ * Is there a decision of yours this hand to take back? Exactly when the
+ * reducer would act on an Undo — the button is never offered as a no-op.
+ */
+export function canUndo(s: AppState): boolean {
+  return rollbackTarget(s, 'undo') !== null;
+}
+
+/** Has anything happened this hand that replaying it would clear? */
+export function canRestart(s: AppState): boolean {
+  return rollbackTarget(s, 'restart') !== null;
+}
+
+/** Question bookmarks from a retried hand get their own branch id, so they never merge with the original's. */
+export function questionGameId(s: Pick<AppState, 'sessionId' | 'retry' | 'game'>): string {
+  return s.retry && s.game && s.retry.handNumber === s.game.handNumber
+    ? `${s.sessionId.slice(0, 70)}-r${s.retry.attempt}` : s.sessionId;
+}
+
+/** Key-order-independent equality for plain engine state. */
+function canonical(v: unknown): string {
+  return JSON.stringify(v, (_k, x: unknown) => x && typeof x === 'object' && !Array.isArray(x)
+    ? Object.fromEntries(Object.entries(x as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x);
+}
+
+/**
+ * The state an undo or replay would produce, or null when there is none.
+ *
+ * Undo replays the kept decisions from the deal under the hand's current
+ * rules. It is offered only when replaying *every* decision under those rules
+ * reproduces the hand exactly, so a recorded bid or call is never reinterpreted.
+ * Live toggles (Walt version, Nel-O preview) never fail this: the two Plunge
+ * configs differ only in Nel-O availability, which bids don't depend on. A
+ * legacy computer-player switch between reshake and forced-30 rules mid-auction
+ * can; then only "Play this hand again" — a fresh deal-start — is offered.
+ */
+function rollbackTarget(s: AppState, kind: HandRetry['kind']): AppState | null {
+  const g = retryable(s);
+  if (!g) return null;
+  let steps: HandStep[];
+  try { steps = handSteps(g); } catch { return null; }
+  let kept = 0;
+  if (kind === 'undo') {
+    kept = steps.map((step) => step.seat).lastIndexOf(HUMAN_SEAT);
+    if (kept < 0) return null;
+    try {
+      const replayed = steps.reduce((at, step) => applyAction(at, step.action), handStartOf(g));
+      if (canonical(replayed) !== canonical(g)) return null;
+    } catch { return null; }
+  } else if (!steps.length) return null;
+  let game: GameState;
+  try {
+    // Availability applies as at any auction; a contract already in play keeps its rules.
+    game = configureAuction(steps.slice(0, kept).reduce((at, step) => applyAction(at, step.action), handStartOf(g)), s.settings)!;
+  } catch { return null; }
+  const plays = game.tricks.reduce((n, t) => n + t.plays.length, 0) + game.currentTrick.length;
+  const hand = `${g.handNumber}:`;
+  const previous = s.retry?.handNumber === g.handNumber ? s.retry : null;
+  const finished = g.phase === 'hand-over' || g.phase === 'game-over';
+  return {
+    ...s,
+    game,
+    showTrick: false,
+    aiMoves: s.aiMoves - steps.slice(kept).filter((step) => step.seat !== HUMAN_SEAT).length,
+    epoch: s.epoch + 1,
+    // Links to undone moves leave the live table; the snapshots taken while
+    // they were current keep them, and the receipts themselves are untouched.
+    nativeReceipts: Object.fromEntries(Object.entries(s.nativeReceipts)
+      .filter(([k]) => !k.startsWith(hand) || Number(k.slice(hand.length)) < plays)),
+    auctionSurveys: Object.fromEntries(Object.entries(s.auctionSurveys)
+      .filter(([k]) => !k.startsWith(hand) || game.bids.some((b) => k === `${hand}${b.seat}`))),
+    retry: {
+      handNumber: g.handNumber,
+      attempt: (previous?.attempt ?? 0) + 1,
+      kind,
+      kept,
+      from: { code: encodeReplay(g), phase: g.phase, marks: g.marks, handResult: g.handResult, winner: g.winner, thrownIn: g.thrownIn },
+      sawResult: (previous?.sawResult ?? false) || finished,
+    },
+    practiceHands: s.practiceHands.includes(g.handNumber) ? s.practiceHands : [...s.practiceHands, g.handNumber],
   };
 }
 
@@ -214,6 +399,9 @@ export function reducer(s: AppState, e: AppEvent): AppState {
         sessionId: e.sessionId ?? `seed-${e.seed.replace(/[^a-zA-Z0-9_-]/g, '').slice(0,60) || 'game'}`,
         nativeReceipts: {},
         auctionSurveys: {},
+        epoch: s.epoch + 1,
+        retry: null,
+        practiceHands: [],
         game: isNative(s.settings.difficulty)
           ? catalogueDeal(newGame(tableConfig(s.settings),e.seed),e.seed)
           : newGame(tableConfig(s.settings),e.seed),
@@ -223,9 +411,17 @@ export function reducer(s: AppState, e: AppEvent): AppState {
     case 'view-scenario':
       return { ...s, screen: 'table', scenarioGame: e.game, scenarioFlag: e.flag ?? null };
     case 'trick-shown':
-      return { ...s, showTrick: false };
+      return stale(s, e.epoch) ? s : { ...s, showTrick: false };
+    case 'undo':
+      return e.epoch === s.epoch ? rollbackTarget(s, 'undo') ?? s : s;
+    case 'restart-hand':
+      return e.epoch === s.epoch ? rollbackTarget(s, 'restart') ?? s : s;
     case 'human': {
       if (!s.game || s.scenarioGame || s.showTrick || nelloPaused(s)) return s; // no moves during review, the trick pause, or a disabled preview
+      // A tap rendered before an undo or replay never lands afterward, even at an identical position.
+      if (stale(s, e.epoch)) return s;
+      // Only your own turn: a late tap must never act for a computer seat.
+      if (e.action.type !== 'next-hand' && s.game.turn !== HUMAN_SEAT) return s;
       if (e.action.type === 'declare' && e.action.decl.type === 'nello' && !nelloAvailable(s.settings)) return s;
       let game: GameState;
       try {
@@ -237,11 +433,15 @@ export function reducer(s: AppState, e: AppEvent): AppState {
       } catch {
         return s; // defensive: stale tap / double tap — ignore
       }
-      return { ...s, game, showTrick: trickJustCompleted(s.game, game),
-        auctionSurveys: e.action.type === 'next-hand' ? {} : s.auctionSurveys };
+      if (e.action.type === 'next-hand') {
+        // Earlier hands can't be undone once the next one is dealt.
+        return { ...s, game, showTrick: false, auctionSurveys: {}, retry: null };
+      }
+      return { ...s, game, showTrick: trickJustCompleted(s.game, game) };
     }
     case 'auction-ai': {
       const seat=pendingAiSeat(s), g=s.game, d=e.decision;
+      if (stale(s, e.epoch)) return s;
       if (seat===null || !g || !['bidding','declaring'].includes(g.phase) || d.key!==auctionKey(g,s.sessionId)) return s;
       if ((g.phase==='bidding' && d.action.type!=='bid') || (g.phase==='declaring' && d.action.type!=='declare')) return s;
       try {
@@ -251,7 +451,7 @@ export function reducer(s: AppState, e: AppEvent): AppState {
     }
     case 'native-ai': {
       const seat = pendingAiSeat(s);
-      if (seat === null || !s.game || s.game.phase !== 'playing' || !isNative(s.settings.difficulty)) return s;
+      if (stale(s, e.epoch) || seat === null || !s.game || s.game.phase !== 'playing' || !isNative(s.settings.difficulty)) return s;
       const req = requestOf(s.game, seat, s.sessionId);
       const wanted = s.settings.difficulty === 'native-l1' ? 'l1-default' : 'l1-partner-rollout';
       if (requestKey(req) !== requestKey(e.receipt.identity.request) || e.receipt.identity.game_id !== s.sessionId
@@ -263,7 +463,7 @@ export function reducer(s: AppState, e: AppEvent): AppState {
     }
     case 'ai': {
       const seat = pendingAiSeat(s);
-      if (seat === null || !s.game) return s;
+      if (stale(s, e.epoch) || seat === null || !s.game) return s;
       const choose = e.choose ?? chooseAction;
       const action = choose(s.game, seat, s.settings.difficulty, aiRand(s.game, s.aiMoves));
       const game = applyAction(s.game, action);
@@ -305,6 +505,10 @@ export interface SavedState {
   readonly sessionId?: string;
   readonly nativeReceipts?: Record<string, string>;
   readonly auctionSurveys?: Record<string, AuctionEvidence>;
+  /** Absent in saves from before undo; they load as generation 0 with no retries. */
+  readonly epoch?: number;
+  readonly retry?: HandRetry | null;
+  readonly practiceHands?: readonly number[];
 }
 
 export interface StorageLike {
@@ -317,7 +521,19 @@ export const STORAGE_KEY = 'plunge:save:v1';
 
 export function toSaved(s: AppState): SavedState {
   return { v: 1, showTrick: s.showTrick, settings: s.settings, seed: s.seed, game: s.game, aiMoves: s.aiMoves,
-    sessionId: s.sessionId, nativeReceipts: s.nativeReceipts, auctionSurveys: s.auctionSurveys };
+    sessionId: s.sessionId, nativeReceipts: s.nativeReceipts, auctionSurveys: s.auctionSurveys,
+    epoch: s.epoch, retry: s.retry, practiceHands: s.practiceHands };
+}
+
+const HAND_NUMBER = (n: unknown): boolean => Number.isSafeInteger(n) && (n as number) >= 1;
+
+function validRetry(r: unknown): boolean {
+  if (r === null || r === undefined) return true;
+  const v = r as HandRetry;
+  return typeof v === 'object' && HAND_NUMBER(v.handNumber) && HAND_NUMBER(v.attempt)
+    && (v.kind === 'undo' || v.kind === 'restart') && Number.isSafeInteger(v.kept) && v.kept >= 0
+    && typeof v.sawResult === 'boolean' && typeof v.from === 'object' && v.from !== null
+    && (v.from.code === null || typeof v.from.code === 'string') && typeof v.from.phase === 'string';
 }
 
 export function saveApp(storage: StorageLike, s: AppState): void {
@@ -348,6 +564,9 @@ export function loadApp(storage: StorageLike): SavedState | null {
     if (p.sessionId !== undefined && (typeof p.sessionId !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(p.sessionId))) return null;
     if (p.nativeReceipts !== undefined && (typeof p.nativeReceipts !== 'object' || p.nativeReceipts === null
       || Object.entries(p.nativeReceipts).some(([k,v]) => !/^\d+:\d+$/.test(k) || typeof v !== 'string' || !/^[a-f0-9]{64}$/.test(v)))) return null;
+    if (p.epoch !== undefined && (!Number.isSafeInteger(p.epoch) || p.epoch < 0)) return null;
+    if (!validRetry(p.retry)) return null;
+    if (p.practiceHands !== undefined && (!Array.isArray(p.practiceHands) || !p.practiceHands.every(HAND_NUMBER))) return null;
     if (p.game !== null) {
       const g = p.game;
       if (typeof g !== 'object' || typeof g.phase !== 'string') return null;

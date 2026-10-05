@@ -28,12 +28,17 @@ export interface HandRecord {
   readonly thrownIn: boolean;
   /** Computer-player setting when the hand was played. */
   readonly player: string;
+  /**
+   * Earlier hands of this game that were undone or replayed. Present only when
+   * there were some: the marks and game result then include practice.
+   */
+  readonly practiceHands?: readonly number[];
 }
 
 const GAME_ID = /^[a-zA-Z0-9_-]{1,80}$/;
 
 /** The finished hand as a log record, or null when it cannot be replayed. */
-export function handRecordOf(g: GameState, gameId: string, player: string): HandRecord | null {
+export function handRecordOf(g: GameState, gameId: string, player: string, practiceHands: readonly number[] = []): HandRecord | null {
   if ((g.phase !== 'hand-over' && g.phase !== 'game-over') || !GAME_ID.test(gameId)) return null;
   const code = encodeReplay(g);
   if (!code) return null;
@@ -51,6 +56,7 @@ export function handRecordOf(g: GameState, gameId: string, player: string): Hand
     gameOver: g.phase === 'game-over',
     thrownIn: g.thrownIn,
     player,
+    ...(practiceHands.length ? { practiceHands: [...practiceHands] } : {}),
   };
 }
 
@@ -91,7 +97,7 @@ export async function listHands(): Promise<HandRecord[]> {
   });
 }
 
-export async function recordFinishedHand(g: GameState, gameId: string, player: string): Promise<void> {
-  const record = handRecordOf(g, gameId, player);
+export async function recordFinishedHand(g: GameState, gameId: string, player: string, practiceHands: readonly number[] = []): Promise<void> {
+  const record = handRecordOf(g, gameId, player, practiceHands);
   if (record) await appendHand(record);
 }

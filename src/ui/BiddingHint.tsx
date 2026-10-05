@@ -45,7 +45,7 @@ function RecordedScore({ panel, target }: { panel: PlayedPanel; target: number }
 
 export function BookDetails({ hint, g, captured, capture }: {
   hint: BookAdvice; g: GameState; captured?: BookHintEvidence;
-  capture?: { sessionId: string; onSaved: (id: string) => void };
+  capture?: { sessionId: string; questionGameId?: string; onSaved: (id: string) => void };
 }) {
   const [target, setTarget] = useState(captured?.explored_target ?? hint.target);
   const [comparisonOpen, setComparisonOpen] = useState(captured?.comparison_open ?? false);
@@ -82,7 +82,7 @@ export function BookDetails({ hint, g, captured, capture }: {
       <p class="setting-hint">A higher recorded rate isn’t a guarantee. Sample counts vary; “unsettled” means more samples may change which side of {cutoff}% a score falls on.</p>
       <p class="setting-hint">These are completed Walt games with your seven dominoes and different partner and opponent hands. No one’s actual hidden hand is used. The results don’t infer hidden hands from this auction’s bids.</p>
     </details>
-    {capture && <SaveHint g={g} sessionId={capture.sessionId} onSaved={capture.onSaved} evidence={{
+    {capture && <SaveHint g={g} sessionId={capture.sessionId} questionGameId={capture.questionGameId ?? capture.sessionId} onSaved={capture.onSaved} evidence={{
       kind: g.phase === 'bidding' ? 'bid' : 'trump', book_id: BID_BOOK.source_book, profile: BID_BOOK.profile,
       policy_bid: BID_BOOK.policy_bid, threshold: [...BID_BOOK.threshold], advice: hint, explored_target: target,
       comparison_open: comparisonOpen, heading, explanation,
@@ -91,7 +91,7 @@ export function BookDetails({ hint, g, captured, capture }: {
 }
 
 /** Advice never bids or runs a solver; optional feedback uses the question notebook. */
-export function BiddingHint({ g, sessionId, onQuestion }: { g: GameState; sessionId: string; onQuestion: (id: string) => void }) {
+export function BiddingHint({ g, sessionId, questionGameId = sessionId, onQuestion }: { g: GameState; sessionId: string; questionGameId?: string; onQuestion: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null), button = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (open) dialog.current?.showModal(); else dialog.current?.close(); }, [open]);
@@ -104,7 +104,7 @@ export function BiddingHint({ g, sessionId, onQuestion }: { g: GameState; sessio
     <dialog ref={dialog} class="hint-dialog" aria-labelledby="bid-hint-title" onCancel={e => { e.preventDefault(); close(); }}>
       <header class="hint-header"><h2 id="bid-hint-title">{g.phase === 'declaring' ? 'Choosing trump' : 'A bidding hint'}</h2>
         <button type="button" class="hint-close" aria-label="Close hint" onClick={close}>×</button></header>
-      {hint?.kind === 'book' && <BookDetails hint={hint} g={g} capture={{ sessionId, onSaved: id => { close(); onQuestion(id); } }} />}
+      {hint?.kind === 'book' && <BookDetails hint={hint} g={g} capture={{ sessionId, questionGameId, onSaved: id => { close(); onQuestion(id); } }} />}
       {hint?.kind === 'unavailable' && <p>{hint.reason === 'missing-hand'
         ? 'Walt doesn’t have recorded games for this hand. Bidding hints are available for hands in the current deal book; you can still choose your own bid and trump.'
         : 'The recorded games cover ordinary 42 with you as the bidder. They don’t cover this contract or rule set.'}</p>}

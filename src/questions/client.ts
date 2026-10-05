@@ -19,12 +19,18 @@ async function request<T>(path: string, init: RequestInit = {}, privateRequest =
   if (!r.ok) throw new Error(`Question service unavailable (${r.status}). Your saved copy stays on this device.`);
   return await r.json() as T;
 }
+/**
+ * `gameId` names the bookmark's branch: the session itself, or a retried
+ * hand's branch id, so a replayed hand never merges into the original's
+ * questions or receives its finished replay. Seeds always follow the session.
+ */
 export async function saveQuestion(g: GameState, ply: number, sessionId: string, receiptId: string | null,
-  note: string | undefined = undefined, alternative: number | null = null, original: NativeReceipt | null = null, seed?: number): Promise<LocalQuestion> {
+  note: string | undefined = undefined, alternative: number | null = null, original: NativeReceipt | null = null, seed?: number,
+  gameId = sessionId): Promise<LocalQuestion> {
   const replay = encodeReplay(g);
   if (!replay || !allPlays(g)[ply]) throw new Error('That play could not be saved.');
   const question = validQuestion({ schema:'plunge-question-v1', id:randomHex(16), created:new Date().toISOString(),
-    game_id:sessionId, hand_number:g.handNumber, ply, seed:seed ?? original?.identity.request.seed ?? nativeSeed(sessionId,g.handNumber),
+    game_id:gameId, hand_number:g.handNumber, ply, seed:seed ?? original?.identity.request.seed ?? nativeSeed(sessionId,g.handNumber),
     snapshot:replay, replay, note:note ?? '', alternative, receipt_id:receiptId, receipt:original, build:BUILD_ID });
   let saved = await insertQuestion(question);
   // A plain table tap preserves the note; an explicit examiner save applies its edits.
@@ -41,13 +47,13 @@ export async function saveQuestion(g: GameState, ply: number, sessionId: string,
   return saved;
 }
 /** Capture the advice that was displayed, before the player takes any action. */
-export async function saveHintQuestion(g: GameState, sessionId: string, evidence: HintEvidence): Promise<LocalQuestion> {
+export async function saveHintQuestion(g: GameState, sessionId: string, evidence: HintEvidence, gameId = sessionId): Promise<LocalQuestion> {
   const replay = encodeReplay(g), hint = structuredClone(evidence);
   if (!replay) throw new Error('That hint could not be saved.');
   const seed = hint.kind === 'move' ? hint.estimate?.identity.request.seed ?? nativeSeed(sessionId,g.handNumber)
     : nativeSeed(sessionId,g.handNumber);
   const question = validQuestion({ schema: 'plunge-question-v2', id: randomHex(16), created: new Date().toISOString(),
-    game_id: sessionId, hand_number: g.handNumber, ply: allPlays(g).length, seed, snapshot: replay, replay,
+    game_id: gameId, hand_number: g.handNumber, ply: allPlays(g).length, seed, snapshot: replay, replay,
     note: '', alternative: null, receipt_id: null, receipt: null, build: BUILD_ID,
     hint, hint_id: await digest(hint) });
   const saved = await insertQuestion(question);
@@ -60,13 +66,14 @@ export async function editNote(id: string, note: string): Promise<void> {
   } : old);
   changed(); void syncQuestions();
 }
-export async function attachGame(g: GameState, sessionId: string): Promise<void> {
+/** Attach a finished hand only to bookmarks of the same branch (see saveQuestion). */
+export async function attachGame(g: GameState, gameId: string): Promise<void> {
   if (!finished(g)) return;
   const replay = encodeReplay(g);
   if (!replay) return;
   let updated = false;
   for (const item of await listQuestions()) {
-    if (item.question.game_id !== sessionId || item.question.hand_number !== g.handNumber) continue;
+    if (item.question.game_id !== gameId || item.question.hand_number !== g.handNumber) continue;
     await changeQuestion(item.question.id, old => {
       if (!old || replay.length <= old.question.replay.length || !replay.startsWith(old.question.replay)) return old;
       updated = true;

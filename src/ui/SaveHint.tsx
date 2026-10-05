@@ -4,8 +4,8 @@ import type { HintEvidence } from '../questions/hint-evidence';
 import { saveHintQuestion } from '../questions/client';
 
 /** Same notebook as played-domino questions, capturing before an action is taken. */
-export function SaveHint({ g, sessionId, evidence, onSaved, disabled = false }: {
-  g: GameState; sessionId: string; evidence: HintEvidence; onSaved: (id: string) => void; disabled?: boolean;
+export function SaveHint({ g, sessionId, questionGameId = sessionId, evidence, onSaved, disabled = false }: {
+  g: GameState; sessionId: string; questionGameId?: string; evidence: HintEvidence; onSaved: (id: string) => void; disabled?: boolean;
 }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const alive = useRef(true), saving = useRef(false);
@@ -14,7 +14,7 @@ export function SaveHint({ g, sessionId, evidence, onSaved, disabled = false }: 
     if (saving.current) return;
     saving.current = true; setBusy(true); setError('');
     try {
-      const saved = await saveHintQuestion(g, sessionId, evidence);
+      const saved = await saveHintQuestion(g, sessionId, evidence, questionGameId);
       if (alive.current) onSaved(saved.question.id);
     } catch { if (alive.current) setError('The hint couldn’t be saved. Please try again.'); }
     finally { saving.current = false; if (alive.current) setBusy(false); }

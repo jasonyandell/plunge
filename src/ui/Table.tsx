@@ -18,8 +18,9 @@ import { Tally } from './Tally';
 import type { AppEvent, AppState } from './store';
 import {
   HUMAN_SEAT, SEAT_NAMES, nelloAvailable, TRICK_HOLD_MS, bidLabel, contractLabel, declLabel, ledChip, trumpChip,
+  canRestart, canUndo, liveDispatch, questionGameId,
 } from './store';
-import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet } from './sheets';
+import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet, RestartConfirm } from './sheets';
 import { TrickHistory } from './TrickHistory';
 import { NativeReview } from './NativeReview';
 import { MoveHint } from './MoveHint';
@@ -35,10 +36,14 @@ interface QuestionSelection {
   game: GameState;
   ply: number;
   sessionId: string;
+  questionGameId: string;
   receiptId: string | null;
   target: HTMLElement;
   label: string;
 }
+
+/** After an undo lands, the button rests briefly so a double tap can't take back two moves. */
+export const UNDO_REST_MS = 700;
 
 interface TableProps {
   app: AppState;
@@ -48,10 +53,22 @@ interface TableProps {
   onQuestion: (id: string) => void;
 }
 
-export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps) {
+export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion }: TableProps) {
+  // Every human decision below — tiles, bid/trump sheets, end cards — is
+  // stamped with the generation this render shows (see liveDispatch).
+  const dispatch = liveDispatch(rawDispatch, app.epoch);
   const [question, setQuestion] = useState<QuestionSelection | null>(null);
   const g = app.scenarioGame ?? app.game;
-  useEffect(() => setQuestion(null), [app.sessionId, g?.handNumber, app.scenarioGame]);
+  useEffect(() => setQuestion(null), [app.sessionId, g?.handNumber, app.scenarioGame, app.epoch]);
+  // Undo and replay are deliberate: Undo rests after each use; replaying asks first.
+  const [resting, setResting] = useState(false);
+  useEffect(() => {
+    if (!resting) return;
+    const timer = setTimeout(() => setResting(false), UNDO_REST_MS);
+    return () => clearTimeout(timer);
+  }, [resting]);
+  const [confirmRestart, setConfirmRestart] = useState<number | null>(null);
+  useEffect(() => setConfirmRestart(null), [app.sessionId, g?.handNumber, app.scenarioGame, app.epoch]);
   const [saved, setSaved] = useState<{ id: string; text: string } | null>(null);
   useEffect(() => {
     if (!saved) return;
@@ -67,6 +84,17 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
   // Reviewing the finished hand: hides the end-of-hand card in favor of the
   // trick-by-trick history until the player comes back to the result.
   const [review, setReview] = useState(scenario);
+  const undoReady = !scenario && !resting && canUndo(app);
+  const restartReady = !scenario && canRestart(app);
+  const undo = (): void => {
+    if (!undoReady) return;
+    setResting(true);
+    dispatch({ type: 'undo', epoch: app.epoch });
+  };
+  const askRestart = (): void => { if (restartReady) setConfirmRestart(app.epoch); };
+  const branch = questionGameId(app);
+  // Undone or replayed: shown on the table and the end cards, not only in exports.
+  const practice = !scenario && !!g && app.retry?.handNumber === g.handNumber;
   const phase = (app.scenarioGame ?? app.game)?.phase;
   useEffect(() => {
     if (phase !== 'hand-over' && phase !== 'game-over') setReview(false);
@@ -81,13 +109,14 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
     const play = [...g.tricks.flatMap(t => t.plays), ...g.currentTrick][ply];
     if (!play) return;
     // Keep the original evidence even if the trick clears before confirmation.
-    setQuestion({ game: g, ply, sessionId: app.sessionId, target,
+    setQuestion({ game: g, ply, sessionId: app.sessionId, questionGameId: branch, target,
       receiptId: app.nativeReceipts[`${g.handNumber}:${ply}`] ?? null,
       label: `${play.seat === HUMAN_SEAT ? 'You' : SEAT_NAMES[play.seat]} · ${play.domino.split('').join('–')}` });
   };
   const bookmark = (selected: QuestionSelection): void => {
     setQuestion(null);
-    void saveQuestion(selected.game, selected.ply, selected.sessionId, selected.receiptId)
+    void saveQuestion(selected.game, selected.ply, selected.sessionId, selected.receiptId,
+      undefined, null, null, undefined, selected.questionGameId)
       .then(item => setSaved({ id: item.question.id, text: 'Saved for later' }))
       .catch(() => setSaved({ id: '', text: 'Could not save. Please try again.' }));
   };
@@ -106,6 +135,16 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
   return (
     <div class="table-screen" style={{ '--trick-hold-ms': `${TRICK_HOLD_MS}ms` }}>
       <StatusStrip g={g} dispatch={dispatch} />
+      {!scenario && !review && (
+        <div class="hand-tools">
+          {practice && <span class="practice-chip" title="Undone or replayed: kept as practice, not counted in stats">Practice</span>}
+          <button type="button" class="hand-tool" disabled={!undoReady} onClick={undo}
+            aria-label="Undo your last move">&#8630; Undo</button>
+          <button type="button" class="hand-tool" disabled={!restartReady} onClick={askRestart}>
+            &#8635; Play this hand again
+          </button>
+        </div>
+      )}
       {(g.phase === 'playing' || showingLast) && (
         <InfoBar
           g={g}
@@ -138,7 +177,7 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
                 : 'Your hand'}</span>
             </p>
             {app.settings.showHints && humanTurn && !showingLast && !scenario && explainScope(g) && isNative(app.settings.difficulty) &&
-              <MoveHint key={`${app.sessionId}:${g.handNumber}:${g.tricks.length}:${g.currentTrick.length}`} g={g} sessionId={app.sessionId} onQuestion={onQuestion} />}
+              <MoveHint key={`${app.sessionId}:${app.epoch}:${g.handNumber}:${g.tricks.length}:${g.currentTrick.length}`} g={g} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
           </div>
           {humanSitsOut ? (
             <div class="hand sit-out">
@@ -171,14 +210,17 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
       {saved && <div class="question-toast" role="status"><span>{saved.text}</span>{saved.id && <button class="text-btn" onClick={() => { onQuestion(saved.id); setSaved(null); }}>Add note</button>}</div>}
       {question && <MoveQuestionPrompt key={`${question.sessionId}:${question.game.handNumber}:${question.ply}`}
         target={question.target} label={question.label} onSave={() => bookmark(question)} onClose={() => setQuestion(null)} />}
-      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} onQuestion={onQuestion} />}
-      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} onQuestion={onQuestion} />}
+      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
+      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
       {g.phase === 'hand-over' && !showingLast && !review && (
         <HandOverSheet
           g={g}
           dispatch={dispatch}
           onReview={g.tricks.length > 0 ? () => setReview(true) : undefined}
           scenario={scenario}
+          practice={practice}
+          onUndo={undoReady ? undo : undefined}
+          onRestart={restartReady ? askRestart : undefined}
         />
       )}
       {g.phase === 'game-over' && !showingLast && !review && (
@@ -186,12 +228,21 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
           g={g}
           dispatch={dispatch}
           onReview={g.tricks.length > 0 ? () => setReview(true) : undefined}
+          practice={practice}
+          onUndo={undoReady ? undo : undefined}
+          onRestart={restartReady ? askRestart : undefined}
         />
       )}
       {(g.phase === 'hand-over' || g.phase === 'game-over') && review && (
-          <NativeReview key={scenario ? (app.scenarioFlag?.id ?? g.dealt.flat().join('')) : `${app.sessionId}:${g.handNumber}`}
-            g={g} nelloPreview={nelloAvailable(app.settings)} onBack={() => setReview(false)} sessionId={app.sessionId}
+          <NativeReview key={scenario ? (app.scenarioFlag?.id ?? g.dealt.flat().join('')) : `${app.sessionId}:${app.epoch}:${g.handNumber}`}
+            g={g} nelloPreview={nelloAvailable(app.settings)} onBack={() => setReview(false)} sessionId={app.sessionId} questionGameId={branch}
             receipts={scenario ? {} : app.nativeReceipts} initialFlag={app.scenarioFlag} onQuestion={onQuestion} />
+      )}
+      {confirmRestart !== null && !scenario && (
+        <RestartConfirm
+          onConfirm={() => { dispatch({ type: 'restart-hand', epoch: confirmRestart }); setConfirmRestart(null); }}
+          onCancel={() => setConfirmRestart(null)}
+        />
       )}
     </div>
   );

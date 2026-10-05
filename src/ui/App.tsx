@@ -9,7 +9,7 @@
 import { useEffect, useReducer, useRef, useState } from 'preact/hooks';
 import type { Seat } from '../engine';
 import {
-  type AppEvent, type AppState, HUMAN_SEAT, TRICK_SHOW_MS, nelloAvailable, aiDelayMs, initialApp, loadApp, pendingAiSeat, reducer, saveApp,
+  type AppEvent, type AppState, HUMAN_SEAT, TRICK_SHOW_MS, nelloAvailable, aiDelayMs, initialApp, loadApp, pendingAiSeat, questionGameId, reducer, saveApp,
 } from './store';
 import {
   BUILD_ID, UPDATE_POLL_MS, fetchRemoteVersion, updateAvailable,
@@ -30,6 +30,11 @@ import { attachGame, syncQuestions } from '../questions/client';
 export function App() {
   const [app, dispatch] = useReducer((state: AppState, event: AppEvent) => {
     const next = reducer(state, event);
+    // Undo and replay never discard: the branch being left is recorded first.
+    // (Content-addressed, so an already-saved snapshot isn't duplicated.)
+    if ((event.type === 'undo' || event.type === 'restart-hand') && next.game !== state.game) {
+      void recordHistory(state).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
+    }
     if (next.game !== state.game || next.settings !== state.settings) {
       void recordHistory(next).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
     }
@@ -68,11 +73,11 @@ export function App() {
     return () => { clearInterval(timer); window.removeEventListener('online', sync); window.removeEventListener('focus', sync); };
   }, []);
   useEffect(() => {
-    const attach = () => { if (app.game) void attachGame(app.game, app.sessionId).then(() => syncQuestions()).catch(() => {}); };
+    const attach = () => { if (app.game) void attachGame(app.game, questionGameId(app)).then(() => syncQuestions()).catch(() => {}); };
     attach();
     window.addEventListener('plunge-questions-changed', attach);
     return () => window.removeEventListener('plunge-questions-changed', attach);
-  }, [app.game, app.sessionId]);
+  }, [app.game, app.sessionId, app.retry]);
 
   const preparation = useRef<AuctionPreparation>();
   useEffect(() => {
@@ -97,6 +102,9 @@ export function App() {
     setNativeError(null);
     if (questions) return;
     const seat = pendingAiSeat(app);
+    // Every response carries the generation it was started in; after an undo or
+    // replay the reducer drops it even if this cleanup hasn't run yet.
+    const epoch = app.epoch;
     if (seat !== null) {
       let alive = true;
       const controller = new AbortController();
@@ -108,7 +116,7 @@ export function App() {
         void auctionMove(app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal,preparation.current?.evaluate).then(
           decision => {
             if (!alive) return;
-            t = setTimeout(() => { if (alive) dispatch({type:'auction-ai',decision}); },
+            t = setTimeout(() => { if (alive) dispatch({type:'auction-ai',decision,epoch}); },
               Math.max(0, aiDelayMs(app) - (performance.now() - started)));
           },
           (error:unknown) => { if (alive) setNativeError(String(error)); },
@@ -117,12 +125,12 @@ export function App() {
         if (isNative(app.settings.difficulty) && app.game?.phase === 'playing') {
           setThinking(seat);
           void nativeMove(app.game, seat, app.settings.difficulty, app.sessionId, controller.signal, app.settings.thinkDeeper).then(
-            (receipt) => { if (alive) dispatch({ type: 'native-ai', receipt }); },
+            (receipt) => { if (alive) dispatch({ type: 'native-ai', receipt, epoch }); },
             (error: unknown) => { if (alive) setNativeError(String(error)); },
           ).finally(() => { if (alive) setThinking(null); });
           return;
         }
-        dispatch({ type: 'ai' });
+        dispatch({ type: 'ai', epoch });
       }, aiDelayMs(app));
       return () => {
         alive = false;
@@ -132,7 +140,7 @@ export function App() {
       };
     }
     if (app.showTrick && app.screen === 'table' && !app.scenarioGame) {
-      const t = setTimeout(() => dispatch({ type: 'trick-shown' }), TRICK_SHOW_MS);
+      const t = setTimeout(() => dispatch({ type: 'trick-shown', epoch }), TRICK_SHOW_MS);
       return () => clearTimeout(t);
     }
     return undefined;
@@ -142,7 +150,8 @@ export function App() {
   // is never part of the save — the player's own game stays underneath.)
   useEffect(() => {
     if (typeof localStorage !== 'undefined') saveApp(localStorage, app);
-  }, [app.game, app.settings, app.showTrick, app.seed, app.aiMoves, app.nativeReceipts, app.auctionSurveys, app.sessionId]);
+  }, [app.game, app.settings, app.showTrick, app.seed, app.aiMoves, app.nativeReceipts, app.auctionSurveys, app.sessionId,
+    app.epoch, app.retry, app.practiceHands]);
 
   // A share link (#r=...) opens that hand in view-only review. The hash is
   // consumed on load so reloads and future navigation stay clean.
