@@ -59,6 +59,9 @@ try {
   else await human.getByRole('button', { name: 'Pass', exact: true }).click();
   await until(async () => (await state(guest))?.revision > before && (await state(host))?.revision > before);
   check('Milestone: two phone contexts joined; a human bid synchronized through the room coordinator.');
+  // Capture before refresh, which intentionally starts a fresh test transcript.
+  const accepted = await human.evaluate(() => window.__commands.find(c => c.type === 'action' && c.seat === undefined && c.action?.type === 'bid'));
+  assert(accepted);
   // Refresh retains canonical seat 2 and matches the exact ongoing game.
   await guest.reload(); await until(async () => (await state(guest))?.seats[2]?.connected);
   assert.equal(await guest.locator('.room-table').getAttribute('data-seat'), '2');
@@ -70,8 +73,7 @@ try {
   await guest.evaluate(s => window.__socket.send(JSON.stringify({ type: 'action', id: 'stale-test', revision: -1, action: { type: 'play', domino: '00' } })), at);
   await until(async () => (await guest.evaluate(() => window.__errors)).some(e => e.id === 'stale-test'));
   // Duplicate the already accepted human bid with its original id and revision.
-  const accepted = await human.evaluate(() => window.__commands.find(c => c.type === 'action' && c.action?.type === 'bid'));
-  assert(accepted); at = await state(host);
+  at = await state(host);
   await human.evaluate(command => window.__socket.send(JSON.stringify(command)), accepted);
   await new Promise(r => setTimeout(r, 250));
   assert(!(await human.evaluate(() => window.__errors)).some(e => e.id === accepted.id));
