@@ -15,6 +15,8 @@ const { legalActions } = await import(pathToFileURL(join(output, 'engine.mjs')))
 const url = process.env.PLUNGE_ROOM_URL ?? 'http://127.0.0.1:5178';
 const takebacks = process.env.PLUNGE_ROOM_TAKEBACKS === '1';
 const nello = process.env.PLUNGE_ROOM_NELLO === '1';
+const nelloBidder = process.env.PLUNGE_ROOM_NELLO_BIDDER === undefined ? undefined : Number(process.env.PLUNGE_ROOM_NELLO_BIDDER);
+assert(nelloBidder === undefined || [0,2].includes(nelloBidder), 'Nel-O test bidder must be a human seat.');
 const browser = await chromium.launch({ headless: true });
 const contexts = await Promise.all([0,1].map(() => browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })));
 const pages = await Promise.all(contexts.map(c => c.newPage()));
@@ -101,7 +103,8 @@ try {
   let at = await state(host); const human = at.game.turn === 0 ? host : guest;
   const before = at.revision, beforeBid = at;
   // First action is an actual bid UI tap; both browsers must see the same new state.
-  const point = legalActions(at.game).find(a => a.type === 'bid' && (nello ? a.bid.kind === 'marks' && !a.bid.special && a.bid.value === 2 : a.bid.kind === 'points'));
+  const point = nello && nelloBidder !== undefined && at.game.turn !== nelloBidder ? undefined
+    : legalActions(at.game).find(a => a.type === 'bid' && (nello ? a.bid.kind === 'marks' && !a.bid.special && a.bid.value === 2 : a.bid.kind === 'points'));
   if (point) await human.getByRole('button', { name: point.bid.kind === 'marks' ? `${point.bid.value} marks` : `Bid ${point.bid.value}`, exact: true }).click();
   else await human.getByRole('button', { name: 'Pass', exact: true }).click();
   await until(async () => (await state(guest))?.revision > before && (await state(host))?.revision > before);
@@ -173,7 +176,10 @@ try {
     if (Date.now() < at.holdUntil + 100 || at.game.turn === null || ![0,2].includes(at.game.turn)) { await new Promise(r => setTimeout(r, 100)); continue; }
     const page = at.game.turn === 0 ? host : guest;
     await until(async () => (await state(page))?.revision === at.revision);
-    const actions = legalActions(at.game), action = actions.find(a => a.type === 'bid' && a.bid.kind === 'pass') ?? actions[0];
+    const actions = legalActions(at.game), pass = actions.find(a => a.type === 'bid' && a.bid.kind === 'pass');
+    const action = nello && at.game.phase === 'bidding' && (nelloBidder === undefined || at.game.turn === nelloBidder)
+      ? actions.find(a => a.type === 'bid' && a.bid.kind === 'marks' && !a.bid.special && a.bid.value === 2) ?? pass ?? actions[0]
+      : pass ?? actions[0];
     if (action.type === 'bid') {
       const label = action.bid.kind === 'pass' ? 'Pass' : action.bid.kind === 'points' ? `Bid ${action.bid.value}` : action.bid.value === 1 ? '1 mark (42)' : `${action.bid.value} marks`;
       await page.getByRole('button', { name: label, exact: true }).click();
@@ -186,8 +192,8 @@ try {
         await guest.setViewportSize({ width: 320, height: 568 }); await snapshot(guest, 'phone-small.png');
         assert(await guest.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         assert(await guest.evaluate(() => document.querySelector('.hand-area').getBoundingClientRect().top >= document.querySelector('.middle').getBoundingClientRect().bottom));
-        await guest.locator('.hand').scrollIntoViewIfNeeded(); await snapshot(guest, 'phone-small-scrolled.png');
-        assert(await guest.evaluate(() => { const tile = document.querySelector('.hand .dom').getBoundingClientRect(); return tile.top >= 0 && tile.bottom <= innerHeight; }));
+        await guest.locator('.hand-area').scrollIntoViewIfNeeded(); await snapshot(guest, 'phone-small-scrolled.png');
+        assert(await guest.evaluate(() => { const tile = document.querySelector('.hand .dom').getBoundingClientRect(); return tile.top >= 0 && tile.bottom <= innerHeight; }), 'The whole domino must remain reachable after scrolling its hand area.');
         await guest.setViewportSize({ width: 390, height: 844 }); firstPlay = false;
       }
       if (takebacks && !aiUndo) await host.evaluate(() => { window.__delayWalt = true; });
@@ -236,7 +242,7 @@ try {
     assert(events.some(e => e.room?.revision === finished.revision && e.retry?.sawResult));
     check('History preserves prior results and takeback branches; retry snapshots retain root identity and Walt evidence.');
   }
-  receipts.final = { takebacks, nello, elapsedMs: Date.now() - startedAt, revision: finished.revision, phase: finished.game.phase, tricks: finished.game.tricks.length, result: finished.game.handResult, waltReceipts: Object.keys(finished.nativeReceipts).length, historyCaptures: events.length };
+  receipts.final = { takebacks, nello, bidder: finished.game.declarer, sittingOut: finished.game.sittingOut, elapsedMs: Date.now() - startedAt, revision: finished.revision, phase: finished.game.phase, tricks: finished.game.tricks.length, result: finished.game.handResult, waltReceipts: Object.keys(finished.nativeReceipts).length, historyCaptures: events.length };
   check('Full hand completed with 2 humans and real Walt; both clients agree on tricks/marks and shared-room history retains receipt links.');
   assert.equal(await guest.getByRole('button', { name: /Undo|Play this hand again/ }).count(), 0);
   await host.getByRole('button', { name: 'Undo', exact: true }).waitFor();

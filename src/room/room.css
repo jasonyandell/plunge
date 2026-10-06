@@ -24,7 +24,7 @@
 .room-table .trick { min-height: 190px; }
 .room-table .sheet { bottom: calc(164px + env(safe-area-inset-bottom, 0px)); }
 .room-table .hand-caption { margin-bottom: 6px; }
-.room-table .hand-area { margin-top: auto; padding-top: 6px; }
+.room-table .hand-area { margin-top: auto; padding-top: 6px; padding-bottom: 4px; }
 .room-table .overlay { top: 50px; }
 .room-invite { z-index: 60; }
 .room-invite .card { width: min(420px, 94vw); }
