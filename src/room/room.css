@@ -1,0 +1,44 @@
+.rooms { height: 100%; display: flex; flex-direction: column; }
+.rooms > .home { height: 100%; overflow-y: auto; }
+.room-intro { line-height: 1.6; }
+.room-label { display: flex; flex-direction: column; gap: 8px; text-align: left; font-size: 14px; margin: 18px 0; }
+.room-label input { font: inherit; font-size: 17px; min-height: 48px; width: 100%; border: 1px solid #a88f69; border-radius: 10px; padding: 10px; background: #fffaf0; color: #302316; }
+.room-bar { display: flex; align-items: center; gap: 5px; padding: 3px 8px; background: #21170e; font-size: 12px; }
+.room-bar > span { flex: 1; min-width: 0; }
+.room-bar small { display: block; color: var(--butterscotch); font-size: 10px; }
+.room-bar button, .room-error button { min-height: 44px; padding: 6px 8px; background: none; color: var(--cream); border: 1px solid #e9c07a40; border-radius: 8px; font: inherit; }
+.room-pause { background: #e0a84f; color: #2b1d12; padding: 10px 14px; line-height: 1.4; font-size: 14px; flex: 0 0 auto; }
+.room-wait { flex: 1; display: flex; justify-content: center; align-items: center; padding: 20px 12px; overflow-y: auto; }
+.room-wait .home-card { width: min(420px, 100%); }
+.room-chairs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 20px 0; }
+.room-chairs > div { display: flex; flex-direction: column; gap: 5px; background: #286f6514; border-radius: 12px; padding: 14px 8px; overflow-wrap: anywhere; }
+.room-chairs span { font-size: 12px; color: #725a40; }
+.rooms .big-btn:disabled { opacity: .45; cursor: default; }
+.room-table { flex: 1; min-height: 500px; height: auto; }
+.room-table .seat-name { font-size: 14px; overflow-wrap: anywhere; }
+.room-table .seat-top { min-height: 72px; }
+.room-table .hand { min-height: 118px; }
+.room-table .trick { min-height: 190px; }
+.room-table .sheet { bottom: calc(164px + env(safe-area-inset-bottom, 0px)); }
+.room-table .hand-caption { margin-bottom: 6px; }
+.room-table .hand-area { margin-top: auto; padding-top: 6px; }
+.room-table .overlay { top: 50px; }
+.room-invite { z-index: 60; }
+.room-invite .card { width: min(420px, 94vw); }
+.room-invite .card { max-height: 92dvh; overflow-y: auto; }
+.room-join { border-top: 1px solid #a88f6950; margin-top: 20px; padding-top: 2px; }
+.room-error { position: fixed; bottom: 8px; left: 8px; right: 8px; z-index: 80; display: flex; gap: 8px; align-items: center; background: #702d21; color: #fff; padding: 12px; border-radius: 12px; font-size: 14px; }
+.room-error span { flex: 1; overflow-wrap: anywhere; }
+.room-tricks { max-height: 220px; overflow-y: auto; background: #21170e; padding: 10px; }
+.room-tricks .hist-row > span { font-size: 11px; }
+@media (max-height: 700px) {
+  .rooms { overflow-y: auto; }
+  .room-table { flex-shrink: 0; min-height: 540px; }
+  .room-table .middle { min-height: 185px; }
+  .room-table .seat-top { min-height: 56px; }
+  .room-table .mini-row .dom { width: 16px; }
+  .room-table .suit-name { font-size: 20px; }
+  .room-table .suit-card { padding: 6px; }
+  .room-table .trick { min-height: 150px; }
+  .room-table .sheet { max-height: calc(100dvh - 245px); }
+}

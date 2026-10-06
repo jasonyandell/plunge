@@ -18,6 +18,7 @@ export function snapshotOf(app: AppState) {
     ...(code ? {} : { engineState: g }),
     receipts: Object.fromEntries(Object.entries(app.nativeReceipts).filter(([k]) => k.startsWith(`${g.handNumber}:`))),
     auctionSurveys: app.auctionSurveys,
+    ...(app.room ? { room: app.room } : {}),
     // Added only when present, so ordinary snapshots keep their earlier content ids.
     ...retryProvenance(app) };
 }
@@ -74,7 +75,7 @@ export async function recordHistory(app: AppState): Promise<void> {
   await appendSnapshot(snapshot);
   // A retried hand stays in history above, but never enters the finished-hand
   // log as a fresh result; the original attempt's record is left as written.
-  if (!snapshot.retry) await recordFinishedHand(app.game!, app.sessionId, app.settings.difficulty, app.practiceHands ?? []);
+  if (!snapshot.retry && !snapshot.room) await recordFinishedHand(app.game!, app.sessionId, app.settings.difficulty, app.practiceHands ?? []);
   pending.delete(key);
   const entry = staged.get(key);
   if (entry && typeof localStorage !== 'undefined') localStorage.removeItem(entry);

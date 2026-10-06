@@ -19,7 +19,7 @@ jobs:
       - run: python3 scripts/test-update-walt.py
       - run: npm run typecheck
       - run: npm test
-      - run: npm run build
+      - run: PLUNGE_ROOMS=experimental npm run build
       - run: printf '{"build":"%s"}' "$GITHUB_SHA" > dist/version.json
       - name: Prepare question database and deploy
         env:

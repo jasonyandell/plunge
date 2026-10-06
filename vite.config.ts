@@ -7,15 +7,20 @@ import preact from '@preact/preset-vite';
 const questions = process.env.PLUNGE_QUESTIONS || 'remote';
 if (questions !== 'remote' && questions !== 'local-only')
   throw new Error(`PLUNGE_QUESTIONS must be "remote" or "local-only", not "${questions}".`);
+const rooms = process.env.PLUNGE_ROOMS || 'off';
+if (rooms !== 'off' && rooms !== 'experimental') throw new Error('PLUNGE_ROOMS must be off or experimental.');
 
 export default defineConfig({
   plugins: [preact(), {
     // Lets preview tooling confirm what was built, before and after deployment.
     name: 'plunge-questions-mode',
-    transformIndexHtml: () => [{ tag: 'meta', attrs: { name: 'plunge-questions', content: questions }, injectTo: 'head' }],
+    transformIndexHtml: () => [
+      { tag: 'meta', attrs: { name: 'plunge-questions', content: questions }, injectTo: 'head' },
+      { tag: 'meta', attrs: { name: 'plunge-rooms', content: rooms }, injectTo: 'head' },
+    ],
   }],
   server: {
-    proxy: { '/api/questions': { target: `http://127.0.0.1:${process.env.PLUNGE_QUESTIONS_PORT ?? '8787'}` }, '/api': { target: `http://127.0.0.1:${process.env.PLUNGE_BRIDGE_PORT ?? '4245'}` } },
+    proxy: { '/api/rooms': { target: `http://127.0.0.1:${process.env.PLUNGE_ROOMS_PORT ?? '8788'}`, ws: true }, '/api/questions': { target: `http://127.0.0.1:${process.env.PLUNGE_QUESTIONS_PORT ?? '8787'}` }, '/api': { target: `http://127.0.0.1:${process.env.PLUNGE_BRIDGE_PORT ?? '4245'}` } },
   },
   build: { target: 'es2022' },
   test: {
@@ -37,5 +42,6 @@ export default defineConfig({
     // Stamped with the commit SHA in CI; 'dev' locally (disables update polling).
     __BUILD_ID__: JSON.stringify(process.env.GITHUB_SHA ?? 'dev'),
     __QUESTIONS_LOCAL_ONLY__: JSON.stringify(questions === 'local-only'),
+    __ROOMS_ENABLED__: JSON.stringify(rooms === 'experimental'),
   },
 });
