@@ -186,6 +186,8 @@ try {
         await guest.setViewportSize({ width: 320, height: 568 }); await snapshot(guest, 'phone-small.png');
         assert(await guest.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         assert(await guest.evaluate(() => document.querySelector('.hand-area').getBoundingClientRect().top >= document.querySelector('.middle').getBoundingClientRect().bottom));
+        await guest.locator('.hand').scrollIntoViewIfNeeded(); await snapshot(guest, 'phone-small-scrolled.png');
+        assert(await guest.evaluate(() => { const tile = document.querySelector('.hand .dom').getBoundingClientRect(); return tile.top >= 0 && tile.bottom <= innerHeight; }));
         await guest.setViewportSize({ width: 390, height: 844 }); firstPlay = false;
       }
       if (takebacks && !aiUndo) await host.evaluate(() => { window.__delayWalt = true; });
@@ -218,7 +220,7 @@ try {
   assert.deepEqual(finished.game, guestFinished.game);
   assert(finished.game.tricks.length > 0 && finished.game.handResult);
   if (takebacks) { assert(aiUndo && endUndo); assert(finished.retry?.sawResult); }
-  if (nello) { assert(sawNello); assert(finished.game.tricks.every(t => t.plays.length === 3)); assert.equal(finished.game.hands[finished.game.sittingOut].length, 7); }
+  if (nello) { assert(sawNello); assert(finished.game.tricks.every(t => t.plays.length === 3)); assert.equal(finished.game.hands[finished.game.sittingOut].length, 7); assert.match(await host.locator('.card-title').innerText(), /2 marks/); }
   assert(Object.keys(finished.nativeReceipts).length > 0);
   assert.equal(faults.length, 0, faults.join('\n'));
   await snapshot(host, 'hand-complete.png');

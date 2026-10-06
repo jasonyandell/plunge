@@ -41,7 +41,7 @@ export function RoomTable({ room, seat, enabled, holding, thinking, act, start, 
   };
   return <div class="table-screen room-table" data-revision={room.revision} data-seat={seat} data-sitting-out={sittingOut}>
     <header class="status"><div class="status-mid"><div class="status-line">{status}</div>
-      <div class="status-sub">{g.phase === 'bidding' ? `${name(g.shaker)} shook` : g.contract?.kind === 'nello' ? `Nel-O · ${name(g.sittingOut!)} sits out` : `Points · Us ${view.points[0]} · Them ${view.points[1]}`}</div></div>
+      <div class="status-sub">{g.phase === 'bidding' ? `${name(g.shaker)} shook` : g.contract?.kind === 'nello' ? `Nel-O · ${g.sittingOut === seat ? 'You sit out' : `${name(g.sittingOut!)} sits out`}` : `Points · Us ${view.points[0]} · Them ${view.points[1]}`}</div></div>
       <div class="status-tallies"><Tally marks={view.marks[0]} label="Us" /><Tally marks={view.marks[1]} label="Them" /></div></header>
     {g.declaration && <div class="info-bar"><div class="suit-card suit-trump"><span class="suit-label">Trump</span><strong class="suit-name">{declLabel(g.declaration)}</strong></div>
       <div class="suit-card suit-led"><span class="suit-label">Suit led</span><strong class="suit-name">{led ?? 'Not led yet'}</strong></div>
