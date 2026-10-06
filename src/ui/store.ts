@@ -36,10 +36,11 @@ import {
   ledSuitOf,
   mulberry32,
   newGame,
-  nextSeat,
   teamOf,
 } from '../engine';
 import { encodeReplay } from '../engine/replay-code';
+import { handStartOf, handSteps, type HandStep } from '../engine/hand-history';
+export { handStartOf, handSteps, type HandStep } from '../engine/hand-history';
 
 export const HUMAN_SEAT = 0 as Seat;
 
@@ -225,34 +226,6 @@ export function initialApp(saved?: SavedState | null, search = ''): AppState {
 // the deal plus its ordered bids, trump call and plays — so old saves gain
 // them for free and nothing extra needs to be persisted to stay consistent.
 // ---------------------------------------------------------------------------
-
-/** The current hand as dealt: same dominoes, shaker, RNG and pre-hand marks. */
-export function handStartOf(g: GameState): GameState {
-  const marks: [number, number] = [g.marks[0], g.marks[1]];
-  if (g.handResult) marks[g.handResult.team] -= g.handResult.marks;
-  return {
-    ...g, marks, phase: 'bidding',
-    hands: g.dealt.map((h) => [...h]),
-    bids: [], turn: nextSeat(g.shaker), declarer: null, contract: null, declaration: null, rules: null,
-    sittingOut: null, forcedBid: false, leader: null, currentTrick: [], tricks: [], points: [0, 0],
-    thrownIn: false, handResult: null, winner: null,
-  };
-}
-
-export interface HandStep { readonly seat: Seat; readonly action: Action }
-
-/** Every decision taken this hand, in order, with who took it. */
-export function handSteps(g: GameState): HandStep[] {
-  const steps: HandStep[] = g.bids.map((b) => ({ seat: b.seat, action: { type: 'bid', bid: b.bid } }));
-  if (g.declaration) {
-    // A forced Nel-O fixes its declaration with the bid; only a called trump is a step.
-    let sim = handStartOf(g);
-    for (const s of steps) sim = applyAction(sim, s.action);
-    if (sim.phase === 'declaring' && sim.turn !== null) steps.push({ seat: sim.turn, action: { type: 'declare', decl: g.declaration } });
-  }
-  for (const p of [...g.tricks.flatMap((t) => t.plays), ...g.currentTrick]) steps.push({ seat: p.seat, action: { type: 'play', domino: p.domino } });
-  return steps;
-}
 
 function retryable(s: AppState): GameState | null {
   return s.game && !s.scenarioGame && !nelloPaused(s) ? s.game : null;

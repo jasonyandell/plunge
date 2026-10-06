@@ -81,7 +81,17 @@ game, seats, action revision, and bounded retry identifiers. The engine owns the
 legal turns. Clients cannot accidentally act for another person, apply a stale
 move, or apply a successful retry twice. The host browser runs the existing Walt
 player for empty seats. New people can join the lobby or between hands. No person
-is replaced automatically, and Undo/restart is unavailable in a shared game.
+is replaced automatically. The host can Undo the last human decision in the
+current hand, including subsequent Walt moves, for everyone. Takebacks advance
+the room revision, cancel old Walt work, retain prior history and mark the hand
+as a retry. A guest asks the host for a takeback. Whole-hand replay remains off.
+
+Nel-O uses the existing own-suit rules and Walt play worker. Win a bid of one
+mark or more, then choose Nel-O: the bidder's partner sits out, each trick has
+three plays, and the bidder must lose every trick. Walt's auction continues to
+choose its existing straight-42 declarations; it plays and defends human-called
+Nel-O. A deploy preserves saved rooms and active contracts; auctions and the
+next hand receive the enabled option without resetting the room.
 
 The host must keep the room open. All play pauses while any occupied seat is
 disconnected. A five-second browser heartbeat lets the coordinator detect a
@@ -117,6 +127,11 @@ never overwrites the solo resume save.
 Chromium phone contexts and the real host Walt worker. It checks a complete hand,
 refresh/rejoin, rejected stale/wrong-seat moves, duplicate acknowledgement, host
 disconnect/rejoin, and phone layout. It also accepts a deployed preview origin.
+Add `PLUNGE_ROOM_TAKEBACKS=1` to test shared Undo during bidding, while a real
+Walt worker is running, after the result, and across reloads. Add
+`PLUNGE_ROOM_NELLO=1` too for a human marks bid and full three-player Nel-O hand.
+The takeback test delays delivery of real worker messages briefly to represent
+a slower phone; it never fabricates a Walt decision.
 Install the browser once with `npx playwright install chromium` if needed.
 
 Shared-room recorder snapshots retain canonical seats, human names, revision,

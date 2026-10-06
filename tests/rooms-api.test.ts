@@ -91,6 +91,50 @@ it('isolates room capability tokens, checks origin, and retains no question back
   expect(await (await mf.dispatchFetch('https://plunge.test/api/rooms/status')).json()).toEqual({ experimental: true });
 }, 10000);
 
+it('synchronizes host Undo, rejects old callbacks and duplicate takebacks, and preserves retry lineage after restart', async () => {
+  const host = await (await post('', { name: 'Undo host' })).json() as RoomCredentials;
+  const partner = await (await post(`/${host.roomId}/join`, { name: 'Undo partner' })).json() as RoomCredentials;
+  const a = await connect(host), b = await connect(partner), lobby = await b.state();
+  a.socket.send(JSON.stringify({ type: 'start', id: 'start', revision: lobby.revision }));
+  let state = await a.state(lobby.revision + 1); await b.state(state.revision);
+  const action = async (at: RoomState) => {
+    const turn = at.game!.turn!, actor = turn === 2 ? b : a;
+    const choices = legalActions(at.game!);
+    const chosen = choices.find(candidate => candidate.type === 'bid' && candidate.bid.kind === 'marks' && candidate.bid.value === 1) ?? choices[0]!;
+    const command = { type: 'action', id: `action-${at.revision}`, revision: at.revision, action: chosen };
+    actor.socket.send(JSON.stringify(command));
+    const next = await a.state(at.revision + 1); expect((await b.state(next.revision)).game).toEqual(next.game);
+    return next;
+  };
+  while (!state.seats[state.game!.turn!]) state = await action(state);
+  const beforeHuman = state, humanSeat = state.game!.turn!;
+  state = await action(state);
+  if (!state.seats[state.game!.turn!]) state = await action(state);
+  expect(state.canUndo).toBe(true);
+  b.socket.send(JSON.stringify({ type: 'undo', id: 'guest-takeback', revision: state.revision }));
+  const guestError = await b.next((m): m is Extract<RoomMessage, { type: 'error' }> => m !== 'pong' && m.type === 'error' && m.id === 'guest-takeback');
+  expect(guestError.message).toContain('Only the host');
+  const command = { type: 'undo', id: 'host-takeback', revision: state.revision };
+  a.socket.send(JSON.stringify(command));
+  const undone = await a.state(state.revision + 1), shared = await b.state(state.revision + 1);
+  expect(undone.game).toEqual(beforeHuman.game); expect(shared.game).toEqual(undone.game);
+  expect(undone.retry).toMatchObject({ kind: 'undo', attempt: 1 }); expect(undone.practiceHands).toEqual([1]);
+  expect(undone.lastUndo).toMatchObject({ revision: undone.revision, seat: humanSeat });
+  a.socket.send(JSON.stringify(command));
+  await a.next((m): m is Extract<RoomMessage, { type: 'ack' }> => m !== 'pong' && m.type === 'ack' && m.id === 'host-takeback');
+  expect((await a.state(undone.revision)).game).toEqual(undone.game);
+  a.socket.send(JSON.stringify({ type: 'action', id: 'old-callback', revision: state.revision, action: legalActions(state.game!)[0] }));
+  const stale = await a.next((m): m is Extract<RoomMessage, { type: 'error' }> => m !== 'pong' && m.type === 'error' && m.id === 'old-callback');
+  expect(stale.message).toContain('table changed');
+  a.socket.close(); b.socket.close(); await mf.dispose(); mf = new Miniflare(options());
+  const restoredHost = await connect(host), restoredPartner = await connect(partner);
+  const restored = await restoredPartner.state();
+  expect(restored.game).toEqual(undone.game); expect(restored.revision).toBe(undone.revision);
+  expect(restored.retry).toEqual(undone.retry); expect(restored.practiceHands).toEqual(undone.practiceHands);
+  expect(restored.lastUndo).toEqual(undone.lastUndo); expect(restored.sessionId).toBe(undone.sessionId);
+  restoredHost.socket.close(); restoredPartner.socket.close();
+}, 20000);
+
 it('pauses a silently suspended host within fifteen seconds while the partner remains connected', async () => {
   const host = await (await post('', { name: 'Host heartbeat' })).json() as RoomCredentials;
   const partner = await (await post(`/${host.roomId}/join`, { name: 'Partner heartbeat' })).json() as RoomCredentials;

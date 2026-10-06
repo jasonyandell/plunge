@@ -11,7 +11,9 @@ Create a room and send its invite or room code. Family can open their existing
 Plunge app, choose **Play with family**, and paste the code or invite; no second
 install or account is needed. Walt fills empty seats. Keep the host's page open
 and screen awake; disconnected people pause the table and refresh rejoins their
-seat. Undo and replay are off in shared rooms. Your solo game stays saved.
+seat. The host can Undo the last human move for everyone, including Walt moves
+that followed it. Earlier attempts stay in history. For Nel-O, win a bid of one
+mark or more and choose Nel-O; your partner sits out. Your solo game stays saved.
 
 The live table plays **straight 42** with regular bidding: 30–41, then marks.
 Each player bids once or passes, starting left of the shaker; the winner calls
