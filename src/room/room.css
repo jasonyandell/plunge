@@ -29,4 +29,14 @@
 .room-error span { flex: 1; overflow-wrap: anywhere; }
 .room-tricks { max-height: 220px; overflow-y: auto; background: #21170e; padding: 10px; }
 .room-tricks .hist-row > span { font-size: 11px; }
-@media (max-height: 700px) { .room-table { min-height: 450px; } .room-table .trick { min-height: 150px; } .room-table .sheet { max-height: calc(100dvh - 245px); } }
+@media (max-height: 700px) {
+  .rooms { overflow-y: auto; }
+  .room-table { flex-shrink: 0; min-height: 540px; }
+  .room-table .middle { min-height: 185px; }
+  .room-table .seat-top { min-height: 56px; }
+  .room-table .mini-row .dom { width: 16px; }
+  .room-table .suit-name { font-size: 20px; }
+  .room-table .suit-card { padding: 6px; }
+  .room-table .trick { min-height: 150px; }
+  .room-table .sheet { max-height: calc(100dvh - 245px); }
+}

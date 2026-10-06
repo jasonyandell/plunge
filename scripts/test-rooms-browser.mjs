@@ -109,6 +109,7 @@ try {
         await snapshot(host, 'phone-host.png'); await snapshot(guest, 'phone-guest.png');
         await guest.setViewportSize({ width: 320, height: 568 }); await snapshot(guest, 'phone-small.png');
         assert(await guest.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        assert(await guest.evaluate(() => document.querySelector('.hand-area').getBoundingClientRect().top >= document.querySelector('.middle').getBoundingClientRect().bottom));
         await guest.setViewportSize({ width: 390, height: 844 }); firstPlay = false;
       }
       await page.locator('.hand').getByRole('button', { name: new RegExp(`^${tileLabel(action.domino)}(?:,|$)`) }).click();
