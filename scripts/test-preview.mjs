@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { names, previewConfig, checkConfig, preparePreview, cleanupPreview, cloudflare, smokePreview, stampPreview,
-  LOCAL_ONLY_MARKER, PREVIEW_PROTOCOL } from './preview.mjs';
+  LOCAL_ONLY_MARKER, ROOMS_MARKER, PREVIEW_PROTOCOL, LOCAL_ONLY_PROTOCOL } from './preview.mjs';
 
 const previewDb = { name: 'plunge-pr-4-questions', uuid: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' };
 const productionDb = { name: 'plunge-questions', uuid: '11111111-2222-3333-4444-555555555555' };
@@ -33,6 +33,7 @@ test('preview deploys never touch D1 and always build and check a local-only pre
   const commands = deploy.split('\n').filter(line => !line.trim().startsWith('#')).join('\n');
   assert.doesNotMatch(commands, /\bd1\b|migrations/i);
   assert.match(deploy, /PLUNGE_QUESTIONS=local-only npm run build/);
+  assert.match(deploy, /PLUNGE_ROOMS="\$PREVIEW_ROOMS"/);
   assert.match(deploy, /wrangler deploy --config wrangler\.preview\.generated\.json/);
   assert.match(deploy, /\.\.\/preview-tools\/scripts\/preview\.mjs check-config/);
   // The workflow's grep must select these tools, and reject tools that predate them.
@@ -65,6 +66,8 @@ test('preparing a preview only reads the subdomain and never creates or binds a 
   assert.equal(first.config.d1_databases, undefined);
   assert.equal(first.config.routes, undefined);
   assert.equal(first.config.preview_urls, false);
+  assert.deepEqual(first.config.durable_objects, { bindings: [{ name: 'ROOMS', class_name: 'PlungeRoom' }] });
+  assert.deepEqual(first.config.migrations, [{ tag: 'family-rooms-v1', new_sqlite_classes: ['PlungeRoom'] }]);
   assert.deepEqual(f.calls.map(c => `${c.method} ${c.path}`), ['GET /workers/subdomain', 'GET /workers/subdomain']);
 });
 test('generated configuration rejects bindings, routes and other workers', () => {
@@ -78,8 +81,20 @@ test('generated configuration rejects bindings, routes and other workers', () =>
     { ...config, name: 'plunge' },
     { ...config, workers_dev: false },
     { ...config, assets: { ...config.assets, binding: 'QUESTIONS' } },
+    { ...config, assets: { ...config.assets, directory: '/production' } },
+    { ...config, main: 'worker/another.ts' },
+    { ...config, durable_objects: { bindings: [{ name: 'ROOMS', class_name: 'PlungeRoom', script_name: 'plunge' }] } },
+    { ...config, migrations: [{ tag: 'family-rooms-v1', new_classes: ['PlungeRoom'] }] },
   ]) assert.throws(() => checkConfig(4, bad), /database-free/);
   assert.throws(() => checkConfig(5, config));
+});
+test('older local-only heads keep exactly their own configuration without rooms', () => {
+  const local = previewConfig(4, LOCAL_ONLY_PROTOCOL);
+  assert.equal(local.durable_objects, undefined);
+  assert.equal(local.migrations, undefined);
+  assert.equal(checkConfig(4, local, LOCAL_ONLY_PROTOCOL), local);
+  assert.throws(() => checkConfig(4, local, PREVIEW_PROTOCOL));
+  assert.throws(() => checkConfig(4, previewConfig(4), LOCAL_ONLY_PROTOCOL));
 });
 test('cleanup removes this PR and its legacy database, is repeatable, and never deletes production', async () => {
   const f = fixture({ exists: true });
@@ -93,6 +108,7 @@ test('cleanup without a legacy database deletes only the Worker', async () => {
   const f = fixture();
   await cleanupPreview(4, f.api);
   assert.deepEqual(f.calls.filter(c => c.method !== 'GET').map(c => c.path), ['/workers/scripts/plunge-pr-4']);
+  assert.ok(f.calls.every(c => !c.path.includes('force=') && !c.path.includes('durable_objects')));
 });
 test('legacy database lookup follows pagination', async () => {
   const filler = Array.from({ length: 100 }, (_, i) => ({ name: `another-${i}` }));
@@ -111,6 +127,10 @@ test('failed Worker cleanup retains its database', async () => {
   assert.equal(f.calls.length, 1);
 });
 test('API allows missing cleanup targets but does not hide auth/server failures', async () => {
+  for (const status of [200, 204]) {
+    const empty = cloudflare({ account: 'test', token: 'secret', request: async () => new Response(null, { status }) });
+    assert.equal(await empty('/workers/scripts/plunge-pr-4', 'DELETE'), null);
+  }
   for (const status of [403, 404, 500]) {
     const api = cloudflare({ account: 'test', token: 'secret', request: async () =>
       new Response(JSON.stringify({ success: false, errors: [{ code: 10007 }] }), { status }) });
@@ -126,10 +146,13 @@ test('stamping refuses a build that would offer uploads', () => {
     writeFileSync('dist/index.html', '<meta name="plunge-questions" content="remote"><script></script>');
     assert.throws(() => stampPreview(4, 'a'.repeat(40)), /local-only/);
     writeFileSync('dist/index.html', `${LOCAL_ONLY_MARKER}<script></script>`);
+    assert.throws(() => stampPreview(4, 'a'.repeat(40)), /experimental/);
+    stampPreview(4, 'a'.repeat(40), LOCAL_ONLY_PROTOCOL);
+    writeFileSync('dist/index.html', `${LOCAL_ONLY_MARKER}${ROOMS_MARKER}<script></script>`);
     assert.throws(() => stampPreview(4, 'short'), /SHA/);
     stampPreview(4, 'a'.repeat(40));
     assert.deepEqual(JSON.parse(readFileSync('dist/version.json', 'utf8')),
-      { build: 'a'.repeat(40), preview_pr: 4, questions: 'local-only' });
+      { build: 'a'.repeat(40), preview_pr: 4, questions: 'local-only', rooms: 'experimental' });
     assert.match(readFileSync('dist/_headers', 'utf8'), /X-Robots-Tag: noindex/);
   } finally { process.chdir(home); rmSync(dir, { recursive: true, force: true }); }
 });
@@ -137,7 +160,8 @@ test('smoke check refuses production and detects stale code, remote builds, or a
   const sha = 'a'.repeat(40), url = 'https://plunge-pr-4.test-account.workers.dev';
   const request = async (input, options) => {
     if (input.pathname === '/version.json') return Response.json({ build: sha });
-    if (input.pathname === '/') return new Response(`${LOCAL_ONLY_MARKER}<script src="/app.js"></script>`);
+    if (input.pathname === '/') return new Response(`${LOCAL_ONLY_MARKER}${ROOMS_MARKER}<script src="/app.js"></script>`);
+    if (input.pathname === '/api/rooms/status') return Response.json({ experimental: true });
     assert.match(options.headers.Authorization, /^Bearer [a-f0-9]{64}$/);
     return Response.json({ error: 'This preview keeps questions on your device only.', local_only: true }, { status: 503 });
   };
@@ -146,6 +170,8 @@ test('smoke check refuses production and detects stale code, remote builds, or a
   await assert.rejects(smokePreview('https://plunge.test-account.workers.dev', sha, request), /preview URL/);
   await assert.rejects(smokePreview(url, 'b'.repeat(40), request), /expected commit/);
   await assert.rejects(smokePreview(url, sha, replace('/', () => new Response('<script></script>'))), /local-only/);
+  await assert.rejects(smokePreview(url, sha, replace('/', () => new Response(`${LOCAL_ONLY_MARKER}<script></script>`))), /experimental/);
+  await assert.rejects(smokePreview(url, sha, replace('/api/rooms/status', () => Response.json({ experimental: false }))), /coordinator/);
   await assert.rejects(smokePreview(url, sha, replace('/api/questions', () => Response.json({ items: [] }))), /not local-only/);
   await assert.rejects(smokePreview(url, sha, replace('/api/questions',
     () => Response.json({ error: 'Questions are temporarily unavailable.' }, { status: 503 }))), /not local-only/);

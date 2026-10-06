@@ -7,6 +7,7 @@ import { DEEP_WORLDS, NATIVE_TABLE, isNative, nativeLabel } from '../ai/native';
 import { canRestart, canUndo, nelloAvailable, nelloPaused, type AppEvent, type AppState } from './store';
 import { Domino } from './Domino';
 import './home.css';
+import { ROOMS_ENABLED } from '../room/client';
 
 interface HomeProps {
   app: AppState;
@@ -48,6 +49,7 @@ export function Home({ app, dispatch, onQuestions, onHistory }: HomeProps) {
         </button>
 
         {nelloAvailable(app.settings) && <p class="setting-hint">Nel-O Preview is on. Change it in Advanced settings.</p>}
+        {ROOMS_ENABLED && <button type="button" class="big-btn secondary" onClick={() => location.assign('?rooms=1')}>Play together · Experimental</button>}
         <p class="setting-hint">Game history and Walt results stay on this device. Export a backup before clearing browser data.</p>
         <div class="link-row">
           {onHistory && <button type="button" class="text-btn" onClick={onHistory}>Export history</button>}

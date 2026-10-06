@@ -98,6 +98,8 @@ export function nelloPaused(s: AppState): boolean {
 export type Screen = 'home' | 'table' | 'how' | 'about';
 
 export interface AppState {
+  /** Present only in the experimental room recorder; solo saves stay unchanged. */
+  readonly room?: { readonly mode: 'shared-room'; readonly localSeat: Seat; readonly revision: number; readonly humans: readonly { seat: Seat; name: string }[] };
   readonly screen: Screen;
   readonly settings: Settings;
   readonly seed: string;
