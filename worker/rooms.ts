@@ -231,7 +231,7 @@ export class PlungeRoom {
 }
 
 export async function roomRequest(request: Request, namespace?: RoomsNamespace): Promise<Response> {
-  if (!namespace) return json({ error: 'Family rooms are available in the experimental preview only.' }, 503);
+  if (!namespace) return json({ error: 'Family rooms are unavailable in this build.' }, 503);
   const url = new URL(request.url);
   if (url.pathname === '/api/rooms/status' && request.method === 'GET') return json({ experimental: true });
   const origin = request.headers.get('Origin');

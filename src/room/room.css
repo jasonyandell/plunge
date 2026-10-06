@@ -25,6 +25,8 @@
 .room-table .overlay { top: 50px; }
 .room-invite { z-index: 60; }
 .room-invite .card { width: min(420px, 94vw); }
+.room-invite .card { max-height: 92dvh; overflow-y: auto; }
+.room-join { border-top: 1px solid #a88f6950; margin-top: 20px; padding-top: 2px; }
 .room-error { position: fixed; bottom: 8px; left: 8px; right: 8px; z-index: 80; display: flex; gap: 8px; align-items: center; background: #702d21; color: #fff; padding: 12px; border-radius: 12px; font-size: 14px; }
 .room-error span { flex: 1; overflow-wrap: anywhere; }
 .room-tricks { max-height: 220px; overflow-y: auto; background: #21170e; padding: 10px; }

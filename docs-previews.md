@@ -67,15 +67,16 @@ Local deployment-tool checks: `node --test scripts/test-preview.mjs`.
 ## Experimental family rooms
 
 The `family-rooms-v1` preview protocol builds with `PLUNGE_ROOMS=experimental`.
-Production and ordinary `local-only-v1` previews build with rooms off. Production's
-Wrangler configuration is unchanged and has no room binding.
+Production builds with rooms enabled too. Its `ROOMS` binding names its own
+`PlungeRoom` class and SQLite namespace; the existing `QUESTIONS` database is
+unchanged. Ordinary `local-only-v1` previews still build with rooms off.
 
 A room needs no account. Its link contains a random 128-bit room identifier;
 each occupied seat receives a separate random 256-bit browser key. Keep the link
 within the group. This prototype shares all four hands with trusted room members.
 It provides no competitive privacy or host migration.
 
-The PR Worker uses one SQLite-backed Durable Object class to persist each room's
+Each Worker uses its own SQLite-backed Durable Object class to persist each room's
 game, seats, action revision, and bounded retry identifiers. The engine owns the
 legal turns. Clients cannot accidentally act for another person, apply a stale
 move, or apply a successful retry twice. The host browser runs the existing Walt
@@ -106,7 +107,12 @@ build its assets, and run `wrangler dev --config wrangler.preview.generated.json
 
 For the phone UI, run `PLUNGE_ROOMS=experimental PLUNGE_QUESTIONS=local-only npm run dev`.
 Vite proxies room HTTP and WebSockets to port 8788; start Wrangler on that port.
-Open `/?rooms=1`, create a room, copy its invite link to another phone, then start.
+Choose **Play with family** in the usual Plunge home, create a room, and copy its
+invite or room code. Another person can open their existing Plunge app, choose
+**Play with family**, and paste the room code or same-origin invite. This keeps
+joining inside that app; it does not depend on the OS opening links in an installed
+PWA. The application's manifest and origin are unchanged. Starting a family room
+never overwrites the solo resume save.
 `PLUNGE_ROOM_URL=http://127.0.0.1:5173 npm run test:rooms:browser` uses two independent
 Chromium phone contexts and the real host Walt worker. It checks a complete hand,
 refresh/rejoin, rejected stale/wrong-seat moves, duplicate acknowledgement, host

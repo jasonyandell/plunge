@@ -5,7 +5,7 @@ import { rotateGame } from '../src/room/view';
 import { initialApp } from '../src/ui/store';
 import { recordHistory, listHistory, snapshotOf } from '../src/history/recorder';
 import { listHands } from '../src/history/legacy';
-import { roomFromHash, savedSeat, saveSeat } from '../src/room/client';
+import { roomCode, roomFromInput, roomFromHash, savedSeat, saveSeat } from '../src/room/client';
 
 describe('room presentation and recorder boundaries', () => {
   it('puts every viewer at seat zero with legal actions unchanged through a complete hand', () => {
@@ -48,5 +48,9 @@ describe('room presentation and recorder boundaries', () => {
     expect(savedSeat('a'.repeat(32),storage)).toBeNull();
     expect(roomFromHash(`#room=${credentials.roomId}`)).toBe(credentials.roomId);
     expect(roomFromHash('#room=short')).toBeNull();
+    expect(roomFromInput(roomCode(credentials.roomId), 'https://plunge.test')).toBe(credentials.roomId);
+    expect(roomFromInput(`https://plunge.test/?rooms=1#room=${credentials.roomId}`, 'https://plunge.test')).toBe(credentials.roomId);
+    expect(roomFromInput(`https://other.test/?rooms=1#room=${credentials.roomId}`, 'https://plunge.test')).toBeNull();
+    expect(roomFromInput('nonsense', 'https://plunge.test')).toBeNull();
   });
 });

@@ -39,14 +39,28 @@ const check = message => { receipts.checks.push(message); console.log(message); 
 const deadline = setTimeout(() => { console.error('Room browser check exceeded 260 seconds'); process.exit(1); }, 260000);
 try {
   const [host, guest] = pages;
-  await host.goto(`${url}/?rooms=1`); await host.getByRole('textbox', { name: 'Your name' }).fill('Host'); await host.getByRole('button', { name: 'Create a private room' }).click();
+  await host.goto(url);
+  await host.getByRole('button', { name: 'Deal me in', exact: true }).click();
+  await host.getByRole('button', { name: 'Back to home', exact: true }).click();
+  await host.getByRole('button', { name: 'Resume your game', exact: true }).waitFor();
+  const soloBefore = await host.evaluate(() => localStorage.getItem('plunge:save:v1'));
+  assert(soloBefore);
+  await host.getByRole('button', { name: 'Play with family · Experimental', exact: true }).click();
+  await host.getByRole('textbox', { name: 'Your name' }).fill('Host'); await host.getByRole('button', { name: 'Create a private room' }).click();
   await until(async () => (await state(host))?.hostConnected);
   await host.getByRole('button', { name: 'Copy invite link' }).click();
   const invite = await host.getByRole('textbox', { name: 'Invite link' }).inputValue();
+  const code = await host.getByRole('textbox', { name: 'Room code', exact: true }).inputValue();
+  assert.equal(new URL(invite).origin, new URL(url).origin);
   await host.getByRole('button', { name: 'Back to the table' }).click();
-  await guest.goto(invite); await guest.getByRole('textbox', { name: 'Your name' }).fill('Guest'); await guest.getByRole('button', { name: 'Join room', exact: true }).click();
+  await guest.goto(url); await guest.getByRole('button', { name: 'Play with family · Experimental', exact: true }).click();
+  await guest.getByRole('textbox', { name: 'Your name' }).fill('Guest');
+  await guest.getByRole('textbox', { name: 'Room code or invite link', exact: true }).fill(code);
+  await guest.getByRole('button', { name: 'Join a family room', exact: true }).click();
   await until(async () => (await state(host))?.seats[2]?.connected && (await state(guest))?.seats[0]?.connected);
   assert.equal((await state(host)).seats[2].name, 'Guest');
+  assert.equal(await host.evaluate(() => localStorage.getItem('plunge:save:v1')), soloBefore);
+  check('Normal home entry and pasted room code joined on the same origin; the existing solo save stayed intact.');
   await snapshot(host, 'lobby.png');
   await host.getByRole('button', { name: 'Start with 2 people + Walt' }).click();
   await until(async () => (await state(guest))?.game);
@@ -134,6 +148,11 @@ try {
   assert.equal(await guest.getByRole('button', { name: /Undo|Play this hand again/ }).count(), 0);
   for (const page of pages) { const dimensions = await page.evaluate(() => ({ w: innerWidth, document: document.documentElement.scrollWidth })); assert(dimensions.document <= dimensions.w); }
   check('390px phone layouts have no horizontal overflow; multi-human Undo/replay controls are absent.');
+  await host.goto(url); await host.getByRole('button', { name: 'Resume your game', exact: true }).waitFor();
+  assert.equal(await host.evaluate(() => localStorage.getItem('plunge:save:v1')), soloBefore);
+  await host.getByRole('button', { name: 'Resume your game', exact: true }).click();
+  await host.getByRole('button', { name: 'Back to home', exact: true }).waitFor();
+  check('Leaving the family room restored the original resumable solo game.');
   await writeFile(join(output, 'receipt.json'), JSON.stringify(receipts, null, 2));
   console.log(`Browser evidence: ${output}`);
 } finally { clearTimeout(deadline); await browser.close(); }

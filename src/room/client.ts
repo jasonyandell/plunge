@@ -5,6 +5,16 @@ const KEY = 'plunge:room:';
 export function roomFromHash(hash: string): string | null {
   return /^#room=([a-f0-9]{32,64})$/.exec(hash)?.[1] ?? null;
 }
+export function roomCode(roomId: string): string { return roomId.match(/.{1,8}/g)?.join('-').toUpperCase() ?? roomId; }
+/** Paste a code or a same-origin invite inside the existing installed app. */
+export function roomFromInput(value: string, origin: string): string | null {
+  const code = value.trim().replace(/[\s-]/g, '').toLowerCase();
+  if (/^[a-f0-9]{32}$/.test(code)) return code;
+  try {
+    const url = new URL(value.trim(), origin);
+    return url.origin === origin ? roomFromHash(url.hash) : null;
+  } catch { return null; }
+}
 export function savedSeat(roomId: string, storage: Storage): RoomCredentials | null {
   try {
     const value = JSON.parse(storage.getItem(KEY + roomId) ?? 'null') as RoomCredentials | null;

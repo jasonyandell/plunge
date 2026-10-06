@@ -6,6 +6,13 @@ best of luck to the both of you.
 **Play it: https://plunge.texas42.workers.dev** — works in any phone browser,
 installable as an app, plays offline.
 
+**Play with family · Experimental** opens a private shared table in the same app.
+Create a room and send its invite or room code. Family can open their existing
+Plunge app, choose **Play with family**, and paste the code or invite; no second
+install or account is needed. Walt fills empty seats. Keep the host's page open
+and screen awake; disconnected people pause the table and refresh rejoins their
+seat. Undo and replay are off in shared rooms. Your solo game stays saved.
+
 The live table plays **straight 42** with regular bidding: 30–41, then marks.
 Each player bids once or passes, starting left of the shaker; the winner calls
 trump and leads. Four passes throw the hand in. First team to seven marks wins.

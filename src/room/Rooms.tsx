@@ -5,7 +5,7 @@ import { checkedAction, nativeMove, requestOf } from '../ai/native';
 import { exportHistory, recordHistory, retryHistory } from '../history/recorder';
 import { DEFAULT_SETTINGS, initialApp } from '../ui/store';
 import type { RoomCommand, RoomCredentials, RoomState } from './protocol';
-import { enterRoom, RoomConnection, roomFromHash, savedSeat, saveSeat } from './client';
+import { enterRoom, RoomConnection, roomCode, roomFromHash, roomFromInput, savedSeat, saveSeat } from './client';
 import { RoomTable } from './RoomTable';
 import '../ui/app.css';
 import '../ui/home.css';
@@ -24,6 +24,7 @@ export function Rooms() {
     try { return roomId ? savedSeat(roomId, localStorage) : null; } catch { return null; }
   });
   const [name, setName] = useState('');
+  const [joinInput, setJoinInput] = useState('');
   const [opening, setOpening] = useState(false);
   const [room, setRoom] = useState<RoomState | null>(null);
   const [online, setOnline] = useState(false);
@@ -96,11 +97,15 @@ export function Rooms() {
     const a = document.createElement('a'); a.href = url; a.download = `plunge-room-history-${new Date().toISOString().slice(0,10)}.json`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   }).catch(() => setHistoryError('History export failed. Keep this tab open and retry.'));
-  const open = async () => {
+  const open = async (joining = false) => {
     if (opening) return;
     setOpening(true); setError(null);
     try {
-      const seat = await enterRoom(name.trim() || 'Player', roomId ?? undefined);
+      const target = joining ? roomFromInput(joinInput, location.origin) : roomId;
+      if (joining && !target) throw new Error('Paste the room code or an invite link from this Plunge app.');
+      let restored: RoomCredentials | null = null;
+      try { if (target) restored = savedSeat(target, localStorage); } catch { /* Joining still works when storage is unavailable. */ }
+      const seat = restored ?? await enterRoom(name.trim() || 'Player', target ?? undefined);
       try { saveSeat(seat, localStorage); } catch { setError('This browser cannot save your seat. Keep this tab open; refreshing could lose access.'); }
       history.replaceState(null, '', `?rooms=1#room=${seat.roomId}`);
       setCredentials(seat);
@@ -118,11 +123,16 @@ export function Rooms() {
     ? 'Waiting for the host. The host must keep this room open; play resumes when they return.'
     : !allConnected ? `Waiting for ${room?.seats.filter(s => s && !s.connected).map(s => s!.name).join(', ')} to rejoin. Their seats are saved.` : null;
   return <div class="rooms">
-    {!credentials ? <div class="home"><div class="home-card"><p class="eyebrow">Plunge · Experimental</p><h1 class="title">Play together</h1>
+    {!credentials ? <div class="home"><div class="home-card"><p class="eyebrow">Plunge · Experimental</p><h1 class="title">Play with family</h1>
       <p class="room-intro">{roomId ? 'Pull up a chair in this private room.' : 'Invite your family. Walt fills the empty chairs.'}</p>
       <form onSubmit={e => { e.preventDefault(); void open(); }}><label class="room-label">Your name<input maxLength={20} value={name} onInput={e => setName(e.currentTarget.value)} autoComplete="nickname" placeholder="Name at the table" /></label>
         <button class="big-btn" disabled={opening}>{opening ? 'Opening…' : roomId ? 'Join room' : 'Create a private room'}</button></form>
       <p class="setting-hint">No account needed. The host keeps this page open to run Walt. Share the invite only with your group.</p>
+      {!roomId && <form class="room-join" onSubmit={e => { e.preventDefault(); void open(true); }}>
+        <label class="room-label">Room code or invite link<input value={joinInput} onInput={e => setJoinInput(e.currentTarget.value)} autoCapitalize="none" autoCorrect="off" spellcheck={false} placeholder="Paste from your family" /></label>
+        <button class="big-btn secondary" disabled={opening || !joinInput.trim()}>Join a family room</button>
+        <p class="setting-hint">Already using the Plunge app? Paste the code here to stay in this app.</p>
+      </form>}
       <a class="text-btn" href={location.pathname}>Back to solo play</a>
     </div></div> : <>
       <div class="room-bar"><span>Shared room <small>Experimental</small></span><button onClick={share}>Invite</button><button onClick={download} aria-label="Export room history">Export</button><button onClick={() => { if (confirm('Leave the room? Your seat is saved here. Others will wait until you return.')) location.assign(location.pathname); }}>Leave</button></div>
@@ -138,7 +148,10 @@ export function Rooms() {
     </>}
     {inviteOpen && <div class="overlay room-invite"><div class="card" role="dialog" aria-label="Invite family"><h2 class="sheet-title">Invite your family</h2><p>Open this link on another phone. The first guest is your partner.</p>
       <label class="room-label">Invite link<input aria-label="Invite link" value={invite} readOnly onFocus={e => e.currentTarget.select()} /></label>
-      <p class="hint">{copied ? 'Link copied. Paste it into your family conversation.' : 'Select and copy the link to share it.'}</p>
+      <label class="room-label">Room code<input aria-label="Room code" value={credentials ? roomCode(credentials.roomId) : ''} readOnly onFocus={e => e.currentTarget.select()} /></label>
+      <button class="big-btn secondary" onClick={() => void navigator.clipboard?.writeText(roomCode(credentials!.roomId)).then(() => setCopied(true)).catch(() => setCopied(false))}>Copy room code</button>
+      <p class="hint">In the existing Plunge app, choose Play with family and paste this code. No second install needed.</p>
+      <p class="hint">{copied ? 'Copied. Paste it into your family conversation.' : 'Select and copy the link or room code to share it.'}</p>
       <button class="big-btn" onClick={() => setInviteOpen(false)}>Back to the table</button></div></div>}
     {error && <div class="room-error" role="alert"><span>{error}</span><button onClick={() => setError(null)}>Dismiss</button></div>}
     {aiError && <div class="room-error" role="alert"><span>{aiError}</span><button onClick={() => { setAiError(null); setRetry(n => n + 1); }}>Retry Walt</button></div>}

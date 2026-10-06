@@ -57,6 +57,18 @@ test('invalid identities cannot select production or perform API calls', async (
     assert.equal(f.calls.length, 0);
   }
 });
+test('production enables its own room namespace while preserving question database identity', () => {
+  const config = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
+  assert.match(config, /^name = "plunge"/);
+  assert.match(config, /database_name = "plunge-questions"\ndatabase_id = "98730843-94b0-4507-b3c1-91fb12f0702a"/);
+  assert.match(config, /\[\[durable_objects.bindings\]\]\nname = "ROOMS"\nclass_name = "PlungeRoom"/);
+  assert.match(config, /new_sqlite_classes = \["PlungeRoom"\]/);
+  assert.doesNotMatch(config, /script_name|plunge-pr-/);
+  const workflow = readFileSync(new URL('../.github/workflows/deploy.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /if: github.ref == 'refs\/heads\/main'/);
+  assert.match(workflow, /PLUNGE_ROOMS=experimental npm run build/);
+  assert.doesNotMatch(workflow, /\bdelete\b|\bcleanup\b/);
+});
 test('preparing a preview only reads the subdomain and never creates or binds a database', async () => {
   const f = fixture();
   const first = await preparePreview(4, f.api);

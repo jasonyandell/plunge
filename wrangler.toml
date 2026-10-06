@@ -13,3 +13,11 @@ binding = "QUESTIONS"
 database_name = "plunge-questions"
 database_id = "98730843-94b0-4507-b3c1-91fb12f0702a"
 migrations_dir = "migrations"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "PlungeRoom"
+
+[[migrations]]
+tag = "family-rooms-v1"
+new_sqlite_classes = ["PlungeRoom"]
