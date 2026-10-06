@@ -7,6 +7,9 @@
 .room-bar > span { flex: 1; min-width: 0; }
 .room-bar small { display: block; color: var(--butterscotch); font-size: 10px; }
 .room-bar button, .room-error button { min-height: 44px; padding: 6px 8px; background: none; color: var(--cream); border: 1px solid #e9c07a40; border-radius: 8px; font: inherit; }
+.room-bar button:disabled { opacity: .4; }
+.room-takeback { padding: 6px 10px; background: #286f65; color: var(--cream); font-size: 12px; line-height: 1.4; flex: 0 0 auto; }
+.room-table .seat-sitting-out .mini-row, .room-table .seat-sitting-out .mini-col, .room-table .hand-sitting-out .hand { opacity: .45; }
 .room-pause { background: #e0a84f; color: #2b1d12; padding: 10px 14px; line-height: 1.4; font-size: 14px; flex: 0 0 auto; }
 .room-wait { flex: 1; display: flex; justify-content: center; align-items: center; padding: 20px 12px; overflow-y: auto; }
 .room-wait .home-card { width: min(420px, 100%); }
@@ -21,7 +24,7 @@
 .room-table .trick { min-height: 190px; }
 .room-table .sheet { bottom: calc(164px + env(safe-area-inset-bottom, 0px)); }
 .room-table .hand-caption { margin-bottom: 6px; }
-.room-table .hand-area { margin-top: auto; padding-top: 6px; }
+.room-table .hand-area { margin-top: auto; padding-top: 6px; padding-bottom: 4px; }
 .room-table .overlay { top: 50px; }
 .room-invite { z-index: 60; }
 .room-invite .card { width: min(420px, 94vw); }

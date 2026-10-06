@@ -1,8 +1,10 @@
 /** One authoritative, trusted-family room. Walt runs in the host's browser. */
-import { applyAction, legalActions, newGame, LEGACY_PLUNGE_CONFIG, type Seat } from '../src/engine';
+import { applyAction, legalActions, newGame, PLUNGE_CONFIG, type Seat } from '../src/engine';
+import { handSteps } from '../src/engine/hand-history';
 import { catalogueDeal } from '../src/ai/catalogue';
 import type { RoomCommand, RoomCredentials, RoomState } from '../src/room/protocol';
 import { ROOM_ID } from '../src/room/protocol';
+import { roomAuctionConfig, roomUndoTarget, upgradeRoom } from './room-undo';
 
 const TOKEN = /^[a-f0-9]{64}$/;
 const COMMAND_ID = /^[a-zA-Z0-9_-]{1,128}$/;
@@ -29,6 +31,8 @@ export const randomKey = (bytes: number): string => [...crypto.getRandomValues(n
 interface SavedSeat { name: string; token: string }
 export interface SavedRoom {
   state: RoomState; players: (SavedSeat | null)[]; accepted: string[]; updated: number;
+  /** Actual human decisions in this hand. Missing on rooms saved by older code. */
+  humanSteps?: { handNumber: number; indices: number[] };
 }
 export function cleanName(value: unknown): string {
   if (typeof value !== 'string') throw new Error('Please enter your name.');
@@ -39,14 +43,16 @@ export function cleanName(value: unknown): string {
 export function createRoom(roomId: string, name: string, token = randomKey(32), now = Date.now()): SavedRoom {
   return { state: { type: 'state', roomId, revision: 0, seed: '', sessionId: '', game: null,
     seats: [null, null, null, null], hostConnected: false, started: false, holdUntil: 0, thinkingSeat: null,
-    nativeReceipts: {}, auctionSurveys: {} },
+    nativeReceipts: {}, auctionSurveys: {}, retry: null, practiceHands: [], lastUndo: null },
     players: [{ name: cleanName(name), token }, null, null, null], accepted: [], updated: now };
 }
 export function roomSnapshot(room: SavedRoom, connected: ReadonlySet<Seat>): RoomState {
-  return { ...room.state, seats: room.players.map((player, seat) => player
+  return { ...room.state, canUndo: roomUndoTarget(room) !== null, seats: room.players.map((player, seat) => player
     ? { name: player.name, connected: connected.has(seat as Seat) } : null), hostConnected: connected.has(0) };
 }
 export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), now = Date.now()): RoomCredentials {
+  // Record old human membership before a newcomer takes a formerly Walt seat.
+  upgradeRoom(room);
   if (room.state.game && !['hand-over', 'game-over'].includes(room.state.game.phase))
     throw new Error('This hand is in progress. Join after the hand ends.');
   const seat = ([2, 1, 3] as const).find(seat => !room.players[seat]);
@@ -59,7 +65,7 @@ export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), n
 /** The same guard protects human moves, delayed Walt replies and reconnect retries. */
 export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
   connected: ReadonlySet<Seat>, now = Date.now()): 'duplicate' | 'changed' | 'thinking' {
-  if (!command || !COMMAND_ID.test(command.id) || !['start', 'action', 'thinking'].includes(command.type)
+  if (!command || !COMMAND_ID.test(command.id) || !['start', 'action', 'thinking', 'undo'].includes(command.type)
     || !Number.isSafeInteger(command.revision)) throw new Error('Invalid room command.');
   const key = `${seat}:${command.id}`;
   if (room.accepted.includes(key)) return 'duplicate';
@@ -67,20 +73,33 @@ export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
   if (!connected.has(0)) throw new Error('The host disconnected. Play resumes when the host returns.');
   if (room.players.some((player, i) => player && !connected.has(i as Seat)))
     throw new Error('A player disconnected. Play resumes when everyone returns.');
+  upgradeRoom(room);
   if (command.type === 'thinking') {
     if (seat !== 0 || (command.seat !== null && (command.seat !== room.state.game?.turn || room.players[command.seat ?? 0])))
       throw new Error('Only the host can run Walt for an empty seat.');
     room.state = { ...room.state, thinkingSeat: command.seat ?? null };
     return 'thinking';
   }
-  if (now < room.state.holdUntil) throw new Error('Please wait for this trick to finish showing.');
-  if (command.type === 'start') {
+  if (command.type === 'undo') {
+    if (seat !== 0) throw new Error('Only the host can take back a move.');
+    const target = roomUndoTarget(room);
+    if (!target) throw new Error('There is no human move to take back in this hand.');
+    room.state = { ...room.state, game: target.game, retry: target.retry, practiceHands: target.practiceHands,
+      nativeReceipts: target.nativeReceipts, auctionSurveys: target.auctionSurveys, holdUntil: 0, thinkingSeat: null,
+      lastUndo: { revision: room.state.revision + 1, seat: target.seat, name: room.players[target.seat]?.name ?? 'Player' } };
+    room.humanSteps = { handNumber: target.game.handNumber,
+      indices: room.humanSteps!.indices.filter(index => index < target.kept) };
+  } else if (command.type === 'start') {
+    if (now < room.state.holdUntil) throw new Error('Please wait for this trick to finish showing.');
     if (seat !== 0) throw new Error('Only the host can start the game.');
     if (room.state.game && room.state.game.phase !== 'game-over') throw new Error('The game is already in progress.');
     const seed = randomKey(16), sessionId = randomKey(16);
-    room.state = { ...room.state, seed, sessionId, game: catalogueDeal(newGame(LEGACY_PLUNGE_CONFIG, seed), seed),
-      started: true, holdUntil: 0, thinkingSeat: null, nativeReceipts: {}, auctionSurveys: {} };
+    room.state = { ...room.state, seed, sessionId, game: catalogueDeal(newGame(PLUNGE_CONFIG, seed), seed),
+      started: true, holdUntil: 0, thinkingSeat: null, nativeReceipts: {}, auctionSurveys: {},
+      retry: null, practiceHands: [], lastUndo: null };
+    room.humanSteps = { handNumber: 1, indices: [] };
   } else {
+    if (now < room.state.holdUntil) throw new Error('Please wait for this trick to finish showing.');
     const game = room.state.game, action = command.action;
     if (!game || !action) throw new Error('Start the game first.');
     if (action.type === 'next-hand') {
@@ -95,7 +114,12 @@ export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
     if (command.auction !== undefined && (!['plunge-played-auction-v1', 'walt-auction-v1'].includes(command.auction.schema)
       || command.auction.seat !== game.turn)) throw new Error('Invalid Walt auction evidence.');
     let next = applyAction(game, legal);
-    if (legal.type === 'next-hand') next = catalogueDeal(next, room.state.seed);
+    if (legal.type === 'next-hand') {
+      next = catalogueDeal(roomAuctionConfig(next), room.state.seed);
+      room.humanSteps = { handNumber: next.handNumber, indices: [] };
+    } else if (game.turn !== null && room.players[game.turn]) {
+      room.humanSteps!.indices = [...room.humanSteps!.indices, handSteps(game).length];
+    }
     const receipts = { ...room.state.nativeReceipts }, surveys = { ...room.state.auctionSurveys };
     const ply = game.tricks.reduce((sum, trick) => sum + trick.plays.length, 0) + game.currentTrick.length;
     if (command.receiptId && legal.type === 'play') receipts[`${game.handNumber}:${ply}`] = command.receiptId;
@@ -103,6 +127,7 @@ export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
     room.state = { ...room.state, game: next, thinkingSeat: null,
       holdUntil: next.tricks.length > game.tricks.length ? now + 2000 : 0,
       nativeReceipts: receipts, auctionSurveys: surveys };
+    if (legal.type === 'next-hand') room.state = { ...room.state, retry: null, lastUndo: null };
   }
   room.state = { ...room.state, revision: room.state.revision + 1 };
   room.accepted = [...room.accepted.slice(-511), key];
@@ -127,7 +152,10 @@ export class PlungeRoom {
   private room: SavedRoom | undefined;
   private readonly ready: Promise<void>;
   constructor(private readonly ctx: RoomContext) {
-    this.ready = ctx.blockConcurrencyWhile(async () => { this.room = await ctx.storage.get<SavedRoom>('room'); });
+    this.ready = ctx.blockConcurrencyWhile(async () => {
+      this.room = await ctx.storage.get<SavedRoom>('room');
+      if (this.room && upgradeRoom(this.room)) await ctx.storage.put('room', this.room);
+    });
   }
   private connected(exclude?: RoomSocket): Set<Seat> {
     return new Set(this.ctx.getWebSockets().filter(socket => socket !== exclude && socket.readyState === 1

@@ -22,7 +22,7 @@ describe('trusted family room guards', () => {
     expect(JSON.stringify(snapshot)).not.toContain(hostToken);
     expect(JSON.stringify(snapshot)).not.toContain(guestToken);
     expect(snapshot.game!.config.allPass).toBe('force-30');
-    expect(snapshot.game!.config.nello).toBe('off');
+    expect(snapshot.game!.config.nello).toBe('open');
     expect(() => joinRoom(room, 'Late arrival')).toThrow(/in progress/);
   });
   it('rejects wrong-seat, stale and illegal actions while duplicate success is idempotent', () => {
