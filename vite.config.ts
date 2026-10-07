@@ -20,7 +20,7 @@ export default defineConfig({
     ],
   }],
   server: {
-    proxy: { '/api/rooms': { target: `http://127.0.0.1:${process.env.PLUNGE_ROOMS_PORT ?? '8788'}`, ws: true }, '/api/questions': { target: `http://127.0.0.1:${process.env.PLUNGE_QUESTIONS_PORT ?? '8787'}` }, '/api': { target: `http://127.0.0.1:${process.env.PLUNGE_BRIDGE_PORT ?? '4245'}` } },
+    proxy: { '/api/ideas': { target: `http://127.0.0.1:${process.env.PLUNGE_QUESTIONS_PORT ?? '8787'}` }, '/api/rooms': { target: `http://127.0.0.1:${process.env.PLUNGE_ROOMS_PORT ?? '8788'}`, ws: true }, '/api/questions': { target: `http://127.0.0.1:${process.env.PLUNGE_QUESTIONS_PORT ?? '8787'}` }, '/api': { target: `http://127.0.0.1:${process.env.PLUNGE_BRIDGE_PORT ?? '4245'}` } },
   },
   build: { target: 'es2022' },
   test: {
