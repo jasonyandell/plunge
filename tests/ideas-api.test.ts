@@ -80,6 +80,19 @@ describe('family idea conversations and automatic builds',()=>{
     await call('/admin/publish','POST',{id:job.card.id,sha:'c'.repeat(40),status:'shipped'},admin);
     thread=await (await call(`/${job.card.id}`)).json() as IdeaThread;expect(thread.card.status).toBe('queued');
   });
+  it('targets a specific card and invalidates a preview after a manual PR update',async()=>{
+    const idea=id(50);
+    await call(`/${idea}`,'PUT',{body:'A separate idea',context:'Phone'});
+    const picked=await (await call('/admin/claim','POST',{runId:id(150),ideaId:idea},admin)).json() as {card:{id:string}};
+    expect(picked.card.id).toBe(idea);
+    await finish(150,{status:'checking',message:'Ready for checks.',pr:150,sha:'e'.repeat(40)});
+    const fetch=vi.spyOn(globalThis,'fetch').mockResolvedValueOnce(Response.json({build:'e'.repeat(40),preview_pr:150}));
+    await call('/admin/publish','POST',{id:idea,sha:'e'.repeat(40),status:'ready'},admin);fetch.mockRestore();
+    await call('/admin/refresh','POST',{id:idea,sha:'e'.repeat(40),nextSha:'f'.repeat(40)},admin);
+    const updated=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect(updated.card.status).toBe('checking');expect(updated.card.preview).toBeNull();expect(updated.card.sha).toBe('f'.repeat(40));
+    expect((await call('/admin/publish','POST',{id:idea,sha:'e'.repeat(40),status:'closed'},admin)).status).toBe(409);
+  });
   it('bounds inputs, supports invite revocation, and keeps previews isolated',async()=>{
     expect((await call(`/${id(4)}`,'PUT',{body:'x'.repeat(16001)})).status).toBe(400);
     expect((await call('/admin/revoke','POST',{id:dad.id},admin)).status).toBe(200);

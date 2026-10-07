@@ -57,27 +57,35 @@ retained under `~/.local/share/plunge-ideas/runs/`. These contain private family
 text; they are not repository files. Stop the scheduled task to stop new builds.
 Do not delete an active run directory.
 
-## Set up after review
+## Activation
 
 The production workflow only deploys main. Review and merge this implementation
-first; it applies `0002_family_ideas.sql` using the existing deployment path.
+when ready to publish; it applies `0002_family_ideas.sql` using the existing deployment path.
 It creates no extra database. Until the private builder key is installed, the
 ideas endpoint stays unavailable and accepts no submissions.
 
-On the builder Mac, from a checkout of the reviewed implementation:
+Before merging, prepare the builder key from this checkout:
 
 ```sh
 codex login status
 node scripts/ideas/admin.mjs init
 node scripts/ideas/admin.mjs install-secret
+```
+
+After merging and a successful main deployment:
+
+```sh
 node scripts/ideas/admin.mjs invite Mom
 node scripts/ideas/admin.mjs invite Dad
 node scripts/ideas/builder.mjs
 ```
 
 `init` writes a mode-600 configuration in `~/.config/plunge-ideas/config.json`.
-`install-secret` passes its key through stdin to Wrangler, never command arguments
-or output. Use the existing scoped Cloudflare deployment credentials. `invite`
+`install-secret` saves it as the GitHub Actions secret `PLUNGE_IDEAS_ADMIN_TOKEN`
+through stdin, never command arguments or output. The main deployment job installs
+it as a Worker secret after tests/build, using the existing scoped Cloudflare
+deployment credentials. It is never available to preview jobs or application tests.
+This also avoids depending on a separately signed-in Cloudflare CLI on the Mac. `invite`
 writes each personal link to a mode-600 file next to that configuration; share
 that file's link directly with its intended person. For the installed PWA,
 **Ideas for Plunge** accepts pasting the invite, so it works when the OS opens an

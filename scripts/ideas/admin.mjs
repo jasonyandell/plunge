@@ -12,8 +12,8 @@ if(command==='init') {
   console.log(`Private configuration saved to ${configPath}.`);
 } else if(command==='install-secret') {
   const config=await loadConfig();
-  await run('npx',['wrangler','secret','put','IDEAS_ADMIN_TOKEN'],{input:config.token});
-  console.log('Builder secret installed on the configured Worker.');
+  await run('gh',['secret','set','PLUNGE_IDEAS_ADMIN_TOKEN','--repo','jasonyandell/plunge'],{input:config.token});
+  console.log('Builder key saved for the next main deployment.');
 } else if(command==='invite') {
   const config=await loadConfig();
   const member=await service(config,'members',{name:args.join(' ')});
