@@ -14,11 +14,12 @@ interface HomeProps {
   dispatch: (e: AppEvent) => void;
   onQuestions?: () => void;
   onHistory?: () => void;
+  onJam?: () => void;
 }
 
 const DIFFS: readonly Difficulty[] = ['native-partner', 'native-l1'];
 
-export function Home({ app, dispatch, onQuestions, onHistory }: HomeProps) {
+export function Home({ app, dispatch, onQuestions, onHistory, onJam }: HomeProps) {
   const paused = nelloPaused(app);
   // A finished game stays resumable while its last hand can still be undone or
   // replayed, so a reload doesn't strand those choices on the result card.
@@ -50,6 +51,7 @@ export function Home({ app, dispatch, onQuestions, onHistory }: HomeProps) {
 
         {nelloAvailable(app.settings) && <p class="setting-hint">Nel-O Preview is on. Change it in Advanced settings.</p>}
         {ROOMS_ENABLED && <button type="button" class="big-btn secondary" onClick={() => location.assign('?rooms=1')}>Play with family · Experimental</button>}
+        {onJam && <button type="button" class="big-btn secondary" onClick={onJam}>Family jam · Your idea, built</button>}
         <p class="setting-hint">Game history and Walt results stay on this device. Export a backup before clearing browser data.</p>
         <div class="link-row">
           {onHistory && <button type="button" class="text-btn" onClick={onHistory}>Export history</button>}

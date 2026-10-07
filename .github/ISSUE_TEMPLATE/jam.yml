@@ -1,0 +1,21 @@
+name: Family jam idea
+description: Something Plunge should add or fix. The builder picks it up from here.
+title: "Idea: "
+labels: [jam]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Say it the way you'd say it at the table. Short is fine.
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      placeholder: "Gran's tiles should wiggle when she wins."
+    validations:
+      required: true
+  - type: input
+    id: who
+    attributes:
+      label: Who's asking (first name is plenty)
+      placeholder: Mom

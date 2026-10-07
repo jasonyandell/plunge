@@ -1,6 +1,7 @@
 import { MAX_QUESTION_BYTES, OWNER_TOKEN, QUESTION_ID, publicQuestion, validQuestion, validUpdate,
   type Question, type RemoteQuestion } from '../src/questions/model';
 import { roomRequest, type RoomsNamespace } from './rooms';
+import { jamRequest, type JamEnv } from './jam';
 export { PlungeRoom } from './rooms';
 
 // Minimal D1 surface keeps the browser and worker type environments independent.
@@ -11,7 +12,8 @@ interface Statement {
   run(): Promise<unknown>;
 }
 // PR previews deploy without QUESTIONS; their app keeps questions on the device.
-interface Env { QUESTIONS?: { prepare(sql:string):Statement }; ROOMS?: RoomsNamespace; ASSETS: { fetch(request:Request):Promise<Response> } }
+// Family jam secrets exist only in production; previews answer 503 and point at the live site.
+interface Env extends JamEnv { QUESTIONS?: { prepare(sql:string):Statement }; ROOMS?: RoomsNamespace; ASSETS: { fetch(request:Request):Promise<Response> } }
 interface Row { id:string; owner_hash:string; revision:number; payload:string; answer:string|null; answered_at:string|null }
 const json = (value: unknown, status=200) => Response.json(value,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const remote = (r:Row):RemoteQuestion => ({question:JSON.parse(r.payload) as Question,revision:r.revision,
@@ -39,6 +41,7 @@ export default {
     const url=new URL(request.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     if (url.pathname === '/api/rooms' || url.pathname.startsWith('/api/rooms/')) return roomRequest(request, env.ROOMS);
+    if (url.pathname === '/api/jam' || url.pathname.startsWith('/api/jam/')) return jamRequest(request, env);
     const match=/^\/api\/questions(?:\/([a-f0-9]{32}))?$/.exec(url.pathname);
     if (!match) return json({error:'Not found.'},404);
     const id=match[1];

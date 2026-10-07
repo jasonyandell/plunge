@@ -4,6 +4,8 @@ dist/
 *.local
 .wrangler/
 wrangler.preview.generated.json
+.dev.vars
+.jam/
 scratch/
 
 # Local Python release-tool caches

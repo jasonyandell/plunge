@@ -50,6 +50,13 @@ Completed tricks stay visible for two seconds before gathering toward the winner
 including tricks that end the hand or match. The result card waits until the trick
 has been shown, and taps cannot skip the pause.
 
+**Family jam** on the home screen is how the family changes the game itself: type an
+idea, and a builder turns it into a pull request with its own preview to try before it
+ships. Replies go back and forth in plain words from the same screen. A shared family
+passphrase (or an invite link) is the only key; ideas are posted publicly on GitHub
+under a first name. See [docs/FAMILY-JAM.md](docs/FAMILY-JAM.md) for setup and the
+builder switch.
+
 Tap a played domino, then **Why this move?** to save a question mid-hand. It saves on the
 phone first and uploads anonymously when connected. **Your questions** on the
 home screen holds notes, short links, and later explanations. Original evidence

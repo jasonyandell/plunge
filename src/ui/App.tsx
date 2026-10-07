@@ -26,6 +26,8 @@ import { retryEvidence } from '../ai/phone/records';
 import { recordHistory, retryHistory, exportHistory } from '../history/recorder';
 import { Questions } from './Questions';
 import { attachGame, syncQuestions } from '../questions/client';
+import { Jam } from '../jam/Jam';
+import { jamRequested } from '../jam/client';
 
 export function App() {
   const [app, dispatch] = useReducer((state: AppState, event: AppEvent) => {
@@ -63,6 +65,8 @@ export function App() {
   }).catch(() => setHistoryError('History export failed. Keep this tab open and retry.'));
 
   const [questions, setQuestions] = useState<{ id: string | null } | null>(null);
+  // `?jam=1` and `#jam=<passphrase>` invite links open the family jam straight away.
+  const [jam, setJam] = useState(() => jamRequested(location.search, location.hash));
   const openQuestion = (id: string) => setQuestions({ id });
   useEffect(() => {
     const sync = () => void syncQuestions();
@@ -236,7 +240,7 @@ export function App() {
   const screen = (() => {
     switch (app.screen) {
       case 'home':
-        return <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} />;
+        return <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} onJam={() => setJam(true)} />;
       case 'how':
         return <HowTo dispatch={dispatch} />;
       case 'about':
@@ -245,7 +249,7 @@ export function App() {
         return app.game || app.scenarioGame ? (
           <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} />
         ) : (
-          <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} />
+          <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} onJam={() => setJam(true)} />
         );
     }
   })();
@@ -254,6 +258,7 @@ export function App() {
     <>
       {screen}
       {questions && <Questions nelloPreview={nelloAvailable(app.settings)} key={questions.id ?? "list"} initialId={questions.id} onClose={() => setQuestions(null)} dispatch={dispatch} />}
+      {jam && <Jam onClose={() => setJam(false)} />}
       {nativeError && (
         <div class="native-error" role="alert">
           <span>{nativeError}</span>

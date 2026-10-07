@@ -1,0 +1,44 @@
+/* Family jam dialog: shares the question notebook's paper look. */
+.jam-dialog { box-sizing: border-box; border: 1px solid #c6ae84; border-radius: 22px; padding: 0; color: #3e2d1e; background: #fff8e9; width: min(620px, 94vw); max-height: 92dvh; box-shadow: 0 20px 80px #0007; }
+.jam-dialog[open] { display: flex; flex-direction: column; }
+.jam-dialog::backdrop { background: #16100bdd; backdrop-filter: blur(4px); }
+.jam-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 20px 22px 12px; border-bottom: 1px solid #d7c7ad; }
+.jam-header .eyebrow { margin: 0 0 5px; font-size: 11px; color: #806744; }
+.jam-header h2 { margin: 0; font: 27px Georgia, serif; }
+.jam-close { width: 44px; height: 44px; flex-shrink: 0; border: 0; border-radius: 50%; background: #eedfca; color: #58422c; font-size: 28px; }
+.jam-body { overflow-y: auto; min-height: 0; padding: 14px 22px 22px; overscroll-behavior: contain; }
+.jam-body .setting-hint { color: #766348; }
+.jam-intro { line-height: 1.55; margin: 0 0 10px; }
+.jam-label { display: flex; flex-direction: column; gap: 8px; text-align: left; font-size: 14px; margin: 16px 0; }
+.jam-label input, .jam-label textarea { font: inherit; font-size: 17px; width: 100%; border: 1px solid #a88f69; border-radius: 10px; padding: 10px; background: #fffaf0; color: #302316; }
+.jam-label input { min-height: 48px; }
+.jam-label textarea { min-height: 120px; resize: vertical; line-height: 1.45; }
+.jam-dialog .big-btn { width: 100%; margin: 8px 0 0; }
+.jam-dialog .big-btn:disabled { opacity: .5; }
+.jam-dialog .text-btn { color: #72572f; min-height: 44px; }
+.jam-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+.jam-row h3 { margin: 0; font: 20px Georgia, serif; }
+.jam-list { display: grid; gap: 10px; margin-top: 12px; }
+.jam-item { display: grid; gap: 6px; width: 100%; padding: 14px 14px; text-align: left; border: 1px solid #d9c6a8; border-radius: 14px; background: #f5ead5; color: inherit; font: inherit; }
+.jam-item strong { font-size: 15px; line-height: 1.35; }
+.jam-item small { color: #796548; font-size: 12px; }
+.jam-status { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 650; letter-spacing: .02em; background: #e4d7bd; color: #5d4830; }
+.jam-status.preview { background: #d9eadd; color: #1f5a3f; }
+.jam-status.working { background: #f4e0b6; color: #6e4b11; }
+.jam-status.shipped { background: #286f65; color: #fff6e4; }
+.jam-status.closed { background: #e8e0d4; color: #7a6b58; }
+.jam-empty { padding: 26px 10px; font: italic 19px/1.6 Georgia, serif; text-align: center; color: #78664c; }
+.jam-idea { padding: 12px 16px; background: #f2e6d0; border-radius: 12px; margin: 12px 0; }
+.jam-idea p, .jam-message p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; margin: 6px 0 0; }
+.jam-idea small, .jam-message small { color: #796548; font-size: 12px; }
+.jam-try { display: block; width: 100%; box-sizing: border-box; margin: 10px 0; padding: 14px; border-radius: 12px; text-align: center; font-weight: 650; text-decoration: none; background: #286f65; color: #fff6e4; }
+.jam-thread { display: grid; gap: 10px; margin: 14px 0; }
+.jam-message { padding: 10px 14px; border-radius: 12px; background: #f7efe0; border: 1px solid #e3d5bb; }
+.jam-message.builder { background: #e7edde; border-color: #c3d0b2; }
+.jam-message.family { background: #fff2d8; border-color: #ead6ad; }
+.jam-message strong { font-size: 13px; }
+.jam-footer { border-top: 1px solid #d7c7ad; padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #fff8e9; }
+.jam-footer .big-btn { margin: 0; flex: 1; font-size: 15px; }
+.jam-notice { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: #fbe6d2; color: #6b3a1c; font-size: 14px; line-height: 1.45; }
+.jam-fine { font-size: 12px; color: #7d6a4f; line-height: 1.5; margin: 12px 0 0; }
+@media (max-width: 380px) { .jam-body { padding: 12px 14px; } .jam-footer { padding: 10px 12px; gap: 6px; } }

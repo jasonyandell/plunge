@@ -1,0 +1,160 @@
+name: Family jam (API builder)
+# The API-key builder for the Family jam. Runs only when the repository variable
+# JAM_BACKEND is "action"; otherwise the Codex cloud GitHub integration handles the
+# `@codex` mentions the Worker posts. Both produce the same branch/PR shapes.
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  actions: write
+
+# One build at a time: ideas queue instead of racing each other.
+concurrency:
+  group: family-jam
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: >-
+      vars.JAM_BACKEND == 'action' &&
+      ((github.event_name == 'issues' && github.event.label.name == 'jam') ||
+       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '<!-- plunge-jam from=') &&
+        contains(join(github.event.issue.labels.*.name, ','), 'jam')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Work out which idea, branch and request this is
+        id: ctx
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            let number = issue.number, pr = null, branch = `jam/${issue.number}`;
+            if (issue.pull_request) {
+              const { data } = await github.rest.pulls.get({ ...context.repo, pull_number: issue.number });
+              const linked = /^jam #(\d+)/i.exec(data.title)?.[1] ?? /^jam\/(\d+)/.exec(data.head.ref)?.[1]
+                ?? /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/i.exec(data.body ?? '')?.[1];
+              if (!linked) { core.setOutput('skip', 'true'); return; }
+              number = Number(linked); pr = data.number; branch = data.head.ref;
+            } else {
+              const { data: pulls } = await github.rest.pulls.list({ ...context.repo, state: 'open', head: `${context.repo.owner}:${branch}`, per_page: 1 });
+              if (pulls[0]) pr = pulls[0].number;
+            }
+            const { data: idea } = await github.rest.issues.get({ ...context.repo, issue_number: number });
+            const strip = body => (body ?? '').replace(/^<!-- plunge-jam from="[^"]*" -->\n?/, '').split('<!-- plunge-jam:instructions -->')[0].trim();
+            const request = context.eventName === 'issue_comment' ? strip(context.payload.comment.body) : '';
+            core.setOutput('number', String(number));
+            core.setOutput('pr', pr ? String(pr) : '');
+            core.setOutput('branch', branch);
+            core.setOutput('title', idea.title.replace(/^Idea:\s*/i, '').slice(0, 72));
+            core.setOutput('idea', strip(idea.body));
+            core.setOutput('request', request);
+            core.setOutput('skip', 'false');
+
+      - uses: actions/checkout@v4
+        if: steps.ctx.outputs.skip != 'true'
+        with:
+          ref: ${{ steps.ctx.outputs.pr != '' && steps.ctx.outputs.branch || 'main' }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        if: steps.ctx.outputs.skip != 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      # Dependencies are installed before Codex runs: the :workspace profile has no network.
+      - run: npm ci
+        if: steps.ctx.outputs.skip != 'true'
+
+      - name: Write the builder's brief
+        if: steps.ctx.outputs.skip != 'true'
+        env:
+          NUMBER: ${{ steps.ctx.outputs.number }}
+          TITLE: ${{ steps.ctx.outputs.title }}
+          IDEA: ${{ steps.ctx.outputs.idea }}
+          REQUEST: ${{ steps.ctx.outputs.request }}
+          HAS_PR: ${{ steps.ctx.outputs.pr }}
+        run: |
+          mkdir -p .jam
+          {
+            echo "You are the builder for the Plunge Family jam. Read AGENTS.md, section \"Family jam\", and follow it exactly."
+            echo
+            echo "Idea #$NUMBER: $TITLE"
+            echo
+            echo "What the family asked for:"
+            echo
+            printf '%s\n' "$IDEA" | sed 's/^/> /'
+            echo
+            if [ -n "$REQUEST" ]; then
+              echo "Their latest reply, which you should act on now:"
+              echo
+              printf '%s\n' "$REQUEST" | sed 's/^/> /'
+              echo
+            fi
+            if [ -n "$HAS_PR" ]; then
+              echo "You are on the existing pull request branch. Change the working tree; the workflow commits and pushes for you."
+            else
+              echo "You are on main. Change the working tree; the workflow creates branch jam/$NUMBER and the pull request for you."
+            fi
+            echo
+            echo "Run 'npm run typecheck && npm test' before you finish. Do not run git commands."
+            echo "Your final message is posted to the family as-is: two or three plain sentences, no file names, no jargon."
+          } > .jam/brief.md
+
+      - name: Build the idea with Codex
+        if: steps.ctx.outputs.skip != 'true'
+        id: codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          permission-profile: ":workspace"
+          prompt-file: .jam/brief.md
+          output-file: .jam/reply.md
+
+      - name: Commit, push, open or update the pull request, and reply
+        if: steps.ctx.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ steps.ctx.outputs.number }}
+          PR: ${{ steps.ctx.outputs.pr }}
+          BRANCH: ${{ steps.ctx.outputs.branch }}
+          TITLE: ${{ steps.ctx.outputs.title }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          reply="$(cat .jam/reply.md 2>/dev/null || true)"
+          rm -rf .jam
+          git -c core.hooksPath=/dev/null checkout -- node_modules 2>/dev/null || true
+          git -c core.hooksPath=/dev/null clean -fdq node_modules 2>/dev/null || true
+          git config user.name "Plunge jam"
+          git config user.email "jam@plunge.invalid"
+          changed=0
+          if ! git diff --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+            git add -A
+            git commit -q -m "Jam #$NUMBER: $TITLE" -m "Built for the Plunge Family jam. Closes #$NUMBER"
+            changed=1
+          fi
+          if [ "$changed" = 1 ]; then
+            if [ -z "$PR" ]; then git checkout -q -B "$BRANCH"; fi
+            git push -q origin "HEAD:$BRANCH"
+            if [ -z "$PR" ]; then
+              gh pr create --head "$BRANCH" --base main --label jam --title "Jam #$NUMBER: $TITLE" \
+                --body "$(printf 'Built for the Plunge Family jam.\n\nCloses #%s\n\n%s' "$NUMBER" "$reply")" >/dev/null || true
+              PR="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number')"
+            fi
+            # Pushes made with GITHUB_TOKEN don't start other workflows; ask for the preview explicitly.
+            gh workflow run preview.yml -f pr="$PR" || true
+          fi
+          body="${reply:-I looked at this but did not end up changing anything. Reply here with a little more detail and I will try again.}"
+          if [ "$changed" = 0 ]; then body="$body"$'\n\n'"_(No change was made this time.)_"; fi
+          gh issue comment "$NUMBER" --body "$body"$'\n\n'"<sub>Builder run: $RUN_URL</sub>"
+          # A reply that arrived on the pull request is answered there too.
+          if [ -n "$PR" ] && [ "$EVENT_NUMBER" = "$PR" ]; then gh pr comment "$PR" --body "$body"; fi

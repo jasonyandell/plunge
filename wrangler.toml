@@ -2,6 +2,11 @@ name = "plunge"
 compatibility_date = "2026-05-14"
 main = "worker/index.ts"
 
+# Family jam builder: "codex" (Codex cloud @codex mentions) or "action" (.github/workflows/jam.yml).
+# Secrets JAM_GITHUB_TOKEN and JAM_PASSPHRASE are set with `wrangler secret put`.
+[vars]
+JAM_BACKEND = "codex"
+
 [assets]
 directory = "./dist"
 binding = "ASSETS"
