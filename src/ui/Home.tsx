@@ -30,7 +30,7 @@ export function Home({ app, dispatch, onQuestions, onHistory }: HomeProps) {
         <div class="home-dominoes" aria-hidden="true">
           <Domino id="64" /><Domino id="55" /><Domino id="42" />
         </div>
-        <h1 class="title" aria-label="Plunge home">Plunge</h1>
+        <h1 class="title" aria-label="Plunge Texas 42 home">Plunge</h1>
         <p class="tagline">Pull up a chair.</p>
         <p class="home-welcome">You and Gran against Earl and Ruby.<br />First to seven marks wins.</p>
 
