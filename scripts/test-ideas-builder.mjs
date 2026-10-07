@@ -15,3 +15,7 @@ test('process invocation preserves arguments without shell interpretation',async
 test('failed subprocesses stop the coordinator',async()=>{
   await assert.rejects(run(process.execPath,['-e','process.exit(4)']),/exited 4/);
 });
+
+test('a timed-out command cannot claim success by handling SIGTERM',async()=>{
+  await assert.rejects(run(process.execPath,['-e',"process.on('SIGTERM',()=>process.exit(0));setInterval(()=>{},1000)"],{timeout:100}),/exited/);
+});

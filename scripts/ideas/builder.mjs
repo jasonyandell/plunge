@@ -28,16 +28,16 @@ export function run(command, args, options = {}) {
     const { input, timeout=600000, log, ...spawnOptions } = options;
     const child = spawn(command,args,{stdio:['pipe','pipe','pipe'],detached:process.platform!=='win32',...spawnOptions});
     let output='',errors='';
-    let forceTimer;
+    let forceTimer, cancelled=false;
     const stop=(signal)=>{try{if(process.platform!=='win32')process.kill(-child.pid,signal);else child.kill(signal);}catch{}};
-    const terminate=()=>{stop('SIGTERM');forceTimer=setTimeout(()=>stop('SIGKILL'),3000);forceTimer.unref();};
+    const terminate=()=>{cancelled=true;stop('SIGTERM');forceTimer=setTimeout(()=>stop('SIGKILL'),3000);forceTimer.unref();};
     const timer=setTimeout(terminate,timeout);
     process.once('SIGTERM',terminate);process.once('SIGINT',terminate);
     const cleanup=()=>{clearTimeout(timer);clearTimeout(forceTimer);process.removeListener('SIGTERM',terminate);process.removeListener('SIGINT',terminate);};
     child.stdout.on('data',chunk=>{if(log) log.write(chunk);else output+=chunk;if(output.length>8e6)terminate();});
     child.stderr.on('data',chunk=>{if(log) log.write(chunk);else errors=(errors+chunk).slice(-12000);});
     child.on('error',error=>{cleanup();reject(error);});
-    child.on('close',code=>{cleanup();code===0?resolvePromise(output.trim()):reject(new Error(`${command} exited ${code}: ${errors.slice(-1000)}`));});
+    child.on('close',code=>{cleanup();code===0 && !cancelled?resolvePromise(output.trim()):reject(new Error(`${command} exited ${code}: ${errors.slice(-1000)}`));});
     child.stdin.end(input);
   });
 }
