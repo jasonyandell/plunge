@@ -66,12 +66,17 @@ async function inspectPreviews(config) {
           if(['ahead','identical'].includes(comparison.status))status='shipped';
         }
       } else if(pr.state==='CLOSED')status='closed';
-      else if(pr.headRefOid===card.sha) {
+      else if(pr.headRefOid!==card.sha) {
+        await service(config,'refresh',{id:card.id,sha:card.sha,nextSha:pr.headRefOid});
+      } else {
         const checks=pr.statusCheckRollup ?? [];
         if(checks.some(c=>c.status==='COMPLETED' && ['FAILURE','CANCELLED','TIMED_OUT'].includes(c.conclusion)))status='failed';
         else if(checks.some(c=>c.name==='test' && c.conclusion==='SUCCESS') && checks.some(c=>c.name==='deploy' && c.conclusion==='SUCCESS') && checks.every(c=>c.status==='COMPLETED' && ['SUCCESS','SKIPPED','NEUTRAL'].includes(c.conclusion)))status='ready';
       }
-      if(status)await service(config,'publish',{id:card.id,sha:card.sha,status});
+      if(status && status!==card.status) {
+        await service(config,'publish',{id:card.id,sha:card.sha,status});
+        console.log(JSON.stringify({idea:card.number,status,pr:`https://github.com/${REPO}/pull/${card.pr}`}));
+      }
     } catch(error) {console.error(`Preview ${card.pr}: ${error.message}`);}
   }
 }
@@ -97,7 +102,7 @@ export async function buildOne(config,job,stateDir) {
     if(remoteBranch)await git(checkout,'switch','--track',`origin/${branch}`);
     else await git(checkout,'switch','-c',branch,'origin/main');
     const base=await git(checkout,'rev-parse','HEAD');
-    const gitConfig=await readFile(join(checkout,'.git/config')); 
+    const gitConfig=await readFile(join(checkout,'.git/config'));
     const logFile=await open(join(logDir,'build.log'),'a',0o600);
     const log={write:chunk=>writeSync(logFile.fd,chunk)};
     try {
@@ -112,7 +117,7 @@ export async function buildOne(config,job,stateDir) {
       await writeFile(join(checkout,'.git/config'),gitConfig);
       await rm(join(checkout,'.git/info/attributes'),{force:true});
       const answer=JSON.parse(await readFile(resultFile,'utf8'));
-      if(!['change','question'].includes(answer.kind) || typeof answer.message!=='string' || !answer.message.trim() || answer.message.length>5000)throw new Error('Invalid builder response.');
+      if(!['change','question'].includes(answer.kind) || typeof answer.message!=='string' || !answer.message.trim() || answer.message.length>3000)throw new Error('Invalid builder response.');
       if(answer.kind==='question') {await service(config,`runs/${job.run.id}/finish`,{status:'question',message:answer.message});return;}
       // Check every changed path before staging; dependency caches are never committed.
       if(await git(checkout,'rev-parse','HEAD')!==base)throw new Error('Builder changed Git history; manual review required.');

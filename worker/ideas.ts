@@ -145,6 +145,13 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
     ]);
     return json({ok:true});
   }
+  if (path === '/admin/refresh') {
+    const idea=id(data.id);
+    if(typeof data.nextSha!=='string'||!/^[a-f0-9]{40}$/.test(data.nextSha))return json({error:'Invalid build.'},400);
+    await db.prepare("UPDATE ideas SET status='checking',sha=?,preview=NULL,updated=? WHERE id=? AND sha=? AND status IN ('checking','ready')")
+      .bind(data.nextSha,now,idea,data.sha).run();
+    return json({ok:true});
+  }
   if (path === '/admin/publish') {
     const idea = id(data.id), status = data.status;
     if (!['ready','failed','shipped','closed'].includes(String(status))) return json({error:'Invalid publication.'},400);
