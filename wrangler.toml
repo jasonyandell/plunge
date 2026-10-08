@@ -1,5 +1,7 @@
 name = "plunge"
 compatibility_date = "2026-05-14"
+# Verify preview versions through their public Workers URLs (avoids error 1042).
+compatibility_flags = ["global_fetch_strictly_public"]
 main = "worker/index.ts"
 
 [assets]
