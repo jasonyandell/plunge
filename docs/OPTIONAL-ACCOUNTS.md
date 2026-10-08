@@ -59,13 +59,25 @@ player). While signed in, the app connects that log to the account through
 - **Nothing while signed out or on previews.** The device log is never changed by
   sync. Signing out stops uploads; signing in as another account on the same
   device connects the device's hands to that account too.
-- The account page shows the counts and offers **Connect now**; the game also
-  connects after each finished hand, every 30 seconds, on focus, and on reconnect.
+- **Light touch.** The game's timer (every 30 seconds), focus, reconnect and
+  each finished hand only *upload*, and only when the device has a hand its last
+  known account hasn't acknowledged: an idle or signed-out tab makes no request.
+  An ended session is noticed on the next upload and the device goes quiet until
+  the account page signs in again. The account page (and **Connect now**) does
+  the full pass: who is signed in, upload, pull the other devices, and the
+  account's totals, re-read only when the visit changed something.
 
 The migration `0004_account_hands.sql` is applied by the normal deployment. The
-table holds the record verbatim (`payload`) beside indexed columns for a future
-scoring screen; the replay codes are the human-played hands that labeled data
-will be derived from. `tests/stats-api.test.ts` covers the service and
+table holds the record verbatim (`payload`) beside columns the worker reads from
+the replay itself, so a leaderboard or a same-deal challenge is plain SQL:
+`deal` (shaker plus the four dealt hands, indexed; everyone who played the same
+deal shares it), `bidder`, `bid` (points as bid, 42 per mark), `contract`,
+`declaration`, `result_team`, `result_marks`, `won` (our team took the marks),
+`team0_points`/`team1_points`, `team0_tricks`/`team1_tricks`, the marks before
+and after, `practice`, `thrown_in` and `game_over`. The human always sits at
+seat 0, so team 0 is "us". Walt's own receipts and estimates never leave the
+device; the replay codes are the human-played hands that labeled data will be
+derived from. `tests/stats-api.test.ts` covers the service and
 `tests/stats-sync.test.ts` the device side against the real worker and D1.
 
 ## Passkeys and the stable install

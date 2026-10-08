@@ -4,7 +4,7 @@
  * First write wins per (account, device, hand): nothing here ever overwrites,
  * and a repeated upload is acknowledged, never duplicated.
  */
-import { DEVICE_ID, MAX_UPLOAD_BYTES, UPLOAD_BATCH, validHandRecord } from '../src/history/hand-record';
+import { DEVICE_ID, MAX_UPLOAD_BYTES, UPLOAD_BATCH, handSummary, validHandRecord } from '../src/history/hand-record';
 import type { HandRecord } from '../src/history/legacy';
 import { accountSession, type AccountEnv } from './accounts';
 import type { IdeasDatabase } from './ideas';
@@ -59,9 +59,13 @@ export async function statsRequest(request:Request,env:AccountEnv):Promise<Respo
       for(const value of data.hands) {
         const id=value&&typeof value==='object'&&typeof (value as {id:unknown}).id==='string'?(value as {id:string}).id.slice(0,90):'';
         try {
-          const record=validHandRecord(value);
-          statements.push(db.prepare(`INSERT OR IGNORE INTO account_hands(account_id,device_id,hand_id,game_id,hand_number,ended_at,game_over,thrown_in,player,payload,received)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?)`).bind(account.id,data.device,record.id,record.gameId,record.handNumber,record.endedAt,record.gameOver?1:0,record.thrownIn?1:0,record.player,JSON.stringify(record),now));
+          const {record,game}=validHandRecord(value),facts=handSummary(record,game);
+          statements.push(db.prepare(`INSERT OR IGNORE INTO account_hands(account_id,device_id,hand_id,game_id,hand_number,ended_at,game_over,thrown_in,practice,player,
+            deal,bidder,bid,contract,declaration,result_team,result_marks,won,team0_points,team1_points,team0_tricks,team1_tricks,
+            marks_before_0,marks_before_1,marks_after_0,marks_after_1,payload,received) VALUES(${Array(28).fill('?').join(',')})`)
+            .bind(account.id,data.device,record.id,record.gameId,record.handNumber,record.endedAt,record.gameOver?1:0,record.thrownIn?1:0,record.practiceHands?1:0,record.player,
+              facts.deal,facts.bidder,facts.bid,facts.contract,facts.declaration,facts.resultTeam,facts.resultMarks,facts.won,facts.points[0],facts.points[1],facts.tricks[0],facts.tricks[1],
+              record.marksBefore[0],record.marksBefore[1],record.marksAfter[0],record.marksAfter[1],JSON.stringify(record),now));
           stored.push(record.id);
         } catch(error) {rejected.push({id,error:error instanceof Error?error.message:'Invalid hand record.'});}
       }
@@ -74,7 +78,7 @@ export async function statsRequest(request:Request,env:AccountEnv):Promise<Respo
         for(const row of (await db.prepare(`SELECT hand_id FROM account_hands WHERE account_id=? AND device_id=? AND hand_id IN (${chunk.map(()=>'?').join(',')})`)
           .bind(account.id,data.device,...chunk).all<{hand_id:string}>()).results)present.add(row.hand_id);
       }
-      return json({stored:stored.filter(id=>present.has(id)),rejected});
+      return json({account:account.id,stored:stored.filter(id=>present.has(id)),rejected});
     }
     return json({error:'Not found.'},404);
   } catch(error) {return error instanceof SyntaxError?json({error:error.message||'Invalid stats request.'},400):json({error:'Stats are temporarily unavailable. Your device keeps them and can retry.'},503);}

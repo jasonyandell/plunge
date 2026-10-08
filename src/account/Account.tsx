@@ -4,7 +4,7 @@ import { startRegistration, startAuthentication, browserSupportsWebAuthn,
 import { TOKEN_KEY } from '../ideas/client';
 import { LIVE_PLUNGE } from '../ideas/model';
 import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
-import { statsStatus, syncStats, type StatsStatus } from '../history/stats-sync';
+import { forgetAccount, statsStatus, syncStats, type StatsStatus } from '../history/stats-sync';
 import '../ui/app.css';
 import '../ui/home.css';
 import '../ideas/ideas.css';
@@ -37,9 +37,9 @@ export function AccountPage() {
   const [error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
   const [recover,setRecover]=useState(recoveryFromLink),[recoveryLink,setRecoveryLink]=useState<{name:string;url:string}|null>(null);
   const [stats,setStats]=useState<StatsStatus|null>(null),[connecting,setConnecting]=useState(false);
-  const connectStats=async()=>{setConnecting(true);try{setStats(await syncStats());}catch{/* The device log is unaffected; the next visit retries. */}finally{setConnecting(false);}};
+  const connectStats=async()=>{setConnecting(true);try{setStats(await syncStats('full'));}catch{/* The device log is unaffected; the next visit retries. */}finally{setConnecting(false);}};
   // Signing in connects this device's finished hands; signed out, the page only counts them.
-  useEffect(()=>{if(!state)return;if(state.account)void connectStats();else void statsStatus().then(setStats).catch(()=>{});},[state?.account?.id]);
+  useEffect(()=>{if(!state)return;if(state.account)void connectStats();else void forgetAccount().then(statsStatus).then(setStats).catch(()=>{});},[state?.account?.id]);
   const supported=browserSupportsWebAuthn();
   const refresh=async()=>{const next=await api<State>();setState(next);setName(next.account?.name??'');
     if(next.account?.owner)setMembers((await api<{members:Person[]}>('/members')).members);else {setMembers([]);setRecoveryLink(null);}};

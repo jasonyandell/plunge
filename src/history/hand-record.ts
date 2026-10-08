@@ -3,6 +3,7 @@
  * and in the worker, so a record the device wrote is a record the account keeps.
  */
 import { decodeReplay } from '../engine/replay-code';
+import type { GameState } from '../engine';
 import type { HandRecord } from './legacy';
 
 export const GAME_ID = /^[a-zA-Z0-9_-]{1,80}$/;
@@ -13,8 +14,8 @@ export const MAX_UPLOAD_BYTES = 512_000;
 const MARK = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 0 && (n as number) <= 99;
 const marks = (v: unknown): v is readonly [number, number] => Array.isArray(v) && v.length === 2 && v.every(MARK);
 
-/** The record with only its known fields, or an Error naming what is wrong. */
-export function validHandRecord(value: unknown): HandRecord {
+/** The record with only its known fields and its decoded hand, or an Error naming what is wrong. */
+export function validHandRecord(value: unknown): { record: HandRecord; game: GameState } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Not a hand record.');
   const r = value as Record<string, unknown>;
   if (r.schema !== 'plunge-hand-v1') throw new Error('Unknown hand record schema.');
@@ -31,10 +32,47 @@ export function validHandRecord(value: unknown): HandRecord {
   if (typeof r.player !== 'string' || !r.player || r.player.length > 40) throw new Error('Invalid computer player.');
   if (r.practiceHands !== undefined && (!Array.isArray(r.practiceHands) || r.practiceHands.length > 1000
     || !r.practiceHands.every((n) => Number.isSafeInteger(n) && (n as number) >= 1))) throw new Error('Invalid practice hands.');
-  return {
+  return { game, record: {
     schema: 'plunge-hand-v1', id: r.id, gameId: r.gameId, handNumber: r.handNumber as number, code: r.code, endedAt: r.endedAt,
     marksBefore: [r.marksBefore[0], r.marksBefore[1]], marksAfter: [r.marksAfter[0], r.marksAfter[1]],
     gameOver: r.gameOver, thrownIn: r.thrownIn, player: r.player,
     ...(r.practiceHands !== undefined && (r.practiceHands as number[]).length ? { practiceHands: [...(r.practiceHands as number[])] } : {}),
+  } };
+}
+
+/**
+ * The plain facts of a finished hand for leaderboards and same-deal play,
+ * read from the replay rather than trusted from the device. The human always
+ * sits at seat 0, so "we" is team 0. Nothing here needs the replay decoded again.
+ */
+export interface HandSummary {
+  /** Shaker plus the four dealt hands: everyone who played this exact deal shares it. */
+  readonly deal: string;
+  readonly bidder: number | null;
+  /** Points bids as bid; mark bids as 42 per mark. */
+  readonly bid: number | null;
+  readonly contract: string | null;
+  readonly declaration: string | null;
+  readonly resultTeam: number | null;
+  readonly resultMarks: number | null;
+  /** 1 when our team took the marks, 0 when the other team did, null when thrown in. */
+  readonly won: number | null;
+  readonly points: readonly [number, number];
+  readonly tricks: readonly [number, number];
+}
+export function handSummary(record: HandRecord, game: GameState): HandSummary {
+  const result = game.handResult, contract = result?.contract ?? game.contract;
+  const declaration = game.declaration;
+  return {
+    deal: record.code.slice(3, 60),
+    bidder: result?.declarer ?? game.declarer,
+    bid: contract ? (contract.kind === 'points' ? contract.value : 42 * contract.value) : null,
+    contract: contract?.kind ?? null,
+    declaration: declaration ? (declaration.type === 'pip' ? String(declaration.pip) : declaration.type) : null,
+    resultTeam: result?.team ?? null,
+    resultMarks: result?.marks ?? null,
+    won: result ? (result.team === 0 ? 1 : 0) : null,
+    points: [game.points[0], game.points[1]],
+    tricks: [game.tricks.filter((t) => t.winner % 2 === 0).length, game.tricks.filter((t) => t.winner % 2 === 1).length],
   };
 }

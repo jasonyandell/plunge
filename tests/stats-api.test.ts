@@ -41,7 +41,17 @@ it('connects a device’s finished hands to the signed-in account once, first wr
   expect(await (await call('','GET',undefined,mom)).json()).toEqual({available:true,account:{id:'a'.repeat(32),name:'Mom'},hands:0,devices:0});
   const upload=await call('/hands','PUT',{device:phone,hands:[first,second]},mom);
   expect(upload.status).toBe(200);
-  expect(await upload.json()).toEqual({stored:[first.id,second.id],rejected:[]});
+  expect(await upload.json()).toEqual({account:'a'.repeat(32),stored:[first.id,second.id],rejected:[]});
+  // Leaderboard facts are read from the replay, never from the device.
+  const row=await db.prepare('SELECT deal,bidder,bid,contract,declaration,result_team,result_marks,won,team0_points,team1_points,team0_tricks,team1_tricks,marks_before_0,marks_after_0,practice,thrown_in FROM account_hands WHERE hand_id=?').bind(first.id).first() as Record<string,unknown>;
+  expect(row.deal).toBe(first.code.slice(3,60));expect(row.deal).toHaveLength(57);
+  expect(row).toMatchObject({bid:30,contract:'points',result_marks:1,marks_before_0:0,marks_after_0:1,practice:0,thrown_in:0});
+  expect([0,1,2,3]).toContain(row.bidder);
+  expect(typeof row.declaration).toBe('string');
+  expect([0,1]).toContain(row.result_team);expect(row.won).toBe(row.result_team===0?1:0);
+  // A decided hand can end early, so the totals are bounded rather than fixed.
+  const pts=(row.team0_points as number)+(row.team1_points as number),tricks=(row.team0_tricks as number)+(row.team1_tricks as number);
+  expect(pts).toBeGreaterThan(0);expect(pts).toBeLessThanOrEqual(42);expect(tricks).toBeGreaterThan(0);expect(tricks).toBeLessThanOrEqual(7);
   // The same hand again, even with a different end time, is acknowledged and left exactly as first written.
   const again=await (await call('/hands','PUT',{device:phone,hands:[{...first,endedAt:'2026-10-09T00:00:00.000Z'},thrown]},mom)).json() as {stored:string[]};
   expect(again.stored).toEqual([first.id,thrown.id]);
@@ -54,7 +64,9 @@ it('connects a device’s finished hands to the signed-in account once, first wr
 it('merges the account’s devices without letting matching ids overwrite each other',async()=>{
   // A second device reused the same game id and hand number for a different hand: both survive.
   const other={...second,endedAt:'2026-10-04T12:00:00.000Z'};
-  expect(await (await call('/hands','PUT',{device:laptop,hands:[other]},mom)).json()).toEqual({stored:[second.id],rejected:[]});
+  expect(await (await call('/hands','PUT',{device:laptop,hands:[other]},mom)).json()).toEqual({account:'a'.repeat(32),stored:[second.id],rejected:[]});
+  const thrownRow=await db.prepare('SELECT bidder,bid,contract,result_team,won,thrown_in FROM account_hands WHERE hand_id=?').bind(thrown.id).first();
+  expect(thrownRow).toEqual({bidder:null,bid:null,contract:null,result_team:null,won:null,thrown_in:1});
   const page=await (await call('/hands','GET',undefined,mom)).json() as {items:{device:string;record:HandRecord}[]};
   expect(page.items).toHaveLength(4);
   expect(page.items.filter(i=>i.record.id===second.id).map(i=>[i.device,i.record.endedAt]).sort()).toEqual([[phone,second.endedAt],[laptop,other.endedAt]]);
