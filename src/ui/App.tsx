@@ -17,7 +17,7 @@ import {
 } from './update';
 import { Home, HowTo, About, More } from './Home';
 import { Table } from './Table';
-import { codeFromHash, decodeHand } from './share';
+import { codeFromHash, currentHandFromHash, decodeHand } from './share';
 import { decodeObservation } from './observation-link';
 import { api, isNative, nativeMove, NATIVE_TABLE, type FlagRecord } from '../ai/native';
 import { anticipatedAuctions, auctionMove } from '../ai/auction';
@@ -167,6 +167,13 @@ export function App() {
     let generation = 0;
     const open = (): void => {
       const request = ++generation;
+      if (location.hash.startsWith('#hand=')) {
+        const game = currentHandFromHash(location.hash);
+        history.replaceState(null, '', location.pathname + location.search);
+        if (game) dispatch({ type: 'view-scenario', game });
+        else setNativeError('This shared hand link could not be opened. Ask for a new link.');
+        return;
+      }
       const questionId = /^#question=([a-f0-9]{32})$/.exec(location.hash)?.[1];
       if (questionId) {
         history.replaceState(null, '', location.pathname + location.search);

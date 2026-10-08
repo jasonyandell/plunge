@@ -1,0 +1,11 @@
+.share-hand-dialog { max-height: 90dvh; overflow-y: auto; margin: auto; }
+.share-hand-dialog::backdrop { background: rgba(20, 11, 5, .55); }
+.share-hand-link { display: flex; flex-direction: column; gap: 8px; text-align: left; margin: 16px 0; }
+.share-hand-link input { width: 100%; min-height: 44px; font: inherit; font-size: 16px; padding: 8px; color: var(--brown-9); background: #fffaf0; border: 1px solid #a88f69; border-radius: 8px; }
+.shared-hand { height: 100%; min-height: 0; }
+.shared-hand .doc-body { width: 100%; min-height: 0; }
+.shared-dominoes { display: flex; flex-wrap: wrap; gap: 6px; }
+.shared-dominoes .dom { width: 34px; }
+.shared-plays { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.shared-plays > div { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.shared-plays .dom { width: 60px; }
