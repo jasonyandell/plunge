@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { IdeaPreview, useIdeaPreview } from './IdeaPreview';
 import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
 import { IDEA_STATUS, LIVE_PLUNGE, type IdeaCard, type IdeaThread } from './model';
 import { cardFromHash, deviceContext, ideasApi, ideasLink, initialToken, InviteError, inviteToken, newId, readDraft, TOKEN_KEY } from './client';
@@ -11,11 +12,12 @@ export function Ideas() {
   const [cards,setCards] = useState<IdeaCard[]>([]), [loaded,setLoaded] = useState(false), [next,setNext] = useState<number|null>(null);
   const [selected,setSelected] = useState(cardFromHash), [thread,setThread] = useState<IdeaThread|null>(null);
   const [saved,setSaved] = useState('');
+  const trial=useIdeaPreview();
   const generation = useRef(0), olderLoaded=useRef(false);
   useEffect(() => {
-    const changed = () => {setSelected(cardFromHash());setThread(null);setError('');};
+    const changed = () => {const id=cardFromHash();if(id!==selected){setSelected(id);setThread(null);setError('');}};
     window.addEventListener('hashchange',changed);window.addEventListener('popstate',changed); return () => {window.removeEventListener('hashchange',changed);window.removeEventListener('popstate',changed);};
-  }, []);
+  }, [selected]);
   useEffect(() => {
     const epoch = ++generation.current; let running = false;
     if (!token || QUESTIONS_LOCAL_ONLY) return;
@@ -47,6 +49,8 @@ export function Ideas() {
   const more = async () => {try {const page=await ideasApi<{cards:IdeaCard[];next:number|null}>(token,`?before=${next}`);
     olderLoaded.current=true;setCards(c => [...c,...page.cards.filter(x=>!c.some(y=>y.id===x.id))]);setNext(page.next);
   } catch(e) {setError(String(e));}};
+  if(trial.id && thread?.card.id===trial.id && name && !QUESTIONS_LOCAL_ONLY)
+    return <IdeaPreview pr={thread.card.status==='ready' && thread.card.preview ? thread.card.pr ?? 0 : 0} title={thread.card.title} onClose={trial.close}/>;
   return <main class="ideas-page">
     <header class="ideas-top"><a href="/">← Back to Plunge</a><span>Made together</span></header>
     <div class="ideas-heading"><p class="eyebrow">Your seat at the drawing table</p><h1>Ideas for Plunge</h1>
@@ -66,7 +70,7 @@ export function Ideas() {
           {thread.card.status==='checking' && <p class="idea-help">The change is made. Its tests and preview need to finish before you can try it.</p>}
           {thread.card.status==='failed' && <p class="idea-help">The builder hit a problem. You can reply to try again; your conversation is saved.</p>}
           {thread.card.status==='shipped' && <a class="big-btn" href={LIVE_PLUNGE}>Play the updated game</a>}
-          {thread.card.status==='ready' && thread.card.preview && <a class="big-btn" href={`${thread.card.preview}/?idea=${thread.card.id}`} target="_blank" rel="noopener noreferrer">Try your change ↗</a>}
+          {thread.card.status==='ready' && thread.card.preview && <button class="big-btn" type="button" disabled={busy} onClick={()=>trial.open(thread.card.id)}>Try your change →</button>}
           <ol class="idea-conversation">{thread.messages.map(message=><li key={message.id} class={message.role}><strong>{message.name}</strong><p>{message.body}</p></li>)}</ol>
           <Composer key={selected} token={token} selected={selected} onBusy={setBusy} onSent={sent} onError={setError} />
         </section> : <p role="status">Opening that idea…</p>}

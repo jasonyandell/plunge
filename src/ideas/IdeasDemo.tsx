@@ -1,4 +1,5 @@
 import { useState } from 'preact/hooks';
+import { IdeaPreview, useIdeaPreview } from './IdeaPreview';
 import { newId, readDraft } from './client';
 import type { IdeaThread } from './model';
 import '../ui/app.css';
@@ -25,7 +26,8 @@ function initialCards(): IdeaThread[] {
 /** A browser-only walkthrough. Never calls the ideas service or starts a build. */
 export function IdeasDemo() {
   const [cards,setCards]=useState(initialCards),[person,setPerson]=useState('Mom');
-  const [selected,setSelected]=useState<string|null>(BID_ID),[playing,setPlaying]=useState(false),[notice,setNotice]=useState('');
+  const [selected,setSelected]=useState<string|null>(BID_ID),[notice,setNotice]=useState('');
+  const trial=useIdeaPreview();
   const current=cards.find(t=>t.card.id===selected);
   const save=(next:IdeaThread[])=>{
     setCards(next);
@@ -41,12 +43,7 @@ export function IdeasDemo() {
       setSelected(id);
     }
   };
-  if(playing) return <div class="demo-play">
-    <header class="idea-preview-bar"><button class="text-btn" onClick={()=>setPlaying(false)}>← Back to your idea</button><span>Bidding fix · playable preview</span>
-      <a href={BID_PREVIEW} target="_blank" rel="noopener noreferrer">Open full screen ↗</a></header>
-    <p class="demo-play-help">Start a game and place a bid. Look beside “You” above your dominoes. Come back here to reply.</p>
-    <iframe title="Try the bidding visibility fix" src={BID_PREVIEW} />
-  </div>;
+  if(trial.id===BID_ID) return <IdeaPreview pr={22} title={seed.card.title} onClose={trial.close}/>;
   return <main class="ideas-page">
     <header class="ideas-top"><a href="/">← Back to Plunge</a><span>Made together</span></header>
     <aside class="demo-banner"><strong>Try the family ideas demo</strong><p>Sample conversation, real playable fix. Messages stay in this browser; demo replies don’t start builds.</p></aside>
@@ -62,7 +59,7 @@ export function IdeasDemo() {
           <ol class="demo-steps" aria-label="Example progress"><li>Idea shared</li><li>Change built</li><li>Ready to try</li></ol>
           <div class="demo-bid-example" aria-label="Illustration of the bidding fix"><div><small>Before</small><span>You</span></div><span aria-hidden="true">→</span><div><small>With your idea</small><span>You <b>Bid 30</b></span></div></div>
           <p class="idea-help">Your winning bid stays beside your hand. The example above illustrates the change; the button opens the actual game.</p>
-          <button class="big-btn" onClick={()=>setPlaying(true)}>Try your change →</button>
+          <button class="big-btn" onClick={()=>trial.open(BID_ID)}>Try your change →</button>
           <a class="demo-details" href="https://github.com/jasonyandell/plunge/pull/22" target="_blank" rel="noopener noreferrer">See the change on GitHub ↗</a>
         </> : <p class="idea-help">In the live version, this would automatically join the builder’s queue. Here you can try the conversation.</p>}
         <ol class="idea-conversation">{current.messages.map(m=><li key={m.id} class={m.role}><strong>{m.name}</strong><p>{m.body}</p></li>)}</ol>

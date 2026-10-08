@@ -3,7 +3,12 @@
 Mom and Dad each open a personal invite once. **Ideas for Plunge** then opens
 large, simple cards inside the existing app. They can create another idea at any
 time, reply on either person's card, and try an individual change. No GitHub
-account is needed. A preview links directly back to its conversation on main.
+account is needed. **Try your change** opens the preview inside the existing app,
+under a compact **Back to your idea** bar. It does not open another tab or replace
+the installed app. Back/Forward, reload, and direct preview links keep the card
+address; unsent replies stay saved. Only previews currently marked ready can open.
+The embedded preview is isolated on its own origin, with top-level navigation and
+popups blocked. Preview game saves remain separate from the regular game.
 Temporary previews do not offer installation or register an offline app.
 
 Conversations live in new tables in the existing production D1 database, separate
@@ -126,3 +131,7 @@ expiry, exact preview identity, stale publication and revocation.
 Open `/?ideas=1&demo=bidding` for a browser-only demo, also linked from the preview's Ideas page. It starts with an explicitly labeled sample conversation about keeping your bid visible and embeds the existing PR #22 playable preview. Mom/Dad switching, replies, new cards, and drafts are stored under separate `plunge:ideas-demo:*` / `plunge:ideas-demo-draft:*` browser keys. This route does not read invites, call the ideas service, or start builds. PR #22 must remain deployed for the playable part; its link is separate from this walkthrough's PR.
 
 Validated the demo at 390px and 320px: draft reload, both family identities replying, new-card persistence, playable preview bidding, return to conversation, and zero ideas API requests.
+
+### In-app preview navigation checks
+
+Build with `npm run build`, serve with `npm run preview -- --host 127.0.0.1 --port 4178`, then run `node scripts/test-ideas-navigation.mjs`. This uses intercepted idea fixtures and the deployed PR #22 game in Chromium and WebKit. It covers phone layout, actual bidding inside the frame, one app/tab, saved drafts and replies, Back/Forward/reload, direct links, and expired readiness. The browser checks are not physical installed-iPhone validation.

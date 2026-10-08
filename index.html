@@ -21,7 +21,7 @@
     <script type="module" src="/src/main.tsx"></script>
     <script>
       // Temporary previews stay in the browser; installation belongs to the main game.
-      const previewBuild = document.querySelector('meta[name="plunge-questions"]')?.content === 'local-only';
+      const previewBuild = window.self !== window.top || document.querySelector('meta[name="plunge-questions"]')?.content === 'local-only';
       if (previewBuild) document.querySelector('link[rel="manifest"]')?.remove();
       // Service worker + dismissable install banner (no deps).
       if ('serviceWorker' in navigator) {
