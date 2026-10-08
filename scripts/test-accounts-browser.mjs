@@ -14,6 +14,7 @@ const db=await mf.getD1Database('QUESTIONS');
 const sql=await readFile('migrations/0002_family_ideas.sql','utf8'),[tables,trigger]=sql.split('CREATE TRIGGER');
 for(const statement of tables.split(';').filter(s=>s.trim()))await db.prepare(statement).run();await db.prepare(`CREATE TRIGGER${trigger}`).run();
 for(const statement of (await readFile('migrations/0003_accounts.sql','utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
+for(const statement of (await readFile('migrations/0004_idea_authorizations.sql','utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
 const browser=await chromium.launch();
 const mime={'.html':'text/html','.js':'application/javascript','.css':'text/css','.wasm':'application/wasm','.json':'application/json','.svg':'image/svg+xml','.png':'image/png'};
 async function newPerson() {
@@ -21,7 +22,7 @@ async function newPerson() {
  await context.route('**/*',route=>route.abort());
  await context.route(`${origin}/**`,async route=>{
   const req=route.request(),url=new URL(req.url());
-  if(url.pathname.startsWith('/api/account')) {
+  if(url.pathname.startsWith('/api/account') || url.pathname.startsWith('/api/ideas')) {
    const response=await mf.dispatchFetch(url.href,{method:req.method(),headers:await req.allHeaders(),...(req.method()==='GET'?{}:{body:req.postData()})});
    const headers=Object.fromEntries(response.headers);headers['set-cookie']=response.headers.getSetCookie().join('\n');
    if(!headers['set-cookie'])delete headers['set-cookie'];
@@ -57,6 +58,30 @@ try {
  await owner.page.getByRole('button',{name:'Refresh requests'}).click();
  const dadCard=owner.page.locator('.account-member').filter({hasText:dadId});await dadCard.getByRole('button',{name:'Grant family access'}).click();
  await dad.page.getByRole('button',{name:'Check access'}).click();await dad.page.getByRole('link',{name:'Open family ideas'}).waitFor();
+ // Owner approval uses the real account cookie and D1 revision, not UI fixtures.
+ await dad.page.getByRole('link',{name:'Open family ideas'}).click();
+ await dad.page.getByLabel('Your idea',{exact:true}).fill('Show account-linked stats.');
+ await dad.page.getByRole('button',{name:'Make an idea card'}).click();
+ await dad.page.getByRole('heading',{name:'Show account-linked stats.',exact:true}).waitFor();
+ const ideaId=new URL(dad.page.url()).hash.slice('#idea='.length);
+ assert.equal(await dad.page.getByRole('button',{name:'Approve full access'}).count(),0);
+ await owner.page.goto(`${origin}/?ideas=1#idea=${ideaId}`);
+ await owner.page.getByRole('button',{name:'Approve full access'}).waitFor();
+ for(const width of [320,390]){await owner.page.setViewportSize({width,height:844});assert.ok(await owner.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
+ await owner.page.screenshot({path:'/tmp/plunge-owner-idea-approval.png',fullPage:true});
+ await owner.page.getByRole('button',{name:'Approve full access'}).click();
+ await owner.page.getByText('Full project access is approved for this request.',{exact:true}).waitFor();
+ assert.equal((await db.prepare('SELECT account_id FROM idea_approvals WHERE idea_id=? AND revision=1').bind(ideaId).first()).account_id,ownerId);
+ await dad.page.getByLabel('Keep the conversation going').fill('Also make the stats bigger.');
+ await dad.page.getByRole('button',{name:'Send reply'}).click();await dad.page.getByText('Also make the stats bigger.',{exact:true}).waitFor();
+ await owner.page.reload();await owner.page.getByRole('button',{name:'Approve full access'}).waitFor();
+ await owner.page.getByRole('button',{name:'Another idea'}).click();
+ await owner.page.getByLabel('Your idea',{exact:true}).fill('An owner-authenticated server change.');
+ await owner.page.getByRole('button',{name:'Make an idea card'}).click();
+ await owner.page.getByText('Full project access is approved for this request.',{exact:true}).waitFor();
+ assert.equal(await owner.page.getByRole('button',{name:'Approve full access'}).count(),0);
+ await owner.page.goto(`${origin}/?account=1`);await owner.page.getByRole('heading',{name:'Who’s at the family table?'}).waitFor();
+ await dad.page.goto(`${origin}/?account=1`);await dad.page.getByRole('heading',{name:'Hi, Dad.',exact:true}).waitFor();
  await dad.page.getByRole('button',{name:'Sign out',exact:true}).click();
  await dad.page.getByRole('button',{name:'Sign in with a passkey',exact:true}).click();await dad.page.getByRole('heading',{name:'Hi, Dad.',exact:true}).waitFor();
  assert.equal(await dad.page.evaluate(async()=> (await (await fetch('/api/account')).json()).account.id),dadId);
@@ -73,5 +98,5 @@ try {
  for(const person of [owner,dad])for(const width of [320,390]){await person.page.setViewportSize({width,height:844});assert.ok(await person.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
  await dad.page.screenshot({path:'/tmp/plunge-passkey-account.png',fullPage:true});
  await dad.page.getByRole('button',{name:'Sign out',exact:true}).click();await dad.page.screenshot({path:'/tmp/plunge-passkey-signin.png',fullPage:true});
- console.log('PASS: real browser passkey enrollment/sign-in/add/recovery against account worker and D1; guest play, stable identity, family grants, phone layout. No production requests.');
+ console.log('PASS: real browser passkey enrollment/sign-in/add/recovery against account worker and D1; guest play, stable identity, family grants, owner automatic idea access, revision-bound approval button, phone layout. No production requests.');
 }finally{await browser.close();await mf.dispose();}

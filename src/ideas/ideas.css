@@ -45,3 +45,6 @@
 .idea-trial-back:focus-visible {outline:3px solid #205e49;outline-offset:-2px;}
 .idea-trial iframe {border:0;width:100%;flex:1;min-height:0;background:#174c3d;padding-bottom:env(safe-area-inset-bottom);}
 .idea-trial-notice {color:#fff4de;font-size:15px;line-height:1.4;padding:10px 16px;margin:0;}
+
+.idea-approval{border-top:1px solid var(--line,#c5b68f);padding-top:1rem;margin:1.25rem 0}
+.idea-approval h3{margin:0 0 .5rem}
