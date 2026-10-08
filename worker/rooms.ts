@@ -369,15 +369,18 @@ export class PlungeRoom {
     if (!this.room || !this.env.QUESTIONS) return;
     const before = this.seen, after = this.room.state;
     this.seen = after;
-    const fresh: HandEntry[] = [];
-    const attempt = (state: RoomState, hand: number) => state.retry?.handNumber === hand ? state.retry.attempt : 0;
-    if (before?.game && after.game && attempt(after, before.game.handNumber) > attempt(before, before.game.handNumber)) { const e = roomHandEntry(this.room, before); if (e) fresh.push(e); }
-    if (after.game && (after.game.phase === 'hand-over' || after.game.phase === 'game-over')) { const e = roomHandEntry(this.room, after); if (e) fresh.push(e); }
-    if (fresh.length) { for (const entry of fresh) await this.ctx.storage.put(`hand:${handId(entry)}`, entry); await this.ctx.storage.put('room', this.room); }
-    const pending = await this.ctx.storage.list<HandEntry>({ prefix: 'hand:' });
-    if (!pending.size) return;
-    try { await this.env.QUESTIONS.batch(handStatements(this.env.QUESTIONS, [...pending.values()])); await this.ctx.storage.delete([...pending.keys()]); }
-    catch { /* Kept in storage; the next change or alarm tries again. */ }
+    // Stats never get in the way of play: any failure here is retried on later activity.
+    try {
+      const fresh: HandEntry[] = [];
+      const attempt = (state: RoomState, hand: number) => state.retry?.handNumber === hand ? state.retry.attempt : 0;
+      if (before?.game && after.game && attempt(after, before.game.handNumber) > attempt(before, before.game.handNumber)) { const e = roomHandEntry(this.room, before); if (e) fresh.push(e); }
+      if (after.game && (after.game.phase === 'hand-over' || after.game.phase === 'game-over')) { const e = roomHandEntry(this.room, after); if (e) fresh.push(e); }
+      if (fresh.length) { for (const entry of fresh) await this.ctx.storage.put(`hand:${handId(entry)}`, entry); await this.ctx.storage.put('room', this.room); }
+      const pending = await this.ctx.storage.list<HandEntry>({ prefix: 'hand:' });
+      if (!pending.size) return;
+      await this.env.QUESTIONS.batch(handStatements(this.env.QUESTIONS, [...pending.values()]));
+      await this.ctx.storage.delete([...pending.keys()]);
+    } catch { /* Kept in storage; the next change or alarm tries again. */ }
   }
   private live(exclude?: RoomSocket): RoomSocket[] {
     return this.ctx.getWebSockets().filter(socket => socket !== exclude && socket.readyState === 1);

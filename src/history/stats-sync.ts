@@ -60,10 +60,13 @@ async function status(account: string | null, total: number | null, error?: stri
   return { account, device: hands.length, connected, rejected, waiting: hands.length - connected - rejected, total, ...(error ? { error } : {}) };
 }
 interface Ack { account?: string; stored?: string[]; rejected?: { id: string; error: string }[]; total?: number; error?: string }
+/** Browsers refuse keepalive requests above about 64 KB; a hand is well under this. */
+const KEEPALIVE_BYTES = 48_000;
 async function put(device: string, hands: unknown[]): Promise<Ack & { status: number }> {
-  // keepalive: a hand that finishes as the tab closes still gets its one attempt.
-  const response = await fetch('/api/stats/hands', { method: 'PUT', credentials: 'same-origin', cache: 'no-store', keepalive: true,
-    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device, hands }), signal: AbortSignal.timeout(15000) });
+  // keepalive: a hand that finishes as the tab closes still gets its one attempt. A long backlog goes without it.
+  const body = JSON.stringify({ device, hands });
+  const response = await fetch('/api/stats/hands', { method: 'PUT', credentials: 'same-origin', cache: 'no-store', keepalive: body.length < KEEPALIVE_BYTES,
+    headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(15000) });
   return { status: response.status, ...(await response.json() as Ack) };
 }
 
