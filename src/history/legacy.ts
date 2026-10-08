@@ -39,10 +39,15 @@ export interface HandRecord {
    * there were some: the marks and game result then include practice.
    */
   readonly practiceHands?: readonly number[];
+  /** The app build that wrote the record (a commit SHA in deployed builds). */
+  readonly build?: string;
+  /** The exact Walt at the table: player name, source commit and wasm hash from its manifest. */
+  readonly walt?: { readonly player: string; readonly source_commit: string; readonly wasm_sha256: string };
 }
 
-/** The hand as a log record, or null when nothing has been played or it cannot be replayed. */
-export function handRecordOf(g: GameState, gameId: string, player: string, practiceHands: readonly number[] = []): HandRecord | null {
+/** The hand as a log record, or null when nothing has been played or it cannot be replayed. `details` are kept verbatim. */
+export function handRecordOf(g: GameState, gameId: string, player: string, practiceHands: readonly number[] = [],
+  details: Pick<HandRecord, 'build' | 'walt'> = {}): HandRecord | null {
   if (!g.bids.length || !GAME_ID.test(gameId)) return null;
   const code = encodeReplay(g);
   if (!code) return null;
@@ -61,6 +66,7 @@ export function handRecordOf(g: GameState, gameId: string, player: string, pract
     thrownIn: g.thrownIn,
     player,
     ...(practiceHands.length ? { practiceHands: [...practiceHands] } : {}),
+    ...details,
   };
 }
 
@@ -114,7 +120,8 @@ export async function listHands(): Promise<HandRecord[]> {
   });
 }
 
-export async function recordHand(g: GameState, gameId: string, player: string, practiceHands: readonly number[] = []): Promise<void> {
-  const record = handRecordOf(g, gameId, player, practiceHands);
+export async function recordHand(g: GameState, gameId: string, player: string, practiceHands: readonly number[] = [],
+  details: Pick<HandRecord, 'build' | 'walt'> = {}): Promise<void> {
+  const record = handRecordOf(g, gameId, player, practiceHands, details);
   if (record) await appendHand(record);
 }

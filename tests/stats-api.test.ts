@@ -73,6 +73,14 @@ it('is greedy: another account signing in on the device claims the same hands',a
   expect((await row('SELECT COUNT(*) n FROM hands'))!.n).toBe(5);
   expect(await (await put({device:phone,hands:[]},mom)).json()).toMatchObject({total:5});
 });
+it('stores the record exactly as sent, so a client can attach more detail later',async()=>{
+  const detailed={...first,id:'detail:1',gameId:'detail',build:'abc123',walt:{player:'walt-table-v2',source_commit:'c'.repeat(40),wasm_sha256:'d'.repeat(64)},hints:[{ply:3,shown:'64',chose:'55'}]};
+  expect(await (await put({device:phone,hands:[detailed]},mom)).json()).toMatchObject({stored:['detail:1'],rejected:[]});
+  expect(JSON.parse(String((await row('SELECT payload FROM hands WHERE id=?',`${phone}:detail:1`))!.payload))).toEqual(detailed);
+  expect(await row("SELECT json_extract(payload,'$.walt.wasm_sha256') hash, json_extract(payload,'$.hints[0].chose') chose, walt FROM hands WHERE id=?",`${phone}:detail:1`)).toEqual({hash:'d'.repeat(64),chose:'55',walt:'native-partner'});
+  const bloated={...first,id:'bloat:1',gameId:'bloat',notes:'x'.repeat(70000)};
+  expect(await (await put({device:phone,hands:[bloated]},mom)).json()).toMatchObject({stored:[],rejected:[{id:'bloat:1',error:'Hand record is too large.'}]});
+});
 it('takes a long device log in batches and refuses an oversized one',async()=>{
   const many=Array.from({length:210},(_,i)=>({...first,id:`bulk-${i}:1`,gameId:`bulk-${i}`,endedAt:`2026-09-${String(1+i%28).padStart(2,'0')}T00:00:00.000Z`}));
   for(let i=0;i<many.length;i+=100){const r=await put({device:laptop,hands:many.slice(i,i+100)},dad);expect(r.status).toBe(200);}

@@ -44,11 +44,15 @@ Command-line equivalents are `grant ACCOUNT_ID` and `revoke ACCOUNT_ID`.
 
 Every hand attempt a human played is recorded: finished hands, and the branches
 left behind by a takeback or an abandoned game. Each is one `hands` row (the
-recorder's record verbatim in `payload`, with the engine replay of every bid,
-call and play; plus what SQL cannot read from that replay: the deal key, whether
-it finished, bidder, bid, contract, declaration, result, points and tricks per
-team, and the Walt version for solo play) and one `hand_players` row per human
-seat (account, device or name). A seat's team is `seat % 2`, so "won" is
+recorder's record in `payload`, stored exactly as the client sent it, with the
+engine replay of every bid, call and play, the app build and the exact Walt at
+the table (player name, source commit, wasm hash); plus what SQL cannot read
+from that replay: the deal key, whether it finished, bidder, bid, contract,
+declaration, result, points and tricks per team, and the Walt setting for solo
+play) and one `hand_players` row per human seat (account, device or name). The
+server checks only the fields it decodes and strips nothing, so a client can
+attach more detail (hints shown, receipts) without a server change; a record
+is capped at 64 KB. A seat's team is `seat % 2`, so "won" is
 `result_team = seat % 2`. Everyone who played the same deal shares `deal`. Walt's
 own receipts and estimates never leave the device. The database is the merged
 view; a leaderboard reads it directly.

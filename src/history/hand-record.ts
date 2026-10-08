@@ -11,13 +11,20 @@ export const DEVICE_ID = /^[a-f0-9]{32}$/;
 /** Hands per upload; a device with a long log connects over several requests. */
 export const UPLOAD_BATCH = 100;
 export const MAX_UPLOAD_BYTES = 512_000;
+/** One record as stored, verbatim; room enough for a hand plus whatever a later client attaches. */
+export const MAX_RECORD_BYTES = 64_000;
 const MARK = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 0 && (n as number) <= 99;
 const marks = (v: unknown): v is readonly [number, number] => Array.isArray(v) && v.length === 2 && v.every(MARK);
 export const finished = (g: GameState): boolean => g.phase === 'hand-over' || g.phase === 'game-over';
 
-/** The record normalized to its known fields, with its decoded hand, or an Error naming what is wrong. */
+/**
+ * The record's known fields with its decoded hand, or an Error naming what is
+ * wrong. Only these fields are checked; the server stores the record as sent,
+ * so a client may attach more and nothing is stripped.
+ */
 export function validHandRecord(value: unknown): { record: HandRecord; game: GameState } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Not a hand record.');
+  if (JSON.stringify(value).length > MAX_RECORD_BYTES) throw new Error('Hand record is too large.');
   const r = value as Record<string, unknown>;
   if (r.schema !== 'plunge-hand-v1') throw new Error('Unknown hand record schema.');
   if (typeof r.gameId !== 'string' || !GAME_ID.test(r.gameId)) throw new Error('Invalid game id.');

@@ -4,6 +4,7 @@ import { encodeReplay } from '../engine/replay-code';
 import { BUILD_ID } from '../ui/update';
 import { digest, listEstimates, sessionEstimates, sessionReceipts } from '../ai/phone/records';
 import { recordHand, listHands } from './legacy';
+import manifest from '../ai/phone/manifest.json';
 
 export function snapshotOf(app: AppState) {
   const g = app.game;
@@ -80,7 +81,8 @@ export async function recordHistory(app: AppState, leaving = false): Promise<voi
   await appendSnapshot(snapshot);
   // Every attempt gets its own record under its branch id; the first attempt's record is left as written.
   const g = app.game!, done = g.phase === 'hand-over' || g.phase === 'game-over';
-  if (!snapshot.room && (done || leaving)) await recordHand(g, questionGameId(app), app.settings.difficulty, app.practiceHands ?? []);
+  if (!snapshot.room && (done || leaving)) await recordHand(g, questionGameId(app), app.settings.difficulty, app.practiceHands ?? [],
+    { build: BUILD_ID, walt: { player: manifest.player, source_commit: manifest.source_commit, wasm_sha256: manifest.wasm_sha256 } });
   pending.delete(key);
   const entry = staged.get(key);
   if (entry && typeof localStorage !== 'undefined') localStorage.removeItem(entry);
