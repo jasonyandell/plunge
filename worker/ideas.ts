@@ -99,6 +99,11 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
   }
   if (request.method !== 'POST') return json({error:'Method not allowed.'},405);
   const data = await body(request), now = new Date().toISOString();
+  if (path === '/admin/retry') {
+    const retried = await db.prepare("UPDATE ideas SET status='queued',updated=? WHERE id=? AND status IN ('question','failed','queued') RETURNING id")
+      .bind(now,id(data.id)).first();
+    return json(retried ? {ok:true} : {error:'Only a waiting or stopped idea can be retried.'},retried ? 200 : 409);
+  }
   if (path === '/admin/members') {
     const name = field(data.name, 40), token = hex(crypto.getRandomValues(new Uint8Array(32))), member = hex(crypto.getRandomValues(new Uint8Array(16)));
     await db.prepare('INSERT INTO idea_members(id,name,token_hash) VALUES(?,?,?)').bind(member,name,await hash(token)).run();
