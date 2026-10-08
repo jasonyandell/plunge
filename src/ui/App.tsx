@@ -31,10 +31,10 @@ import { attachGame, syncQuestions } from '../questions/client';
 export function App() {
   const [app, dispatch] = useReducer((state: AppState, event: AppEvent) => {
     const next = reducer(state, event);
-    // Undo and replay never discard: the branch being left is recorded first.
-    // (Content-addressed, so an already-saved snapshot isn't duplicated.)
-    if ((event.type === 'undo' || event.type === 'restart-hand') && next.game !== state.game) {
-      void recordHistory(state).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
+    // Undo, replay and a new deal never discard: the branch being left is recorded first,
+    // hand included. (Content-addressed, so an already-saved snapshot isn't duplicated.)
+    if ((event.type === 'undo' || event.type === 'restart-hand' || event.type === 'new-game') && next.game !== state.game && state.game && !state.scenarioGame) {
+      void recordHistory(state, true).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
     }
     if (next.game !== state.game || next.settings !== state.settings) {
       void recordHistory(next).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
@@ -70,12 +70,14 @@ export function App() {
   const [questions, setQuestions] = useState<{ id: string | null } | null>(null);
   const openQuestion = (id: string) => setQuestions({ id });
   useEffect(() => {
-    const sync = () => { void syncQuestions(); void syncStats().catch(() => {}); };
+    const sync = () => void syncQuestions();
+    // Stats upload after each hand; focus and reconnect catch hands played offline. No timer: an idle tab sends nothing.
+    const stats = () => void syncStats().catch(() => {});
     const timer = setInterval(sync, 30000);
-    window.addEventListener('online', sync);
-    window.addEventListener('focus', sync);
-    sync();
-    return () => { clearInterval(timer); window.removeEventListener('online', sync); window.removeEventListener('focus', sync); };
+    window.addEventListener('online', sync); window.addEventListener('online', stats);
+    window.addEventListener('focus', sync); window.addEventListener('focus', stats);
+    sync(); stats();
+    return () => { clearInterval(timer); window.removeEventListener('online', sync); window.removeEventListener('online', stats); window.removeEventListener('focus', sync); window.removeEventListener('focus', stats); };
   }, []);
   useEffect(() => {
     const attach = () => { if (app.game) void attachGame(app.game, questionGameId(app)).then(() => syncQuestions()).catch(() => {}); };

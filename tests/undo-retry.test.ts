@@ -380,7 +380,9 @@ describe('append-only history', () => {
     await recordHistory(retried);
 
     const hands = (await listHands()).filter((h) => h.gameId === 'undo-history-a');
-    expect(hands).toEqual(original); // no fresh result, no overwrite
+    expect(hands).toEqual(original); // no overwrite; the retry has its own branch record
+    const branchHands = (await listHands()).filter((h) => h.gameId === 'undo-history-a-r1');
+    expect(branchHands.map((h) => [h.code, h.practiceHands])).toEqual([[encodeReplay(retried.game!), [1]]]);
     const events = (await listHistory()) as Array<ReturnType<typeof snapshotOf> & { retry?: Record<string, unknown> }>;
     const mine = events.filter((e) => e!.gameId === 'undo-history-a');
     expect(mine.some((e) => !e!.retry && e!.code === encodeReplay(finished.game!) && e!.phase === 'hand-over')).toBe(true);
@@ -395,18 +397,21 @@ describe('append-only history', () => {
     expect(exported.events.filter((e) => e.gameId === 'undo-history-a' && e.retry).length).toBe(branch.length);
   });
 
-  it('keeps a hand retried mid-way out of finished stats and marks later hands of that game', async () => {
+  it('keeps the branch left by a mid-hand takeback, the retry under its own id, and marks later hands of that game', async () => {
     const mid = untilYou(you(untilYou(you(untilYou(start('history-b', 'undo-history-b'))))));
     await recordHistory(mid);
+    expect((await listHands()).filter((h) => h.gameId === 'undo-history-b')).toEqual([]); // still in play: nothing to log yet
     const undone = reducer(mid, { type: 'undo', epoch: mid.epoch });
+    await recordHistory(mid, true); // App logs the branch being left, undone moves and all
     const retried = toHandEnd(undone);
     await recordHistory(retried);
-    expect((await listHands()).filter((h) => h.gameId === 'undo-history-b')).toEqual([]);
+    expect((await listHands()).filter((h) => h.gameId === 'undo-history-b').map((h) => h.code)).toEqual([encodeReplay(mid.game!)]);
+    expect((await listHands()).filter((h) => h.gameId === 'undo-history-b-r1').map((h) => h.code)).toEqual([encodeReplay(retried.game!)]);
     const second = toHandEnd(reducer(retried, { type: 'human', action: { type: 'next-hand' } }));
     expect(snapshotOf(second)!.practiceHands).toEqual([1]);
     expect('retry' in snapshotOf(second)!).toBe(false);
     await recordHistory(second);
-    const hands = (await listHands()).filter((h) => h.gameId === 'undo-history-b');
+    const hands = (await listHands()).filter((h) => h.gameId === 'undo-history-b' && h.handNumber === 2);
     expect(hands.map((h) => [h.handNumber, h.practiceHands])).toEqual([[2, [1]]]);
   });
 

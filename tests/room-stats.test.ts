@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { legalActions, type GameState } from '../src/engine';
 import { finishedHand } from './hand-fixtures';
-import { createRoom, finishedRoomHand, joinRoom } from '../worker/rooms';
+import { createRoom, joinRoom, roomHandEntry } from '../worker/rooms';
 import { hashToken } from '../worker/accounts';
 import type { RoomCredentials, RoomMessage, RoomState } from '../src/room/protocol';
 
@@ -50,8 +50,8 @@ async function connect(credentials: RoomCredentials, headers: Record<string, str
     outcome: (id: string) => next((m): m is RoomMessage => (m.type === 'ack' || m.type === 'error') && m.id === id) };
 }
 
-it('records a finished room hand once, with every seat, the moment it ends', async () => {
-  const create = await post('', { name: 'Jason' }, { Cookie: cookie, 'X-Plunge-Account': 'f'.repeat(32) }); expect(create.status).toBe(200);
+it('records a finished room hand once, with every human seat, the moment it ends, and the branch a takeback leaves', async () => {
+  const create = await post('', { name: 'Jason' }, { Cookie: cookie }); expect(create.status).toBe(200);
   const hostSeat = await create.json() as RoomCredentials;
   const partner = await (await post(`/${hostSeat.roomId}/join`, { name: 'Dad' })).json() as RoomCredentials; expect(partner.seat).toBe(2);
   const a = await connect(hostSeat), b = await connect(partner);
@@ -70,23 +70,37 @@ it('records a finished room hand once, with every seat, the moment it ends', asy
   }
   expect(n).toBeGreaterThan(10);
   const deadline = Date.now() + 5000; let rows: Record<string, unknown>[] = [];
-  while (Date.now() < deadline && !rows.length) { rows = (await db.prepare('SELECT * FROM hands WHERE source=?').bind('room').all()).results as Record<string, unknown>[]; if (!rows.length) await new Promise(r => setTimeout(r, 100)); }
+  while (Date.now() < deadline && !rows.length) { rows = (await db.prepare('SELECT * FROM hands').all()).results as Record<string, unknown>[]; if (!rows.length) await new Promise(r => setTimeout(r, 100)); }
   expect(rows).toHaveLength(1);
   const hand = rows[0]!;
-  expect(hand).toMatchObject({ id: `room:${hostSeat.roomId}:${state.sessionId}:1`, game_id: state.sessionId, hand_number: 1, room_id: hostSeat.roomId, practice: 0, thrown_in: 0 });
+  expect(hand).toMatchObject({ id: `room:${hostSeat.roomId}:${state.sessionId}:1`, room_id: hostSeat.roomId, walt: null, finished: 1 });
   expect(hand.deal).toHaveLength(57);
   expect(JSON.parse(String(hand.payload))).toMatchObject({ schema: 'plunge-hand-v1', gameId: state.sessionId, handNumber: 1, player: 'room', marksAfter: state.game!.marks });
-  const seats = (await db.prepare('SELECT seat,kind,account_id,device_id,name,player FROM hand_players WHERE hand_id=? ORDER BY seat').bind(hand.id).all()).results;
-  // The host's seat carries the account from the session cookie; the spoofed header was ignored.
-  expect(seats).toEqual([
-    { seat: 0, kind: 'human', account_id: host, device_id: null, name: 'Jason', player: null },
-    { seat: 1, kind: 'walt', account_id: null, device_id: null, name: null, player: null },
-    { seat: 2, kind: 'human', account_id: null, device_id: null, name: 'Dad', player: null },
-    { seat: 3, kind: 'walt', account_id: null, device_id: null, name: null, player: null },
-  ]);
+  // Only human seats: the host's carries the account from the session cookie, the partner's just a name.
+  expect((await db.prepare('SELECT seat,account_id,device_id,name FROM hand_players WHERE hand_id=? ORDER BY seat').bind(hand.id).all()).results).toEqual([
+    { seat: 0, account_id: host, device_id: null, name: 'Jason' }, { seat: 2, account_id: null, device_id: null, name: 'Dad' }]);
   // The host's account counts the room hand as its own.
-  expect(await (await mf.dispatchFetch(`${origin}/api/stats`, { headers: { Cookie: cookie } })).json()).toMatchObject({ hands: 1, devices: 0 });
-  // Dealing the next hand (after the trick-showing pause) records nothing new; the finished hand stays as first written.
+  const mine = await mf.dispatchFetch(`${origin}/api/stats/hands`, { method: 'PUT', headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ device: '3'.repeat(32), hands: [] }) });
+  expect(await mine.json()).toMatchObject({ account: host, total: 1 });
+  // The host takes back the last human move: the finished hand stays as written, and the replayed ending is its own attempt.
+  a.socket.send(JSON.stringify({ type: 'undo', id: 'undo', revision: state.revision }));
+  expect((await a.outcome('undo')).type).toBe('ack');
+  state = await a.state(state.revision + 1);
+  expect(state.retry).toMatchObject({ handNumber: 1, attempt: 1 });
+  while (state.game!.phase !== 'hand-over' && state.game!.phase !== 'game-over') {
+    const game = state.game!, turn = game.turn!, actor = turn === 2 ? b : a, id = `again-${n++}`;
+    const legal = legalActions(game), action = legal[legal.length - 1];
+    actor.socket.send(JSON.stringify({ type: 'action', id, revision: state.revision, action }));
+    const outcome = await actor.outcome(id);
+    if (outcome.type === 'error') { expect(outcome.message).toMatch(/wait for this trick/); await new Promise(r => setTimeout(r, 250)); continue; }
+    state = await actor.state(state.revision + 1);
+    if (actor === b) await a.state(state.revision);
+  }
+  const after = Date.now() + 5000; let ids: string[] = [];
+  while (Date.now() < after && ids.length < 2) { ids = ((await db.prepare('SELECT id FROM hands ORDER BY id').all()).results as { id: string }[]).map(r => r.id); if (ids.length < 2) await new Promise(r => setTimeout(r, 100)); }
+  expect(ids).toEqual([`room:${hostSeat.roomId}:${state.sessionId}-r1:1`, `room:${hostSeat.roomId}:${state.sessionId}:1`]);
+  expect(JSON.parse(String((await db.prepare('SELECT payload FROM hands WHERE id=?').bind(hand.id).first<{ payload: string }>())!.payload))).toEqual(JSON.parse(String(hand.payload)));
+  // Dealing the next hand (after the trick-showing pause) records nothing new.
   for (let attempt = 0; ; attempt++) {
     a.socket.send(JSON.stringify({ type: 'action', id: `deal-${attempt}`, revision: state.revision, action: { type: 'next-hand' } }));
     const outcome = await a.outcome(`deal-${attempt}`);
@@ -95,23 +109,23 @@ it('records a finished room hand once, with every seat, the moment it ends', asy
   }
   state = await a.state(state.revision + 1);
   expect(state.game!.handNumber).toBe(2);
-  expect((await db.prepare('SELECT COUNT(*) n FROM hands').first<{ n: number }>())!.n).toBe(1);
+  expect((await db.prepare('SELECT COUNT(*) n FROM hands').first<{ n: number }>())!.n).toBe(2);
   a.socket.close(); b.socket.close();
 }, 60000);
 
-it('treats a hand with a takeback as practice and never records the same hand twice', () => {
+it('records each attempt once: a finished hand, a branch left part-way, a retry under its own id', () => {
   const room = createRoom('1'.repeat(32), 'Host', undefined, undefined, host);
   joinRoom(room, 'Mom', undefined, undefined, null);
   const game: GameState = finishedHand('room-unit');
   room.state = { ...room.state, sessionId: 'abcd', game };
-  const entry = finishedRoomHand(room);
-  expect(entry).toMatchObject({ source: 'room', roomId: '1'.repeat(32), record: { id: 'abcd:1', player: 'room' } });
-  expect(entry!.players.map(p => p.kind)).toEqual(['human', 'walt', 'human', 'walt']);
-  expect(entry!.players[0]).toEqual({ kind: 'human', name: 'Host', account: host });
-  expect(entry!.players[2]).toEqual({ kind: 'human', name: 'Mom', account: null });
-  expect(finishedRoomHand(room)).toBeNull();
-  const retried = createRoom('2'.repeat(32), 'Host');
-  retried.state = { ...retried.state, sessionId: 'abcd', game, retry: { handNumber: 1, attempt: 1, kind: 'undo', kept: 3, from: { code: null, phase: 'hand-over', marks: [0, 0], handResult: null, winner: null, thrownIn: false }, sawResult: false } };
-  expect(finishedRoomHand(retried)).toBeNull();
-  expect(finishedRoomHand({ ...retried, state: { ...retried.state, game: { ...game, phase: 'playing' } } })).toBeNull();
+  const entry = roomHandEntry(room);
+  expect(entry).toMatchObject({ roomId: '1'.repeat(32), record: { id: 'abcd:1', player: 'room' } });
+  expect(entry!.players).toEqual([{ seat: 0, name: 'Host', account: host }, { seat: 2, name: 'Mom', account: null }]);
+  expect(roomHandEntry(room)).toBeNull();
+  const partial = finishedHand('room-unit', true, 6);
+  expect(partial.phase).toBe('playing');
+  expect(roomHandEntry(room, { ...room.state, sessionId: 'left', game: partial })).toMatchObject({ record: { id: 'left:1', code: expect.not.stringMatching(new RegExp(`^${entry!.record.code}$`)) } });
+  const retry = { handNumber: 1, attempt: 1, kind: 'undo' as const, kept: 3, from: { code: null, phase: 'hand-over' as const, marks: [0, 0] as [number, number], handResult: null, winner: null, thrownIn: false }, sawResult: true };
+  expect(roomHandEntry(room, { ...room.state, retry, practiceHands: [1] })).toMatchObject({ record: { id: 'abcd-r1:1', gameId: 'abcd-r1', practiceHands: [1] } });
+  expect(roomHandEntry(room, { ...room.state, game: { ...game, bids: [] } })).toBeNull();
 });

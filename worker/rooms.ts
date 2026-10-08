@@ -7,7 +7,7 @@ import { ROOM_ID } from '../src/room/protocol';
 import { roomAuctionConfig, roomUndoTarget, upgradeRoom } from './room-undo';
 import { handRecordOf } from '../src/history/legacy';
 import { handStatements, type HandEntry } from './stats';
-import type { IdeasDatabase } from './ideas';
+import { accountSession, type AccountEnv } from './accounts';
 
 const TOKEN = /^[a-f0-9]{64}$/;
 const COMMAND_ID = /^[a-zA-Z0-9_-]{1,128}$/;
@@ -36,12 +36,9 @@ export interface SavedRoom {
   state: RoomState; players: (SavedSeat | null)[]; accepted: string[]; updated: number;
   /** Actual human decisions in this hand. Missing on rooms saved by older code. */
   humanSteps?: { handNumber: number; indices: number[] };
-  /** Finished hands not yet written to the stats database, and the last hand considered. */
-  pendingHands?: HandEntry[]; recordedHand?: string;
+  /** Hands not yet written to the stats database, and the attempts already recorded. */
+  pendingHands?: HandEntry[]; recordedHands?: string[];
 }
-/** The stats header is set by the worker from the session cookie; a client cannot supply it. */
-export const ACCOUNT_HEADER = 'X-Plunge-Account';
-const MAX_PENDING = 100;
 export function cleanName(value: unknown): string {
   if (typeof value !== 'string') throw new Error('Please enter your name.');
   const name = value.trim().replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 24);
@@ -71,21 +68,18 @@ export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), n
   return { roomId: room.state.roomId, token, seat };
 }
 /**
- * The hand that just finished, as a stats entry, or null when it was already
- * considered or is practice (a takeback happened in it, as in solo play). Each
- * seat carries its human's name and account, or Walt.
+ * The hand in `state` as a stats entry, once per attempt: a finished hand, or
+ * a branch being left by a takeback. Null when nothing was played or the
+ * attempt is already recorded. Every human seat carries its name and account.
  */
-export function finishedRoomHand(room: SavedRoom): HandEntry | null {
-  const game = room.state.game;
-  if (!game || (game.phase !== 'hand-over' && game.phase !== 'game-over')) return null;
-  const key = `${room.state.sessionId}:${game.handNumber}`;
-  if (room.recordedHand === key) return null;
-  room.recordedHand = key;
-  if (room.state.retry?.handNumber === game.handNumber) return null;
-  const record = handRecordOf(game, room.state.sessionId, 'room', room.state.practiceHands ?? []);
-  if (!record) return null;
-  const seat = (i: number): HandEntry['players'][number] => { const p = room.players[i]; return p ? { kind: 'human', name: p.name, account: p.account ?? null } : { kind: 'walt' }; };
-  return { record, source: 'room', roomId: room.state.roomId, players: [seat(0), seat(1), seat(2), seat(3)] };
+export function roomHandEntry(room: SavedRoom, state: RoomState = room.state): HandEntry | null {
+  const game = state.game;
+  if (!game) return null;
+  const branch = state.retry?.handNumber === game.handNumber ? `${state.sessionId}-r${state.retry.attempt}` : state.sessionId;
+  const record = handRecordOf(game, branch, 'room', state.practiceHands ?? []);
+  if (!record || room.recordedHands?.includes(record.id)) return null;
+  room.recordedHands = [...(room.recordedHands ?? []).slice(-199), record.id];
+  return { record, roomId: state.roomId, players: room.players.flatMap((p, seat) => p ? [{ seat, name: p.name, account: p.account ?? null }] : []) };
 }
 /** The same guard protects human moves, delayed Walt replies and reconnect retries. */
 export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
@@ -176,7 +170,7 @@ declare const WebSocketPair: { new(): { 0: RoomSocket; 1: RoomSocket } };
 export class PlungeRoom {
   private room: SavedRoom | undefined;
   private readonly ready: Promise<void>;
-  constructor(private readonly ctx: RoomContext, private readonly env: { QUESTIONS?: IdeasDatabase } = {}) {
+  constructor(private readonly ctx: RoomContext, private readonly env: AccountEnv = {}) {
     this.ready = ctx.blockConcurrencyWhile(async () => {
       this.room = await ctx.storage.get<SavedRoom>('room');
       if (this.room && upgradeRoom(this.room)) await ctx.storage.put('room', this.room);
@@ -198,14 +192,14 @@ export class PlungeRoom {
     await this.ctx.storage.put('room', this.room);
     await this.nextAlarm();
   }
-  /** Queue a hand that just finished, then write whatever is queued. A failed write is retried on later activity. */
-  private async recordHands(): Promise<void> {
+  /** Queue hand attempts worth keeping, then write whatever is queued. A failed write is retried on later activity. */
+  private async recordHands(...states: RoomState[]): Promise<void> {
     if (!this.room) return;
-    const entry = finishedRoomHand(this.room);
-    if (entry) this.room.pendingHands = [...(this.room.pendingHands ?? []).slice(-(MAX_PENDING - 1)), entry];
+    const fresh = states.flatMap(state => { const entry = roomHandEntry(this.room!, state); return entry ? [entry] : []; });
+    if (fresh.length) this.room.pendingHands = [...(this.room.pendingHands ?? []), ...fresh];
     const pending = this.room.pendingHands ?? [];
     if (!pending.length) return;
-    if (!this.env.QUESTIONS) { if (entry) await this.save(); return; }
+    if (!this.env.QUESTIONS) { if (fresh.length) await this.save(); return; }
     try { await this.env.QUESTIONS.batch(handStatements(this.env.QUESTIONS, pending)); this.room.pendingHands = []; }
     catch { /* Kept in storage; the next command or alarm tries again. */ }
     await this.save();
@@ -224,7 +218,8 @@ export class PlungeRoom {
     if (!match) return json({ error: 'Room not found.' }, 404);
     const roomId = match[1]!, operation = match[2];
     try {
-      const account = request.headers.get(ACCOUNT_HEADER) || null;
+      // A signed-in person's seat carries their account, so room hands join their stats.
+      const account = (await accountSession(request, this.env).catch(() => null))?.id ?? null;
       if (operation === 'create' && request.method === 'POST') {
         if (this.room) return json({ error: 'Room already exists.' }, 409);
         const { name } = await roomBody(request);
@@ -267,11 +262,15 @@ export class PlungeRoom {
       if (!this.room) throw new Error('This room expired.');
       command = JSON.parse(message) as RoomCommand;
       if (socket.readyState !== 1) throw new Error('This seat connection has closed.');
+      const before = this.room.state;
       const status = commandRoom(this.room, socket.deserializeAttachment().seat, command, this.connected());
       if (status === 'changed') await this.save();
       socket.send(JSON.stringify({ type: 'ack', id: command.id, revision: this.room.state.revision }));
       this.broadcast();
-      if (status === 'changed') await this.recordHands();
+      // A takeback leaves a branch behind; a finished hand is kept where it ended.
+      const left = command.type === 'undo', game = this.room.state.game;
+      const done = !!game && (game.phase === 'hand-over' || game.phase === 'game-over');
+      if (status === 'changed' && (left || done)) await this.recordHands(...(left ? [before] : []), ...(done ? [this.room.state] : []));
     } catch (error) {
       socket.send(JSON.stringify({ type: 'error', ...(command?.id ? { id: command.id } : {}),
         message: error instanceof Error ? error.message : 'Please reconnect to the room.' }));
@@ -299,7 +298,7 @@ export class PlungeRoom {
   }
 }
 
-export async function roomRequest(request: Request, namespace?: RoomsNamespace, account: string | null = null): Promise<Response> {
+export async function roomRequest(request: Request, namespace?: RoomsNamespace): Promise<Response> {
   if (!namespace) return json({ error: 'Family rooms are unavailable in this build.' }, 503);
   const url = new URL(request.url);
   if (url.pathname === '/api/rooms/status' && request.method === 'GET') return json({ experimental: true });
@@ -314,9 +313,5 @@ export async function roomRequest(request: Request, namespace?: RoomsNamespace, 
     if (!match || !ROOM_ID.test(match[1]!)) return json({ error: 'Room not found.' }, 404);
     roomId = match[1]!;
   }
-  const headers = new Headers(request.headers);
-  headers.delete(ACCOUNT_HEADER);
-  if (account) headers.set(ACCOUNT_HEADER, account);
-  const forwarded = new Request(url, { method: request.method, headers, body: request.method === 'GET' || request.method === 'HEAD' ? null : request.body });
-  return namespace.get(namespace.idFromName(roomId)).fetch(forwarded);
+  return namespace.get(namespace.idFromName(roomId)).fetch(new Request(url, request));
 }

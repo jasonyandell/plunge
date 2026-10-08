@@ -1,26 +1,32 @@
 /**
- * The local stats log: an append-only record of finished hands, kept on the
- * device in IndexedDB and never uploaded anywhere.
+ * The local stats log: an append-only record of every hand attempt the human
+ * played, kept on the device in IndexedDB. Finished hands and the branches
+ * left behind by a takeback or an abandoned game alike: every move is a
+ * human-labeled 42 move. A signed-in device uploads the log to its account
+ * (src/history/stats-sync.ts); the log itself is never changed by that.
  *
  * Each hand is stored as its engine-validated replay code plus a few
- * denormalized fields for the dashboard topline. Everything else — tricks,
- * count, bids, agreement with Walt — is re-derived from the replay, so new
- * statistics apply retroactively to the whole log.
+ * denormalized fields. Everything else — tricks, count, bids, agreement with
+ * Walt — is re-derived from the replay, so new statistics apply
+ * retroactively to the whole log.
  *
  * Rescued from PR #7, commit 03970be4. The original analysis store is
  * preserved for compatibility; the current recorder does not run reviews.
  */
 import type { GameState } from '../engine';
 import { encodeReplay } from '../engine/replay-code';
+import { GAME_ID } from './hand-record';
 
 export interface HandRecord {
   readonly schema: 'plunge-hand-v1';
   /** `${gameId}:${handNumber}` — the natural append-only dedup key. */
   readonly id: string;
+  /** The game, or a retried hand's branch (`${sessionId}-r${attempt}`), so every attempt keeps its own record. */
   readonly gameId: string;
   readonly handNumber: number;
-  /** Engine-validated replay of the finished hand (src/engine/replay-code.ts). */
+  /** Engine-validated replay of the hand as far as it went (src/engine/replay-code.ts). */
   readonly code: string;
+  /** When the hand finished, or when its branch was left. */
   readonly endedAt: string;
   readonly marksBefore: readonly [number, number];
   readonly marksAfter: readonly [number, number];
@@ -35,11 +41,9 @@ export interface HandRecord {
   readonly practiceHands?: readonly number[];
 }
 
-const GAME_ID = /^[a-zA-Z0-9_-]{1,80}$/;
-
-/** The finished hand as a log record, or null when it cannot be replayed. */
+/** The hand as a log record, or null when nothing has been played or it cannot be replayed. */
 export function handRecordOf(g: GameState, gameId: string, player: string, practiceHands: readonly number[] = []): HandRecord | null {
-  if ((g.phase !== 'hand-over' && g.phase !== 'game-over') || !GAME_ID.test(gameId)) return null;
+  if (!g.bids.length || !GAME_ID.test(gameId)) return null;
   const code = encodeReplay(g);
   if (!code) return null;
   const marksBefore: [number, number] = [g.marks[0], g.marks[1]];
@@ -110,7 +114,7 @@ export async function listHands(): Promise<HandRecord[]> {
   });
 }
 
-export async function recordFinishedHand(g: GameState, gameId: string, player: string, practiceHands: readonly number[] = []): Promise<void> {
+export async function recordHand(g: GameState, gameId: string, player: string, practiceHands: readonly number[] = []): Promise<void> {
   const record = handRecordOf(g, gameId, player, practiceHands);
   if (record) await appendHand(record);
 }

@@ -136,10 +136,10 @@ Install the browser once with `npx playwright install chromium` if needed.
 
 Shared-room recorder snapshots retain canonical seats, human names, revision,
 auction evidence and Walt receipt links under `room.mode = shared-room`. They
-stay separate from the solo finished-hand log. The room itself records each
-finished hand to the stats database, one row per seat, so a signed-in person's
-room hands join their account stats without any device uploading them (see
-`docs/OPTIONAL-ACCOUNTS.md`). Export on the host device to include
+stay separate from the solo hands log. The room itself records each hand (and
+the branch a takeback leaves) to the stats database, one row per human seat, so
+a signed-in person's room hands join their account stats without any device
+uploading them (see `docs/OPTIONAL-ACCOUNTS.md`). Export on the host device to include
 the original Walt receipt bodies; guest devices retain the shared receipt links.
 Room access and seat keys are omitted from exported recorder provenance.
 

@@ -1,6 +1,6 @@
 /**
- * The finished-hand record as it travels: validated identically on the device
- * and in the worker, so a record the device wrote is a record the account keeps.
+ * The hand record as it travels: validated identically on the device and in
+ * the worker, so a record the device wrote is a record the account keeps.
  */
 import { decodeReplay } from '../engine/replay-code';
 import type { GameState } from '../engine';
@@ -13,8 +13,9 @@ export const UPLOAD_BATCH = 100;
 export const MAX_UPLOAD_BYTES = 512_000;
 const MARK = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 0 && (n as number) <= 99;
 const marks = (v: unknown): v is readonly [number, number] => Array.isArray(v) && v.length === 2 && v.every(MARK);
+export const finished = (g: GameState): boolean => g.phase === 'hand-over' || g.phase === 'game-over';
 
-/** The record with only its known fields and its decoded hand, or an Error naming what is wrong. */
+/** The record normalized to its known fields, with its decoded hand, or an Error naming what is wrong. */
 export function validHandRecord(value: unknown): { record: HandRecord; game: GameState } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Not a hand record.');
   const r = value as Record<string, unknown>;
@@ -24,7 +25,7 @@ export function validHandRecord(value: unknown): { record: HandRecord; game: Gam
   if (r.id !== `${r.gameId}:${r.handNumber}`) throw new Error('Hand id does not match its game and hand number.');
   if (typeof r.code !== 'string' || r.code.length > 512) throw new Error('Invalid replay.');
   const game = decodeReplay(r.code);
-  if (!game || (game.phase !== 'hand-over' && game.phase !== 'game-over')) throw new Error('The replay is not a finished hand.');
+  if (!game || !game.bids.length) throw new Error('The replay holds no moves.');
   if (typeof r.endedAt !== 'string' || r.endedAt.length > 40 || Number.isNaN(Date.parse(r.endedAt))) throw new Error('Invalid end time.');
   if (!marks(r.marksBefore) || !marks(r.marksAfter)) throw new Error('Invalid marks.');
   if (typeof r.gameOver !== 'boolean' || typeof r.thrownIn !== 'boolean') throw new Error('Invalid result flags.');
@@ -41,13 +42,13 @@ export function validHandRecord(value: unknown): { record: HandRecord; game: Gam
 }
 
 /**
- * The plain facts of a finished hand for leaderboards and same-deal play,
- * read from the replay rather than trusted from the device. A seat's team is
- * seat % 2, so whether a player won is resultTeam === seat % 2.
+ * What SQL cannot read from the replay: decoded once at insert time. A seat's
+ * team is seat % 2, so whether a player won is resultTeam === seat % 2.
  */
 export interface HandSummary {
   /** Shaker plus the four dealt hands: everyone who played this exact deal shares it. */
   readonly deal: string;
+  readonly finished: boolean;
   readonly bidder: number | null;
   /** Points bids as bid; mark bids as 42 per mark. */
   readonly bid: number | null;
@@ -59,10 +60,10 @@ export interface HandSummary {
   readonly tricks: readonly [number, number];
 }
 export function handSummary(record: HandRecord, game: GameState): HandSummary {
-  const result = game.handResult, contract = result?.contract ?? game.contract;
-  const declaration = game.declaration;
+  const result = game.handResult, contract = result?.contract ?? game.contract, declaration = game.declaration;
   return {
     deal: record.code.slice(3, 60),
+    finished: finished(game),
     bidder: result?.declarer ?? game.declarer,
     bid: contract ? (contract.kind === 'points' ? contract.value : 42 * contract.value) : null,
     contract: contract?.kind ?? null,
