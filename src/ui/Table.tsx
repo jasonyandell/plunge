@@ -11,6 +11,7 @@ import { playIndex } from '../engine/play-index';
  */
 
 import { useEffect, useState } from 'preact/hooks';
+import type { ComponentChildren } from 'preact';
 import type { CompletedTrick, GameState, PlayRecord, Seat } from '../engine';
 import { legalDominoes } from '../engine';
 import { Domino } from './Domino';
@@ -52,9 +53,13 @@ interface TableProps {
   /** Seat whose slow AI think is in flight (walt solving) — shows a note. */
   thinking?: Seat | null;
   onQuestion: (id: string) => void;
+  /** A shared table's word under a seat: rejoining, or Walt covering an absent person. */
+  seatNote?: (seat: Seat) => string | null;
+  /** A shared table's extra menu entry. */
+  menuExtra?: ComponentChildren;
 }
 
-export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion }: TableProps) {
+export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion, seatNote = () => null, menuExtra = null }: TableProps) {
   // Every human decision below — tiles, bid/trump sheets, end cards — is
   // stamped with the generation this render shows (see liveDispatch).
   const dispatch = liveDispatch(rawDispatch, app.epoch);
@@ -86,7 +91,8 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion 
   // Reviewing the finished hand: hides the end-of-hand card in favor of the
   // trick-by-trick history until the player comes back to the result.
   const [review, setReview] = useState(scenario);
-  const undoReady = !scenario && !resting && canUndo(app);
+  // At a shared table Undo is a vote; one question at a time.
+  const undoReady = !scenario && !resting && canUndo(app) && !app.room?.table?.proposal;
   const restartReady = !scenario && canRestart(app);
   const undo = (): void => {
     if (!undoReady) return;
@@ -141,10 +147,10 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion 
         <div class="hand-tools">
           {practice && <span class="practice-chip" title="Undone or replayed: kept as practice, not counted in stats">Practice</span>}
           <button type="button" class="hand-tool" disabled={!undoReady} onClick={undo}
-            aria-label="Undo your last move">&#8630; Undo</button>
-          <button type="button" class="hand-tool" disabled={!restartReady} onClick={askRestart}>
+            aria-label={app.room ? 'Undo the last human move' : 'Undo your last move'}>&#8630; Undo</button>
+          {!app.room && <button type="button" class="hand-tool" disabled={!restartReady} onClick={askRestart}>
             &#8635; Play this hand again
-          </button>
+          </button>}
         </div>
       )}
       {(g.phase === 'playing' || showingLast) && (
@@ -157,9 +163,9 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion 
         />
       )}
       <div class="felt">
-        <OpponentTop g={g} thinking={thinking} />
+        <OpponentTop g={g} thinking={thinking} note={seatNote(2)} />
         <div class="middle">
-          <OpponentSide g={g} seat={1} thinking={thinking} />
+          <OpponentSide g={g} seat={1} thinking={thinking} note={seatNote(1)} />
           <TrickArea
             g={g}
             plays={trickPlays}
@@ -168,7 +174,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion 
             thinking={thinking}
             onQuestion={scenario ? undefined : (i, target) => selectQuestion(playIndex(g,showingLast ? g.tricks.length - 1 : g.tricks.length,i), target)}
           />
-          <OpponentSide g={g} seat={3} thinking={thinking} />
+          <OpponentSide g={g} seat={3} thinking={thinking} note={seatNote(3)} />
         </div>
         <div class="hand-area">
           <div class="hand-heading">
@@ -241,7 +247,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion 
             receipts={scenario ? {} : app.nativeReceipts} initialFlag={app.scenarioFlag} onQuestion={onQuestion} />
       )}
       {menuOpen && (
-        <GameMenu app={app} dispatch={dispatch} onClose={() => setMenuOpen(false)}
+        <GameMenu app={app} dispatch={dispatch} onClose={() => setMenuOpen(false)} extra={menuExtra}
           onHome={() => { setMenuOpen(false); dispatch({ type: 'go', screen: 'home' }); }} />
       )}
       {confirmRestart !== null && !scenario && (
@@ -259,8 +265,8 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion 
 // ---------------------------------------------------------------------------
 
 /** The table's ☰: decide on hints mid-game, or step back to Home. */
-function GameMenu({ app, dispatch, onClose, onHome }: {
-  app: AppState; dispatch: (e: AppEvent) => void; onClose: () => void; onHome: () => void;
+function GameMenu({ app, dispatch, onClose, onHome, extra }: {
+  app: AppState; dispatch: (e: AppEvent) => void; onClose: () => void; onHome: () => void; extra?: ComponentChildren;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -271,6 +277,7 @@ function GameMenu({ app, dispatch, onClose, onHome }: {
     <div class="overlay game-menu-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div class="card game-menu" role="dialog" aria-label="Menu">
         <HintsSwitch app={app} dispatch={dispatch} />
+        {extra}
         <button type="button" class="big-btn" onClick={onClose}>Keep playing</button>
         <button type="button" class="big-btn secondary" onClick={onHome}>Back to home</button>
       </div>
@@ -396,7 +403,7 @@ function seatBadges(g: GameState, seat: Seat) {
   );
 }
 
-function OpponentTop({ g, thinking }: { g: GameState; thinking: Seat | null }) {
+function OpponentTop({ g, thinking, note }: { g: GameState; thinking: Seat | null; note?: string | null }) {
   const seat: Seat = 2;
   const hand = g.hands[seat] ?? [];
   const sitsOut = g.sittingOut === seat;
@@ -404,7 +411,7 @@ function OpponentTop({ g, thinking }: { g: GameState; thinking: Seat | null }) {
   return (
     <div class={`seat seat-top${active ? ' active' : ''}${thinking === seat ? ' seat-thinking' : ''}`}>
       <div class="seat-name">
-        Gran <span class="seat-tag">Your partner</span> {seatBadges(g, seat)} {bidBubble(g, seat)}
+        {SEAT_NAMES[seat]} <span class="seat-tag">Your partner</span>{note && <span class="seat-tag seat-note">{note}</span>} {seatBadges(g, seat)} {bidBubble(g, seat)}
       </div>
       <div class={`mini-row${sitsOut ? ' sitting' : ''}`}>
         {hand.map((id) => (
@@ -416,14 +423,14 @@ function OpponentTop({ g, thinking }: { g: GameState; thinking: Seat | null }) {
   );
 }
 
-function OpponentSide({ g, seat, thinking }: { g: GameState; seat: Seat; thinking: Seat | null }) {
+function OpponentSide({ g, seat, thinking, note }: { g: GameState; seat: Seat; thinking: Seat | null; note?: string | null }) {
   const hand = g.hands[seat] ?? [];
   const sitsOut = g.sittingOut === seat;
   const active = g.turn === seat;
   return (
     <div class={`seat seat-${POS[seat]}${active ? ' active' : ''}${thinking === seat ? ' seat-thinking' : ''}`}>
       <div class="seat-name">
-        {SEAT_NAMES[seat]} {seatBadges(g, seat)} {bidBubble(g, seat)}
+        {SEAT_NAMES[seat]}{note && <span class="seat-tag seat-note">{note}</span>} {seatBadges(g, seat)} {bidBubble(g, seat)}
       </div>
       <div class={`mini-col${sitsOut ? ' sitting' : ''}`}>
         {hand.map((id) => (

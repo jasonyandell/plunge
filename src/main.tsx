@@ -5,14 +5,12 @@ import { IdeasDemo } from './ideas/IdeasDemo';
 import { IDEA_ID } from './ideas/model';
 import { ideasLink } from './ideas/client';
 import { App } from './ui/App';
-import { Rooms } from './room/Rooms';
-import { ROOMS_ENABLED } from './room/client';
 
 const root = document.getElementById('app');
 if (!root) throw new Error('missing #app root');
 const params = new URLSearchParams(location.search);
 const previewIdea = params.get('idea');
-const game = ROOMS_ENABLED && params.has('rooms') ? <Rooms /> : <App />;
+const game = <App />;
 render(params.has('account') ? <AccountPage /> : params.has('ideas') ? (params.get('demo') === 'bidding' ? <IdeasDemo /> : <Ideas />) : previewIdea && IDEA_ID.test(previewIdea) ? (
   <div class="idea-preview-shell">
     <aside class="idea-preview-bar"><span>Preview</span><a href={ideasLink(previewIdea)}>Tell us what you think →</a></aside>

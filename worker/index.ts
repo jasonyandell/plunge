@@ -1,8 +1,8 @@
 import { MAX_QUESTION_BYTES, OWNER_TOKEN, QUESTION_ID, publicQuestion, validQuestion, validUpdate,
   type Question, type RemoteQuestion } from '../src/questions/model';
 import { ideasRequest, type IdeasDatabase } from './ideas';
-import { accountsRequest, type AccountEnv } from './accounts';
-import { roomRequest, type RoomsNamespace } from './rooms';
+import { accountSession, accountsRequest, type AccountEnv } from './accounts';
+import { familyTableRequest, roomRequest, type RoomsNamespace } from './rooms';
 export { PlungeRoom } from './rooms';
 
 // PR previews deploy without QUESTIONS; their app keeps questions on the device.
@@ -34,6 +34,7 @@ export default {
     const url=new URL(request.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     if (url.pathname === '/api/account' || url.pathname.startsWith('/api/account/')) return accountsRequest(request,env);
+    if (url.pathname === '/api/rooms/family') return familyTableRequest(request, env.ROOMS, env.QUESTIONS, await accountSession(request, env));
     if (url.pathname === '/api/rooms' || url.pathname.startsWith('/api/rooms/')) return roomRequest(request, env.ROOMS);
     if (url.pathname === '/api/ideas' || url.pathname.startsWith('/api/ideas/')) return ideasRequest(request, env);
     const match=/^\/api\/questions(?:\/([a-f0-9]{32}))?$/.exec(url.pathname);

@@ -18,7 +18,7 @@ export function snapshotOf(app: AppState) {
     ...(code ? {} : { engineState: g }),
     receipts: Object.fromEntries(Object.entries(app.nativeReceipts).filter(([k]) => k.startsWith(`${g.handNumber}:`))),
     auctionSurveys: app.auctionSurveys,
-    ...(app.room ? { room: app.room } : {}),
+    ...(app.room ? { room: { mode: app.room.mode, localSeat: app.room.localSeat, revision: app.room.revision, humans: app.room.humans } } : {}),
     // Added only when present, so ordinary snapshots keep their earlier content ids.
     ...retryProvenance(app) };
 }

@@ -4,7 +4,7 @@ import { applyAction, legalActions, newDealtGame, newGame, PLUNGE_CONFIG, LEGACY
 import { decodeReplay } from '../src/engine/replay-code';
 import { handSteps } from '../src/engine/hand-history';
 import { idOfTile } from '../src/ai/walt/requests';
-import { commandRoom, createRoom, joinRoom, roomSnapshot, type SavedRoom } from '../worker/rooms';
+import { commandRoom, createRoom, joinRoom, roomSnapshot, settleRoom, type SavedRoom } from '../worker/rooms';
 import { roomUndoTarget, upgradeRoom } from '../worker/room-undo';
 import fixtures from './fixtures/nello.json';
 
@@ -12,21 +12,30 @@ const pass: Action = { type: 'bid', bid: { kind: 'pass' } };
 const receipt = 'd'.repeat(64);
 function withGame(game: GameState, humans: readonly Seat[] = [0, 2]): SavedRoom {
   const room = createRoom('a'.repeat(32), 'Host', 'b'.repeat(64), 1000);
-  for (const seat of humans) if (seat !== 0) room.players[seat] = { name: `Person ${seat}`, token: String(seat).repeat(64) };
+  for (const seat of humans) if (seat !== 0) room.players[seat] = { name: `Person ${seat}`, token: String(seat).repeat(64), seen: 1000 };
   room.state = { ...room.state, game, seed: 'takeback-test', sessionId: 'session-test', started: true };
   upgradeRoom(room); return room;
 }
 const connected = (room: SavedRoom) => new Set(room.players.flatMap((player, seat) => player ? [seat as Seat] : []));
 const playing = (room: SavedRoom) => room.state.game?.phase === 'playing';
+/** Anyone may ask; the table has five seconds to object, then the clock settles it. */
+function decide(room: SavedRoom, kind: 'undo' | 'next-hand', id: string, now: number) {
+  const status = commandRoom(room, 0, { type: 'propose', id, revision: room.state.revision, kind }, connected(room), now);
+  settleRoom(room, connected(room), now + 5001);
+  return status;
+}
 function take(room: SavedRoom, action: Action = legalActions(room.state.game!)[0]!) {
-  const game = room.state.game!, seat = action.type === 'next-hand' ? 0 : game.turn!;
+  const game = room.state.game!, now = Math.max(2000, room.state.holdUntil + 1);
+  if (action.type === 'next-hand') { decide(room, 'next-hand', `next-${room.state.revision}`, now); return null; }
+  const seat = game.turn!;
   const command = { type: 'action' as const, id: `move-${room.state.revision}`, revision: room.state.revision, action,
     ...(action.type === 'play' && !room.players[seat] ? { receiptId: receipt } : {}) };
-  commandRoom(room, room.players[seat] ? seat : 0, command, connected(room), Math.max(2000, room.state.holdUntil + 1));
+  // The lowest present person runs Walt: seat 0 in every fixture here.
+  commandRoom(room, room.players[seat] ? seat : 0, command, connected(room), now);
   return command;
 }
 function undo(room: SavedRoom, id = `undo-${room.state.revision}`) {
-  return commandRoom(room, 0, { type: 'undo', id, revision: room.state.revision }, connected(room), 2000);
+  return decide(room, 'undo', id, 2000);
 }
 function opening() {
   const dealt = newGame(PLUNGE_CONFIG, 'takeback-test').dealt;
@@ -40,7 +49,7 @@ function opening() {
 describe('host takebacks', () => {
   it('takes back the latest human decision and every later Walt reply, including during thinking or a trick hold', () => {
     const room = opening(), before = structuredClone(room.state.game);
-    const human = take(room); // Guest lead.
+    const human = take(room)!; // Guest lead.
     take(room); // Walt's reply.
     const at = room.state.game!;
     expect(at.currentTrick).toHaveLength(2);
@@ -48,26 +57,26 @@ describe('host takebacks', () => {
     const abandoned = structuredClone(room.state);
     room.state = { ...room.state, thinkingSeat: 1, holdUntil: 999999 };
     expect(roomSnapshot(room, connected(room)).canUndo).toBe(true);
-    expect(() => commandRoom(room, 2, { type: 'undo', id: 'guest-undo', revision: room.state.revision }, connected(room), 2000)).toThrow(/Only the host/);
     const oldRevision = room.state.revision;
-    expect(undo(room)).toBe('changed');
+    expect(undo(room)).toBe('changed'); // One revision asks, one settles.
     expect(room.state.game).toEqual(before);
-    expect(room.state.revision).toBe(oldRevision + 1);
+    expect(room.state.revision).toBe(oldRevision + 2);
     expect(room.state.thinkingSeat).toBeNull(); expect(room.state.holdUntil).toBe(0);
     expect(room.state.nativeReceipts).toEqual({ '0:5': 'e'.repeat(64) });
     expect(abandoned.nativeReceipts['1:1']).toBe(receipt);
     expect(room.state.retry).toMatchObject({ handNumber: 1, attempt: 1, kind: 'undo', kept: 5, sawResult: false });
     expect(room.state.practiceHands).toEqual([1]);
-    expect(room.state.lastUndo).toEqual({ revision: oldRevision + 1, seat: 2, name: 'Person 2' });
+    expect(room.state.lastUndo).toEqual({ revision: oldRevision + 2, seat: 2, name: 'Person 2' });
     expect(commandRoom(room, 2, human, connected(room), 2000)).toBe('duplicate');
     expect(room.state.game).toEqual(before);
   });
   it('uses monotonic revisions and retained request ids across reload, double taps, and delayed Walt work', () => {
     const room = opening(); take(room); take(room);
-    const command = { type: 'undo' as const, id: 'undo-request', revision: room.state.revision };
+    const command = { type: 'propose' as const, kind: 'undo' as const, id: 'undo-request', revision: room.state.revision };
     const delayed = { type: 'action' as const, id: 'late-walt', revision: room.state.revision,
       action: legalActions(room.state.game!)[0]! };
     commandRoom(room, 0, command, connected(room), 2000);
+    settleRoom(room, connected(room), 7001);
     const restored = JSON.parse(JSON.stringify(room)) as SavedRoom;
     const revision = restored.state.revision, game = structuredClone(restored.state.game);
     expect(commandRoom(restored, 0, command, connected(restored), 2000)).toBe('duplicate');
