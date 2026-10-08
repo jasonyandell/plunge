@@ -5,6 +5,14 @@ import type { HandRetry } from '../ui/store';
 export interface RoomCredentials { roomId: string; token: string; seat: Seat }
 /** `away`: absent long enough that Walt plays this seat until the person returns. */
 export interface RoomSeat { name: string; connected: boolean; away: boolean }
+export interface RoomHand {
+  sessionId: string;
+  game: GameState;
+  names: string[];
+  practice: boolean;
+}
+/** Bound the room's saved snapshots and reconnect payload. */
+export const ROOM_HISTORY_LIMIT = 20;
 
 /** Everything the table decides together goes through one proposal at a time. */
 export type ProposalKind = 'start' | 'restart' | 'next-hand' | 'undo' | 'open' | 'close' | 'kick' | 'admit';
@@ -42,6 +50,8 @@ export interface RoomState {
   nativeReceipts: Record<string, string>; auctionSurveys: Record<string, AuctionEvidence>;
   /** Optional on snapshots from an older coordinator. */
   canUndo?: boolean; retry?: HandRetry | null; practiceHands?: readonly number[];
+  /** Completed hands before the current deal, oldest first; absent in older rooms. */
+  recentHands?: readonly RoomHand[];
   lastUndo?: { revision: number; seat: Seat; name: string } | null;
 }
 /** `revision` guards game-changing commands. A vote is keyed to its proposal instead. */

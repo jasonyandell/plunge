@@ -115,8 +115,13 @@ describe('host takebacks', () => {
     undo(room); expect(room.state.retry).toMatchObject({ attempt: 2, sawResult: true });
 
     const nextRoom = opening(); while (playing(nextRoom)) take(nextRoom);
-    undo(nextRoom); while (playing(nextRoom)) take(nextRoom);
+    undo(nextRoom);
+    expect(nextRoom.state.recentHands ?? []).toEqual([]);
+    while (playing(nextRoom)) take(nextRoom);
+    const finalHand = structuredClone(nextRoom.state.game);
     take(nextRoom, { type: 'next-hand' });
+    expect(nextRoom.state.recentHands).toHaveLength(1);
+    expect(nextRoom.state.recentHands![0]).toMatchObject({ game: finalHand, practice: true });
     expect(nextRoom.state.game!.handNumber).toBe(2); expect(nextRoom.state.game!.config.nello).toBe('open');
     expect(nextRoom.state.retry).toBeNull(); expect(nextRoom.state.lastUndo).toBeNull();
     expect(nextRoom.state.practiceHands).toEqual([1]);

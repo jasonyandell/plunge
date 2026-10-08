@@ -1,0 +1,73 @@
+import { useEffect, useRef, useState } from 'preact/hooks';
+import type { Seat } from '../engine';
+import { Domino } from '../ui/Domino';
+import { TrickHistory } from '../ui/TrickHistory';
+import { bidLabel, contractLabel, declLabel } from '../ui/store';
+import { ROOM_HISTORY_LIMIT, type RoomHand, type RoomState } from './protocol';
+import { rotateGame } from './view';
+
+const handKey = (hand: RoomHand) => `${hand.sessionId}:${hand.game.handNumber}`;
+
+/** A local, read-only view of the room's shared record. Never replaces the live game. */
+export function RoomHistory({ room, seat, onClose }: { room: RoomState; seat: Seat; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const element = dialog.current;
+    element?.showModal();
+    return () => element?.close();
+  }, []);
+  const hands = [...(room.recentHands ?? [])];
+  const current = room.game;
+  if (current && (current.phase === 'hand-over' || current.phase === 'game-over')) {
+    hands.push({ sessionId: room.sessionId, game: current,
+      names: room.seats.map((person, index) => person?.name ?? `Walt ${index + 1}`),
+      practice: room.practiceHands?.includes(current.handNumber) ?? false });
+  }
+  const recent = hands.slice(-ROOM_HISTORY_LIMIT).reverse();
+  const latestKey = recent[0] ? handKey(recent[0]) : '';
+  const [selected, setSelected] = useState(latestKey);
+  useEffect(() => { if (!selected && latestKey) setSelected(latestKey); }, [selected, latestKey]);
+  const hand = selected ? recent.find(item => handKey(item) === selected) : recent[0];
+  const g = hand ? rotateGame(hand.game, seat) : null;
+  const names = hand ? [0, 1, 2, 3].map(index => hand.names[(seat + index) % 4]!) : [];
+  const teamName = (team: number) => `${names[team]} & ${names[team + 2]}`;
+  const sessions = [...new Set(hands.map(item => item.sessionId))];
+  const yourTurn = current?.turn === seat && ['bidding', 'declaring', 'playing'].includes(current.phase);
+
+  return <dialog ref={dialog} class="card room-history" aria-labelledby="room-history-title" onClose={onClose}>
+    <h2 id="room-history-title" class="card-title">Prior hands</h2>
+    <p class="hint">The latest {ROOM_HISTORY_LIMIT} completed hands saved at this table. Everyone can choose the same hand to review.</p>
+    <p class="room-notice" role="status">{yourTurn ? 'It’s your turn at the live table.' : 'The live game continues while you review.'}</p>
+    <button type="button" class="big-btn" onClick={onClose} autoFocus>Back to the live table</button>
+    {recent.length === 0 ? <p>No completed hands saved yet. Finish a hand to review it here.</p> : <>
+      <label class="room-label">Choose a hand
+        <select value={hand ? handKey(hand) : ''} onChange={event => setSelected(event.currentTarget.value)}>
+          {!hand && <option value="" disabled>Choose another completed hand</option>}
+          {recent.map(item => <option key={handKey(item)} value={handKey(item)}>
+            {item.sessionId === room.sessionId ? 'Current game' : `Earlier game ${sessions.indexOf(item.sessionId) + 1}`} · Hand {item.game.handNumber}{item.practice ? ' · Practice' : ''}
+          </option>)}
+        </select>
+      </label>
+      {!hand && <p>This hand is no longer in the completed history. It may have been taken back or replaced by newer hands.</p>}
+    </>}
+    {g && hand && <section aria-label={`Hand ${g.handNumber} review`}>
+      <h3>Hand {g.handNumber}{hand.practice ? ' · Practice' : ''}</h3>
+      <p>{g.declarer !== null && `${names[g.declarer]} bid ${g.contract ? contractLabel(g.contract) : ''}`}
+        {g.declaration && ` · ${declLabel(g.declaration)}`}</p>
+      <p>{g.thrownIn ? 'Thrown in — no marks awarded.' : g.handResult
+        ? `${names[g.handResult.declarer]} ${g.handResult.made ? 'made the bid' : 'was set'}. ${teamName(g.handResult.team)} earned ${g.handResult.marks} ${g.handResult.marks === 1 ? 'mark' : 'marks'}.` : ''}</p>
+      <p>{teamName(0)}: {g.points[0]} points · {teamName(1)}: {g.points[1]} points</p>
+      <p>Marks after this hand: {g.marks[0]}–{g.marks[1]}</p>
+      <details key={handKey(hand)}><summary>Bids and starting hands</summary>
+        <ol>{g.bids.map((bid, index) => <li key={index}>{names[bid.seat]}: {bidLabel(bid.bid)}</li>)}</ol>
+        {g.dealt.map((tiles, index) => <div key={index} class="room-history-deal"><strong>{names[index]}</strong>
+          <div>{tiles.map(tile => <Domino key={tile} id={tile} orientation="h" />)}</div>
+        </div>)}
+      </details>
+      <h3>Trick by trick</h3>
+      <p class="hint">Plays read left to right. A dot marks the lead; the highlighted domino won.</p>
+      <div class="review-scroll"><TrickHistory g={g} seatNames={names} /></div>
+      {g.tricks.length === 0 && <p>No tricks were played.</p>}
+    </section>}
+  </dialog>;
+}

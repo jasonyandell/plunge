@@ -5,7 +5,7 @@ import { handSteps } from '../src/engine/hand-history';
 import { catalogueDeal } from '../src/ai/catalogue';
 import type { AuctionEvidence } from '../src/ai/auction';
 import type { Proposal, ProposalKind, RoomCommand, RoomCredentials, RoomState, VoteResult } from '../src/room/protocol';
-import { CLOSE_EXPIRED, CLOSE_OTHER_TAB, CLOSE_PAUSED, CLOSE_SEAT_GONE, ROOM_ID, VISITOR_ID } from '../src/room/protocol';
+import { CLOSE_EXPIRED, CLOSE_OTHER_TAB, CLOSE_PAUSED, CLOSE_SEAT_GONE, ROOM_ID, VISITOR_ID, ROOM_HISTORY_LIMIT } from '../src/room/protocol';
 import { roomAuctionConfig, roomUndoTarget, upgradeRoom } from './room-undo';
 import { newProposal, objector, PROPOSAL_KINDS, proposalStatus } from './room-votes';
 
@@ -122,7 +122,18 @@ export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), n
 }
 
 // --- Effects: the same code whether a person taps or a vote passes ----------
+/** Archive only when leaving a finished hand, so takebacks keep its final version. */
+function archiveHand(room: SavedRoom): void {
+  const { game, sessionId } = room.state;
+  if (!game || (game.phase !== 'hand-over' && game.phase !== 'game-over')) return;
+  const hands = (room.state.recentHands ?? []).filter(hand => hand.sessionId !== sessionId || hand.game.handNumber !== game.handNumber);
+  room.state = { ...room.state, recentHands: [...hands, {
+    sessionId, game, names: [0, 1, 2, 3].map(seat => seatName(room, seat as Seat)),
+    practice: room.state.practiceHands?.includes(game.handNumber) ?? false,
+  }].slice(-ROOM_HISTORY_LIMIT) };
+}
 function startGame(room: SavedRoom): void {
+  archiveHand(room);
   const seed = randomKey(16), sessionId = randomKey(16);
   room.state = { ...room.state, seed, sessionId, game: catalogueDeal(newGame(PLUNGE_CONFIG, seed), seed),
     started: true, holdUntil: 0, thinkingSeat: null, nativeReceipts: {}, auctionSurveys: {},
@@ -134,6 +145,7 @@ function advance(room: SavedRoom, legal: Action, now: number, human: boolean, re
   let next = applyAction(game, legal);
   if (legal.type === 'next-hand') {
     next = catalogueDeal(roomAuctionConfig(next), room.state.seed);
+    archiveHand(room);
     room.humanSteps = { handNumber: next.handNumber, indices: [] };
   } else if (human) {
     room.humanSteps!.indices = [...room.humanSteps!.indices, handSteps(game).length];

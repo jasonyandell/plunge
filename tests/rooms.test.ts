@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { legalActions, type Seat } from '../src/engine';
 import { ClosedTable, commandRoom, createRoom, GRACE, joinRoom, knockRoom, roomSnapshot, settleRoom, type SavedRoom } from '../worker/rooms';
 import type { ProposalKind, RoomCommand } from '../src/room/protocol';
+import { ROOM_HISTORY_LIMIT } from '../src/room/protocol';
 
 const hostToken = 'b'.repeat(64), guestToken = 'c'.repeat(64), thirdToken = 'e'.repeat(64);
 const pair = new Set<Seat>([0, 2]);
@@ -189,6 +190,8 @@ describe('family table without a host', () => {
     expect(holds).toBeGreaterThan(0);
     expect(room.state.nativeReceipts).not.toEqual({});
     const saved = JSON.parse(JSON.stringify(room)) as SavedRoom;
+    const completed = structuredClone(saved.state.game), sessionId = saved.state.sessionId;
+    expect(saved.state.recentHands ?? []).toEqual([]);
     expect(roomSnapshot(saved, pair, now)).toEqual(roomSnapshot(room, pair, now));
     if (saved.state.game!.phase === 'hand-over') {
       const oldHand = saved.state.game!.handNumber;
@@ -200,5 +203,32 @@ describe('family table without a host', () => {
       expect(decide(saved, 2, 'start', pair, now)).toBe('changed');
       expect(saved.state.game!.handNumber).toBe(1);
     }
+    expect(saved.state.recentHands).toEqual([{ sessionId, game: completed,
+      names: ['Host', 'Walt 2', 'Guest', 'Walt 4'], practice: false }]);
+    const reloaded = JSON.parse(JSON.stringify(saved)) as SavedRoom;
+    joinRoom(reloaded, 'New arrival', thirdToken, now + 10000);
+    expect(roomSnapshot(reloaded, pair, now + 10000).recentHands).toEqual(saved.state.recentHands);
+    // Restarting an unfinished hand preserves the history without adding it.
+    decide(reloaded, 0, 'restart', pair, now + 11000);
+    expect(reloaded.state.recentHands).toEqual(saved.state.recentHands);
+  });
+  it('keeps a bounded shared history when a finished game is restarted', () => {
+    const room = fixture(); let now = 2000;
+    while (!['hand-over', 'game-over'].includes(room.state.game!.phase)) {
+      const turn = room.state.game!.turn!;
+      commandRoom(room, actorFor(room, turn, pair), move(room, `finish-${room.state.revision}`), pair, now);
+      now = Math.max(now, room.state.holdUntil) + 1;
+    }
+    const completed = structuredClone(room.state.game!), sessionId = room.state.sessionId;
+    room.state.recentHands = Array.from({ length: ROOM_HISTORY_LIMIT }, (_, index) => ({
+      sessionId: `older-${index}`, game: completed, names: ['A', 'B', 'C', 'D'], practice: false,
+    }));
+    room.state.practiceHands = [completed.handNumber];
+    decide(room, 0, 'restart', pair, now);
+    expect(room.state.recentHands).toHaveLength(ROOM_HISTORY_LIMIT);
+    expect(room.state.recentHands[0]!.sessionId).toBe('older-1');
+    expect(room.state.recentHands.at(-1)).toEqual({ sessionId, game: completed,
+      names: ['Host', 'Walt 2', 'Guest', 'Walt 4'], practice: true });
+    expect(room.state.sessionId).not.toBe(sessionId);
   });
 });

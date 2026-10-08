@@ -245,7 +245,7 @@ export function App() {
     if (room.active && (room.screen || app.screen === 'table' || app.screen === 'home')) return <>
       {room.chrome}
       {room.screen ?? (app.game || app.scenarioGame
-        ? <Table app={app} dispatch={dispatch} thinking={room.thinking} onQuestion={openQuestion} seatNote={room.seatNote} menuExtra={room.menu} />
+        ? <Table app={app} dispatch={dispatch} thinking={room.thinking} onQuestion={openQuestion} seatNote={room.seatNote} menuExtra={room.menu} onHistory={room.openHistory} />
         : <div class="room-wait" role="status">Connecting to the table…</div>)}
     </>;
     switch (app.screen) {
