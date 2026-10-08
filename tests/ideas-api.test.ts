@@ -93,6 +93,25 @@ describe('family idea conversations and automatic builds',()=>{
     expect(updated.card.status).toBe('checking');expect(updated.card.preview).toBeNull();expect(updated.card.sha).toBe('f'.repeat(40));
     expect((await call('/admin/publish','POST',{id:idea,sha:'e'.repeat(40),status:'closed'},admin)).status).toBe(409);
   });
+  it('lets only the private coordinator retry a stopped card without changing its conversation or interrupting a build',async()=>{
+    const idea=id(60);
+    await call(`/${idea}`,'PUT',{body:'Room voting',context:'Phone'});
+    await call('/admin/claim','POST',{runId:id(160),ideaId:idea},admin);
+    expect((await call('/admin/retry','POST',{id:idea},admin)).status).toBe(409);
+    await finish(160,{status:'failed',message:'This needs a private scope adjustment.'});
+    const before=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect((await call('/admin/retry','POST',{id:idea},mom.token)).status).toBe(403);
+    expect((await call('/admin/retry','POST',{id:idea},admin)).status).toBe(200);
+    expect((await call('/admin/retry','POST',{id:idea},admin)).status).toBe(200);
+    const after=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect(after.card.status).toBe('queued');expect(after.card.revision).toBe(before.card.revision);
+    expect(after.messages).toEqual(before.messages);
+    const next=await (await call('/admin/claim','POST',{runId:id(161),ideaId:idea},admin)).json() as {card:{id:string}};
+    expect(next.card.id).toBe(idea);
+    await finish(161,{status:'question',message:'A product question.'});
+    expect((await call('/admin/retry','POST',{id:idea},admin)).status).toBe(200);
+    expect((await call('/admin/retry','POST',{id:id(999)},admin)).status).toBe(409);
+  });
   it('bounds inputs, supports invite revocation, and keeps previews isolated',async()=>{
     expect((await call(`/${id(4)}`,'PUT',{body:'x'.repeat(16001)})).status).toBe(400);
     expect((await call('/admin/revoke','POST',{id:dad.id},admin)).status).toBe(200);

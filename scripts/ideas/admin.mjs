@@ -1,8 +1,8 @@
 /** Local setup helper. Does not print the builder secret. */
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { configPath, loadConfig, service, run } from './builder.mjs';
+import { configPath, loadConfig, service, run, approvedFiles } from './builder.mjs';
 const [command,...args]=process.argv.slice(2);
 if(command==='init') {
   try {await readFile(configPath);throw new Error('Configuration exists; refusing to replace the builder key.');}
@@ -20,6 +20,18 @@ if(command==='init') {
   const file=join(dirname(configPath),`invite-${member.id}.txt`);
   await writeFile(file,`${member.name}\n${config.origin}/?ideas=1#invite=${member.token}\n`,{mode:0o600});
   console.log(`Personal invite saved to ${file}. Share it only with ${member.name}.`);
+} else if(command==='scope') {
+  const [idea,...files]=args;
+  if(!/^[a-f0-9]{32}$/.test(idea??'') || !files.length)throw new Error('Use scope IDEA_ID worker/rooms.ts [worker/room-undo.ts].');
+  const config=await loadConfig();
+  config.ideaScopes={...config.ideaScopes,[idea]:files};
+  config.ideaScopes[idea]=approvedFiles(config,idea);
+  const temporary=`${configPath}.${randomBytes(8).toString('hex')}.tmp`;
+  await writeFile(temporary,JSON.stringify(config,null,2),{mode:0o600,flag:'wx'});
+  await rename(temporary,configPath);
+  console.log('Private scope saved for this idea. Use retry after the coordinator is updated.');
+} else if(command==='retry') {
+  await service(await loadConfig(),'retry',{id:args[0]});console.log('Idea queued again; its conversation is unchanged.');
 } else if(command==='revoke') {
   await service(await loadConfig(),'revoke',{id:args[0]});console.log('Invite revoked.');
-} else throw new Error('Use init, install-secret, invite NAME, or revoke MEMBER_ID.');
+} else throw new Error('Use init, install-secret, invite NAME, revoke MEMBER_ID, scope IDEA_ID FILE..., or retry IDEA_ID.');

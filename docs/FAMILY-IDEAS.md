@@ -26,7 +26,9 @@ drafts. Anyone who receives the invite can use it; keep it within the family.
 
 `scripts/ideas/builder.mjs` runs one queued conversation per invocation using the
 Mac's existing Codex CLI ChatGPT sign-in and GitHub CLI login. It is intended to
-be called by a visible Codex scheduled task. The Mac must be awake and connected;
+be called by ordinary local scheduling code. This Mac uses a LaunchAgent every
+15 seconds, with no model invocation for an empty queue. The Mac must be awake,
+logged in, and connected;
 otherwise cards remain queued. There is no always-on cloud agent in this version.
 Official reference: <https://learn.chatgpt.com/docs/non-interactive-mode>.
 
@@ -44,9 +46,12 @@ For each run the coordinator:
 2. Runs `codex exec` with a workspace-write sandbox, network disabled, structured
    output and no inherited user config. Family discussion is quoted as data.
 3. Accepts changes only under `src/ui`, `src/room`, `src/engine`, and `tests`.
-   Infrastructure, dependencies, the builder and its credentials cannot be
-   published by this path. Requests outside that scope become a question for
-   Jason to pick up. This intentionally starts with game/UI changes.
+   The private coordinator can additionally approve `worker/rooms.ts` and
+   `worker/room-undo.ts` for one specific idea. Infrastructure, dependencies,
+   account access, the builder and its credentials cannot be published by this
+   path. Requests outside the approved scope become **Needs attention** with an
+   explanation that private configuration is needed, not a permission question
+   the family is repeatedly asked to answer.
 4. Runs typecheck, the complete application test suite, and a production build.
    Only passing changes are committed and pushed. GitHub credentials stay with
    the coordinator; the agent has no publishing task. It creates a draft PR and
@@ -62,7 +67,7 @@ queues a retry. A request needing clarification becomes **A question for you**.
 A local process lock avoids overlapping scheduler runs. Full requests, model
 JSONL, test output, source checkouts, result files and publication receipts are
 retained under `~/.local/share/plunge-ideas/runs/`. These contain private family
-text; they are not repository files. Stop the scheduled task to stop new builds.
+text; they are not repository files. Unload the local LaunchAgent to stop new builds.
 Do not delete an active run directory.
 
 ## Activation
@@ -100,11 +105,34 @@ that file's link directly with its intended person. For the installed PWA,
 external link in a different browser. `revoke MEMBER_ID` disables one invite.
 No privileged credential is bundled in the browser or deployed to PR previews.
 
-Create a Codex heartbeat to run the builder every five minutes from a stable
-checkout. Keep it quiet when there is no work; notify Jason about failures and
-completed previews. Attach any PR URL returned by the builder to that chat.
-The task invokes the script, not a second free-form implementation of these
-steps. Runs can exceed five minutes; the scheduler and local lock serialize them.
+The installed macOS job is `~/Library/LaunchAgents/dev.plunge.family-ideas.plist`.
+It invokes `node /Users/jason/code/plunge/scripts/ideas/builder.mjs` every 15 seconds.
+Launchd does not overlap instances of the same job, and the coordinator also keeps
+a process lock. The previous Codex heartbeat is paused. Idle checks and preview
+checks use ordinary code; only a claimed family request starts Codex. Results
+appear on the idea card; this local scheduler does not send chat notifications
+or attach PRs to a Codex chat. Logs are in `~/.local/share/plunge-ideas/listener.log`
+and `listener-errors.log`. The LaunchAgent is local configuration, not shipped
+with the website.
+
+### Apply an approved room scope
+
+Card replies are product instructions, not a mechanism for editing the builder
+policy. When Jason approves the additional room files, record that approval in
+the private coordinator configuration for the exact idea, then retry it:
+
+```sh
+node scripts/ideas/admin.mjs scope IDEA_ID worker/rooms.ts worker/room-undo.ts
+node scripts/ideas/admin.mjs retry IDEA_ID
+```
+
+The `scope` command replaces that idea's additional-file list. Other ideas retain
+the base game/UI scope. Only those two room files can be granted by this helper;
+worker entrypoints, account handlers, infrastructure and credentials stay excluded.
+Each run archives its approved files in `scope.json`, and the publication check
+enforces the same list used in the prompt. `retry` uses the private admin endpoint
+to queue a stopped card without inventing a family reply or changing conversation
+history. It refuses to interrupt an active build or restart a ready preview.
 
 Optional `PLUNGE_IDEAS_CONFIG` selects a private config file for local tests.
 A config's `origin` must be production or localhost. `stateDir` selects a private
