@@ -9,7 +9,7 @@ player's chosen password manager; availability on another device depends on that
 manager and device. The existing private family invites remain an alternative.
 
 Signing in identifies the account. Jason separately grants access to family ideas.
-Every account has a stable random ID that owns its finished-hand stats (below).
+Every account has a stable random ID that its stats attach to (below).
 Signing in does not upload game history, Walt receipts, or questions. Creating a
 second account—even with the same name—creates a separate identity.
 

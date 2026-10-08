@@ -1,8 +1,11 @@
+import { Composer } from './Composer';
+import { Screenshot } from './IdeaScreenshots';
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { IdeaActivity } from './IdeaActivity';
 import { IdeaPreview, useIdeaPreview } from './IdeaPreview';
 import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
-import { IDEA_STATUS, LIVE_PLUNGE, type IdeaCard, type IdeaThread } from './model';
-import { cardFromHash, deviceContext, ideasApi, ideasLink, initialToken, InviteError, inviteToken, newId, readDraft, TOKEN_KEY } from './client';
+import { LIVE_PLUNGE, type IdeaCard, type IdeaThread } from './model';
+import { cardFromHash, ideasApi, ideasLink, initialToken, InviteError, inviteToken, TOKEN_KEY } from './client';
 import '../ui/app.css';
 import '../ui/home.css';
 import './ideas.css';
@@ -11,7 +14,10 @@ export function Ideas() {
   const [name,setName] = useState(''), [error,setError] = useState(''), [busy,setBusy] = useState(false);
   const [cards,setCards] = useState<IdeaCard[]>([]), [loaded,setLoaded] = useState(false), [next,setNext] = useState<number|null>(null);
   const [selected,setSelected] = useState(cardFromHash), [thread,setThread] = useState<IdeaThread|null>(null);
-  const [saved,setSaved] = useState('');
+  const [now,setNow]=useState(Date.now),[connected,setConnected]=useState(navigator.onLine);
+  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),5000);const offline=()=>setConnected(false);
+    window.addEventListener('offline',offline);return()=>{clearInterval(timer);window.removeEventListener('offline',offline);};},[]);
+  const [saved,setSaved] = useState(''), [owner,setOwner] = useState(false);
   const trial=useIdeaPreview();
   const generation = useRef(0), olderLoaded=useRef(false);
   useEffect(() => {
@@ -24,23 +30,33 @@ export function Ideas() {
     const refresh = async () => {
       if (running) return; running=true;
       try {
-        const me = await ideasApi<{name:string}>(token,'/me');
+        const me = await ideasApi<{name:string;owner?:boolean}>(token,'/me');
         const board = await ideasApi<{cards:IdeaCard[];next:number|null}>(token);
         const current = selected ? await ideasApi<IdeaThread>(token,`/${selected}`) : null;
         if (epoch !== generation.current) return;
-        setName(me.name); setCards(old=>[...board.cards,...old.filter(c=>!board.cards.some(n=>n.id===c.id))]); if(!olderLoaded.current)setNext(board.next); setLoaded(true);setThread(current);setError('');
-      } catch(e) { if(epoch===generation.current) {setError(e instanceof Error ? e.message : 'Please retry.'); if(e instanceof InviteError) setName('');} }
+        setConnected(true);setNow(Date.now());setName(me.name);setOwner(me.owner===true); setCards(old=>[...board.cards,...old.filter(c=>!board.cards.some(n=>n.id===c.id))]); if(!olderLoaded.current)setNext(board.next); setLoaded(true);setThread(current);setError('');
+      } catch(e) { if(epoch===generation.current) {setConnected(false);setError(e instanceof Error ? e.message : 'Please retry.'); if(e instanceof InviteError) {setName('');setOwner(false);}} }
       finally {running=false;}
     };
-    void refresh(); const timer=setInterval(() => void refresh(),15000);
+    void refresh(); const timer=setInterval(() => void refresh(),5000);
     window.addEventListener('online',refresh);window.addEventListener('focus',refresh);
     return () => {generation.current++;clearInterval(timer);window.removeEventListener('online',refresh);window.removeEventListener('focus',refresh);};
   }, [token,selected]);
   const open = (id: string|null) => { history.pushState(null,'',location.pathname+location.search+(id ? `#idea=${id}` : '')); setSelected(id);setThread(null);setError(''); };
   const sent = (result: IdeaThread) => {
-    setSaved('Saved. Your message is on the card.');
+    setSaved(selected && result.card.status==='building' ? 'Your reply is saved for the builder’s next turn.' : 'Saved. The builder will reply here. You can add another thought below.');
     if(!selected) open(result.card.id);
     setThread(result);
+  };
+  const approve = async () => {
+    if(!thread || busy)return;
+    const id=thread.card.id,epoch=generation.current;
+    setBusy(true);setError('');
+    try {
+      const result=await ideasApi<IdeaThread>(token,`/${id}/approve`,{revision:thread.card.revision},'POST');
+      if(generation.current===epoch){setThread(result);setSaved('Approved. The builder can use all project files for this request.');}
+    } catch(e) {if(generation.current===epoch)setError(e instanceof Error?e.message:'Could not approve. Please retry.');}
+    finally{setBusy(false);}
   };
   const enter = (event: Event) => {event.preventDefault();const key=inviteToken(invite);
     if(!key) {setError('Paste the invite link Jason shared with you.');return;}
@@ -64,14 +80,20 @@ export function Ideas() {
       <div class="ideas-welcome"><p>Hi, {name}.</p><button class="big-btn secondary" type="button" disabled={busy} onClick={()=>open(null)}>＋ Another idea</button></div>
       {selected ? <>
         <button class="text-btn" type="button" disabled={busy} onClick={()=>open(null)}>← All ideas</button>
-        {thread ? <section class="idea-paper"><div class="idea-meta"><span>{thread.card.name}’s idea</span><span class={`idea-status ${thread.card.status}`}>{IDEA_STATUS[thread.card.status]}</span></div>
+        {thread ? <section class="idea-paper"><div class="idea-meta"><span>{thread.card.name}’s idea</span><span>Idea {thread.card.number}</span></div>
           <h2>{thread.card.title}</h2>
-          {thread.card.status==='queued' && <p class="idea-help">Saved in the queue. Building starts automatically when Jason’s builder is available.</p>}
-          {thread.card.status==='checking' && <p class="idea-help">The change is made. Its tests and preview need to finish before you can try it.</p>}
-          {thread.card.status==='failed' && <p class="idea-help">The builder hit a problem. You can reply to try again; your conversation is saved.</p>}
+          <IdeaActivity card={thread.card} now={now} connected={connected} />
           {thread.card.status==='shipped' && <a class="big-btn" href={LIVE_PLUNGE}>Play the updated game</a>}
           {thread.card.status==='ready' && thread.card.preview && <button class="big-btn" type="button" disabled={busy} onClick={()=>trial.open(thread.card.id)}>Try your change →</button>}
-          <ol class="idea-conversation">{thread.messages.map(message=><li key={message.id} class={message.role}><strong>{message.name}</strong><p>{message.body}</p></li>)}</ol>
+          <p class="idea-help">You can ask a question or clarify your idea below. {thread.card.status==='building' ? 'Replies will be picked up when this pass finishes.' : 'You can say “let’s talk it through first” before asking for changes.'}</p>
+          <ol class="idea-conversation" aria-label="Conversation">{thread.messages.map(message=><li key={message.id} class={message.role}><strong>{message.name}</strong><p>{message.body}</p><div class="screenshot-drafts">{message.screenshots?.map(image=><Screenshot key={image.id} image={image} token={token}/>)}</div></li>)}</ol>
+          {owner && <section class="idea-approval" aria-label="Builder access"><h3>Builder access</h3>
+            {thread.permissions?.scope==='repository' ? <p>Full project access is approved for this request.</p> : <>
+              <p>Allow the builder to change any project file for the conversation above. New family replies need a fresh approval.</p>
+              <button class="big-btn secondary" type="button" disabled={busy || !['queued','question','failed'].includes(thread.card.status)} onClick={()=>void approve()}>Approve full access</button>
+              {thread.card.status==='building' && <p class="idea-help">You can approve when the current build finishes.</p>}
+            </>}
+          </section>}
           <Composer key={selected} token={token} selected={selected} onBusy={setBusy} onSent={sent} onError={setError} />
         </section> : <p role="status">Opening that idea…</p>}
       </> : <>
@@ -82,33 +104,13 @@ export function Ideas() {
         <h2 class="ideas-board-title">Around the table</h2>
         {!loaded ? <p role="status">Opening the board…</p> : !cards.length ? <p>No ideas yet. Yours can be the first.</p> :
           <div class="ideas-grid">{cards.map(card=><button type="button" key={card.id} class="idea-paper idea-card" disabled={busy} onClick={()=>open(card.id)}>
-            <span class="idea-meta">{card.name} · Idea {card.number}</span><h3>{card.title}</h3><span class={`idea-status ${card.status}`}>{IDEA_STATUS[card.status]}</span><span class="idea-open">Open conversation →</span>
+            <span class="idea-meta">{card.name} · Idea {card.number}</span><h3>{card.title}</h3><IdeaActivity card={card} now={now} connected={connected} compact /><span class="idea-open">Open conversation →</span>
           </button>)}</div>}
         {next && <button class="big-btn secondary" type="button" onClick={()=>void more()}>Earlier ideas</button>}
       </>}
       <p class="idea-help">Your family can read and reply to these cards. Changes are reviewed before they join everyone’s game.</p>
     </>}
     {saved && <p role="status" class="idea-notice">{saved}</p>}
-    {error && <p role="alert" class="idea-error">{error} Your unsent words stay in the box.</p>}
+    {error && <p role="alert" class="idea-error">{error} Your unsent reply stays here.</p>}
   </main>;
-}
-
-function Composer({token,selected,onBusy,onSent,onError}: {
-  token:string;selected:string|null;onBusy:(busy:boolean)=>void;onSent:(thread:IdeaThread)=>void;onError:(error:string)=>void;
-}) {
-  const key=`plunge:idea-draft:${selected ?? 'new'}`;
-  const [draft,setDraft]=useState(()=>readDraft(key)),[busy,setBusy]=useState(false);
-  const edit=(body:string)=>{const next={...draft,body};setDraft(next);try{localStorage.setItem(key,JSON.stringify(next));}catch{/* Still in the text box. */}};
-  const send=async(event:Event)=>{
-    event.preventDefault();if(busy||!draft.body.trim())return;setBusy(true);onBusy(true);onError('');
-    try {
-      const result=await ideasApi<IdeaThread>(token,`/${selected ?? draft.id}${selected ? '/messages' : ''}`,{id:draft.id,body:draft.body,context:deviceContext()});
-      try{localStorage.removeItem(key);}catch{/* Already saved on server. */}
-      setDraft({id:newId(),body:''});onSent(result);
-    }catch(e){onError(e instanceof Error?e.message:'Could not save. Please retry.');}
-    finally{setBusy(false);onBusy(false);}
-  };
-  return <form onSubmit={send}><label>{selected?'Keep the conversation going':'Your idea'}
-    <textarea disabled={busy} value={draft.body} maxLength={3000} placeholder={selected?'That helps! Could the letters be bigger?':'I can’t see my bid.'} onInput={e=>edit(e.currentTarget.value)} />
-    </label><button class="big-btn" disabled={busy||!draft.body.trim()}>{busy?'Saving…':selected?'Send reply':'Make an idea card'}</button></form>;
 }

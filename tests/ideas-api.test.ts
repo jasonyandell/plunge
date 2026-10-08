@@ -20,6 +20,8 @@ beforeAll(async()=>{
   const [tables,trigger]=sql.split('CREATE TRIGGER');
   for(const statement of tables!.split(';').filter(s=>s.trim()))await db.prepare(statement).run();
   await db.prepare(`CREATE TRIGGER${trigger}`).run();
+  for(const file of ['0003_accounts.sql','0004_idea_authorizations.sql','0005_idea_screenshots.sql'])
+    for(const statement of (await readFile(new URL(`../migrations/${file}`,import.meta.url),'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
   env={QUESTIONS:db,IDEAS_ADMIN_TOKEN:admin,ASSETS:{fetch:async()=>new Response('app')}};
   mom=await (await call('/admin/members','POST',{name:'Mom'},admin)).json() as typeof mom;
   dad=await (await call('/admin/members','POST',{name:'Dad'},admin)).json() as typeof dad;
@@ -30,7 +32,7 @@ describe('family idea conversations and automatic builds',()=>{
     expect((await call('','GET',undefined,'')).status).toBe(401);
     expect((await call('/admin/claim','POST',{runId:id(99)},mom.token)).status).toBe(403);
     expect((await call(`/${id(1)}`,'PUT',{body:'Idea',context:'Phone'},mom.token,'https://elsewhere.test')).status).toBe(403);
-    expect(await (await call('/me')).json()).toEqual({id:mom.id,name:'Mom'});
+    expect(await (await call('/me')).json()).toEqual({id:mom.id,name:'Mom',owner:false});
   });
   it('creates multiple cards and makes lost-response retries idempotent',async()=>{
     for(const n of [1,2])expect((await call(`/${id(n)}`,'PUT',{body:`I cannot see my bid ${n}`,context:'iPhone 320×780'})).status).toBe(200);
@@ -126,6 +128,48 @@ describe('family idea conversations and automatic builds',()=>{
     for(const excludeIdeaIds of [['invalid'],[idea,idea,idea,idea,idea],idea])
       expect((await call('/admin/claim','POST',{runId:id(173),excludeIdeaIds},admin)).status).toBe(400);
   });
+  it('exposes check-in times on the board and conversation, keeps stale activity honest, and clears it on finish',async()=>{
+    const idea=id(80),run=id(180);
+    await call(`/${idea}`,'PUT',{body:'Show progress',context:'Phone'});
+    const before=Date.now();
+    await call('/admin/claim','POST',{runId:run,ideaId:idea},admin);
+    let current=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect(current.card.activity!.lastSeenAt).toBeGreaterThanOrEqual(before);
+    expect(current.card.activity!.observedAt).toBeGreaterThanOrEqual(current.card.activity!.lastSeenAt!);
+    expect(JSON.stringify(current.card)).not.toMatch(/run_id|lease_until|heartbeat_at/);
+    const old=Date.now()-120000;
+    await env.QUESTIONS!.prepare('UPDATE ideas SET lease_until=? WHERE id=?').bind(old+180000,idea).run();
+    const board=await (await call()).json() as {cards:IdeaThread['card'][]};
+    expect(board.cards.find(c=>c.id===idea)!.activity!.lastSeenAt).toBe(old);
+    await call(`/admin/runs/${run}/heartbeat`,'POST',{},admin);
+    current=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect(current.card.activity!.lastSeenAt).toBeGreaterThan(old);
+    await finish(180,{status:'question',message:'Which part should be clearer?'});
+    current=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect(current.card.activity!.lastSeenAt).toBeNull();
+  });
+  it('streams idempotent conversation updates only from the live builder without requeueing or losing family replies',async()=>{
+    const idea=id(90),run=id(190),path=`/admin/runs/${run}/progress`;
+    await call(`/${idea}`,'PUT',{body:'Keep my bid visible',context:'Phone'});
+    const job=await (await call('/admin/claim','POST',{runId:run,ideaId:idea},admin)).json() as {authorization:unknown};
+    const update={sequence:0,message:'I understand: keep your own bid visible while others bid.',authorization:job.authorization};
+    expect((await call(path,'POST',update)).status).toBe(403);
+    expect((await call(path,'POST',{...update,authorization:{scope:'repository'}},admin)).status).toBe(409);
+    expect((await call(path,'POST',update,admin)).status).toBe(200);
+    expect((await call(path,'POST',update,admin)).status).toBe(200);
+    let thread=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect(thread.messages.map(m=>m.body)).toEqual(['Keep my bid visible',update.message]);
+    expect(thread.card).toMatchObject({status:'building',revision:1});
+    await call(`/${idea}/messages`,'PUT',{id:id(91),body:'Yes, including when I pass.'});
+    expect((await call(path,'POST',{...update,sequence:1,message:'Checking the change now.'},admin)).status).toBe(200);
+    expect((await call(path,'POST',{...update,sequence:20},admin)).status).toBe(400);
+    expect((await call(path,'POST',{...update,sequence:2,message:'x'.repeat(801)},admin)).status).toBe(400);
+    await finish(190,{status:'question',message:'Would larger letters help too?'});
+    expect((await call(path,'POST',{...update,sequence:2},admin)).status).toBe(409);
+    thread=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect(thread.card).toMatchObject({status:'queued',revision:2});
+    expect(thread.messages.map(m=>m.body)).toContain('Yes, including when I pass.');
+  });
   it('bounds inputs, supports invite revocation, and keeps previews isolated',async()=>{
     expect((await call(`/${id(4)}`,'PUT',{body:'x'.repeat(16001)})).status).toBe(400);
     expect((await call('/admin/revoke','POST',{id:dad.id},admin)).status).toBe(200);
@@ -133,4 +177,43 @@ describe('family idea conversations and automatic builds',()=>{
     const res=await worker.fetch(new Request('https://preview.test/api/ideas'),{ASSETS:env.ASSETS});expect(res.status).toBe(503);
     const serialized=JSON.stringify(await (await call()).json());expect(serialized).not.toContain(mom.token);expect(serialized).not.toContain('token_hash');
   });
+});
+
+it('keeps screenshots private, atomic, immutable on retry, and frozen to the claimed conversation',async()=>{
+  const data=await readFile(new URL('./fixtures/screenshot.base64',import.meta.url),'utf8');
+  const idea=id(800),message=id(801),run=id(802);
+  // Isolate this case from the earlier revocation test.
+  const member=await (await call('/admin/members','POST',{name:'Picture sender'},admin)).json() as {token:string};
+  const other=await (await call('/admin/members','POST',{name:'Picture viewer'},admin)).json() as {id:string;token:string};
+  const create=()=>call(`/${idea}`,'PUT',{body:'Put bidding beside these names',screenshots:[{data}]},member.token);
+  expect((await create()).status).toBe(200);
+  const first=await (await create()).json() as IdeaThread;
+  expect(first.card.revision).toBe(1);expect(first.messages).toHaveLength(1);
+  const images=first.messages[0]!.screenshots!;
+  expect(images).toHaveLength(1);expect(images[0]).toMatchObject({width:20,height:30});
+  expect(JSON.stringify(first)).not.toContain(data);
+  const imagePath=`/attachments/${images[0]!.id}`;
+  expect((await call(imagePath,'GET',undefined,'')).status).toBe(401);
+  const picture=await call(imagePath,'GET',undefined,other.token);
+  expect(picture.headers.get('cache-control')).toBe('private, no-store');
+  expect(Buffer.from(await picture.arrayBuffer()).toString('base64')).toBe(data);
+  expect((await call(`/${idea}`,'PUT',{body:'Retry must not add another image',screenshots:[{data},{data}]},member.token)).status).toBe(200);
+  expect(((await (await call(`/${idea}`,'GET',undefined,member.token)).json()) as IdeaThread).messages[0]!.screenshots).toHaveLength(1);
+  expect(await (await call('/admin/claim','POST',{runId:run,ideaId:idea},admin)).json()).toBeNull();
+  const job=await (await call('/admin/claim','POST',{runId:run,ideaId:idea,supportsScreenshots:true},admin)).json() as IdeaThread;
+  expect(job.messages[0]!.screenshots).toEqual(images);
+  const download=(image:string)=>call(`/admin/runs/${run}/attachments/${image}`,'GET',undefined,admin);
+  expect((await download(images[0]!.id)).status).toBe(200);
+  const reply=await (await call(`/${idea}/messages`,'PUT',{id:message,body:'',screenshots:[{data}]},member.token)).json() as IdeaThread;
+  expect(reply.messages[1]!.body).toBe('Screenshot for this idea.');
+  expect((await download(reply.messages[1]!.screenshots![0]!.id)).status).toBe(404);
+  expect((await call(`/admin/runs/${id(803)}/attachments/${images[0]!.id}`,'GET',undefined,admin)).status).toBe(404);
+  await call('/admin/revoke','POST',{id:other.id},admin);
+  expect((await call(imagePath,'GET',undefined,other.token)).status).toBe(401);
+  await env.QUESTIONS!.prepare('UPDATE ideas SET lease_until=0 WHERE run_id=?').bind(run).run();
+  expect((await download(images[0]!.id)).status).toBe(404);
+  for(const screenshots of [[{data:'<svg></svg>'}],[{data:'AAAA'}],[{data:'A'.repeat(540000)}],[{data},{data},{data}]]) {
+    expect((await call(`/${id(804)}`,'PUT',{body:'Rejected picture',screenshots},member.token)).status).toBe(400);
+    expect((await call(`/${id(804)}`,'GET',undefined,member.token)).status).toBe(404);
+  }
 });

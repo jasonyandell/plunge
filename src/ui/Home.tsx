@@ -7,7 +7,9 @@ import { DEEP_WORLDS, NATIVE_TABLE, isNative, nativeLabel } from '../ai/native';
 import { canRestart, canUndo, nelloAvailable, nelloPaused, type AppEvent, type AppState } from './store';
 import { Domino } from './Domino';
 import './home.css';
-import { ROOMS_ENABLED } from '../room/client';
+import { useEffect, useState } from 'preact/hooks';
+import { ClosedTableError, familyTable, lastRoom, ROOMS_ENABLED, roomUrl, saveSeat } from '../room/client';
+import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
 
 interface HomeProps {
   app: AppState;
@@ -22,6 +24,50 @@ interface MoreProps extends HomeProps {
 const DIFFS: readonly Difficulty[] = ['native-partner', 'native-l1'];
 
 const openRooms = () => { const url = new URL(location.href); url.searchParams.set('rooms', '1'); location.assign(url.href); };
+/** Signed in with family access: the standing table is one tap away. Asked once per page. */
+let familyAccess: Promise<boolean> | undefined;
+const hasFamilyAccess = (): Promise<boolean> => familyAccess ??= (!ROOMS_ENABLED || QUESTIONS_LOCAL_ONLY || typeof fetch !== 'function'
+  ? Promise.resolve(false)
+  : fetch('/api/rooms/family', { credentials: 'same-origin', cache: 'no-store' }).then(r => r.json())
+    .then((data: { family?: boolean }) => data.family === true).catch(() => false));
+
+/** Family entry points: the standing table for signed-in family, the last table
+ * this browser sat at, and invite rooms. Its own component so Home stays hook-free. */
+function FamilyEntry() {
+  const [family, setFamily] = useState(false);
+  const [familyError, setFamilyError] = useState<string | null>(null);
+  const [opening, setOpening] = useState(false);
+  const remembered = (() => { try { return lastRoom(localStorage); } catch { return null; } })();
+  useEffect(() => { let live = true; void hasFamilyAccess().then(value => { if (live) setFamily(value); }); return () => { live = false; }; }, []);
+  const openFamilyTable = async () => {
+    if (opening) return;
+    setOpening(true); setFamilyError(null);
+    try {
+      const seat = await familyTable();
+      try { saveSeat(seat, localStorage); } catch { /* The room page can still open the seat it was given. */ }
+      location.assign(roomUrl(seat.roomId));
+    } catch (e) {
+      if (e instanceof ClosedTableError && e.roomId) { location.assign(roomUrl(e.roomId)); return; }
+      setFamilyError(String(e instanceof Error ? e.message : e));
+    } finally { setOpening(false); }
+  };
+  return <>
+    {family && (
+      <button type="button" class="big-btn secondary" disabled={opening} onClick={() => void openFamilyTable()}>
+        {opening ? 'Finding the family table…' : 'Family table'}
+      </button>
+    )}
+    {familyError && <p class="setting-hint" role="alert">{familyError}</p>}
+    {!family && remembered && (
+      <button type="button" class="text-btn home-family" onClick={() => location.assign(roomUrl(remembered))}>
+        Back to your family table
+      </button>
+    )}
+    <button type="button" class="text-btn home-family" aria-label="Play with family · Experimental" onClick={openRooms}>
+      Play with family <small class="preview-badge">Experimental</small>
+    </button>
+  </>;
+}
 
 /** The front door: one decision, everything else behind More. */
 export function Home({ app, dispatch }: HomeProps) {
@@ -53,11 +99,7 @@ export function Home({ app, dispatch }: HomeProps) {
         >
           Deal me in
         </button>
-        {ROOMS_ENABLED && (
-          <button type="button" class="text-btn home-family" aria-label="Play with family · Experimental" onClick={openRooms}>
-            Play with family <small class="preview-badge">Experimental</small>
-          </button>
-        )}
+        {ROOMS_ENABLED && <FamilyEntry />}
 
         <div class="link-row home-links">
           <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'how' })}>

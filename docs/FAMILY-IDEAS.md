@@ -42,6 +42,15 @@ family replies arriving afterward automatically queue another pass. Repeated
 client writes, claim retries, and finish retries are idempotent. An expired
 builder cannot finish another builder's job.
 
+Each card and its conversation show **Working now** while the latest check-in is
+less than 75 seconds old, with its age below. After that the label becomes
+**No recent update**; browser connection failures show **Updates unavailable**.
+Waiting for a reply, queued work, preview checks, and completed builds have
+separate labels. This is coordinator liveness while making/testing a change, not
+a token-level model activity meter. The page polls every five seconds and ages its
+last observation locally, with reduced-motion support. It uses the existing lease
+and heartbeat; it adds no model calls or database migration.
+
 For each run the coordinator:
 
 1. Clones Plunge into its own checkout and continues that idea's open branch, or
@@ -129,10 +138,39 @@ or attach PRs to a Codex chat. Logs are in `~/.local/share/plunge-ideas/listener
 and `listener-errors.log`. The LaunchAgent is local configuration, not shipped
 with the website.
 
+### Owner authorization and family approvals
+
+The server records the signed-in account on each family message. The most recent
+request in a claimed conversation receives repository-wide file access when its
+author is still an owner with family access. Names, client-supplied account IDs,
+invitation tokens, and claims made in message text never grant owner authority.
+Existing account-backed messages are migrated using their non-invitation member
+identity; invitation posts remain unprivileged even if named Jason.
+
+On another family member's card, the signed-in owner sees **Approve full access**.
+The button records the owner account and exact conversation revision, then requeues
+a waiting/stopped request without adding a pretend family message. A racing new
+reply or active build rejects the approval. A later family reply requires new
+approval. A new owner-authenticated request authorizes its own turn automatically.
+Approval needs a valid owner session cookie and same-origin request; the private
+builder token is never sent to the browser.
+
+The claim response contains a separate server-generated `authorization` record.
+The coordinator archives it in `scope.json`, applies it to both the current prompt
+and the changed-file check, and sends it on heartbeats and successful completion.
+Owner role/family revocation invalidates that authorization before publication.
+Historical messages and resumed Codex sessions cannot override the current grant.
+
+Repository-wide access includes `worker/`, `migrations/`, configuration, and project
+instructions. It applies only to the isolated checkout: Git internals, secret files,
+credentials, and files outside it remain excluded. The live coordinator runs from
+main, never from model-edited builder code. All builds still produce reviewed PRs;
+this does not grant automatic merge or access to live accounts/services.
+
 ### Apply an approved room scope
 
-Card replies are product instructions, not a mechanism for editing the builder
-policy. When Jason approves the additional room files, record that approval in
+For limited non-owner requests, private per-idea room-file exceptions remain
+available. Card prose alone cannot edit this policy. When Jason approves the additional room files, record that approval in
 the private coordinator configuration for the exact idea, then retry it:
 
 ```sh
@@ -198,3 +236,58 @@ Validated the demo at 390px and 320px: draft reload, both family identities repl
 ### In-app preview navigation checks
 
 Build with `npm run build`, serve with `npm run preview -- --host 127.0.0.1 --port 4178`, then run `node scripts/test-ideas-navigation.mjs`. This uses intercepted idea fixtures and the deployed PR #22 game in Chromium and WebKit. It covers phone layout, actual bidding inside the frame, one app/tab, saved drafts and replies, Back/Forward/reload, direct links, and expired readiness. The browser checks are not physical installed-iPhone validation.
+
+## Conversation feedback
+
+The coordinator posts a receipt as soon as it picks up a card. It forwards only
+short completed public `agent_message` items from the existing Codex JSON stream,
+never reasoning, command output, or the structured final result. The builder is
+prompted to say what it understands before using tools, and to ask a short product
+question when needed. Tests and publishing have explicit progress messages.
+Updates are bounded, ordered, and idempotent under response retries; only the
+current authorized run can append them. They do not increment the family request
+revision. Follow-up messages remain queued for the next turn, and polling preserves
+the unsent draft. Family members can ask to talk an idea through before changes.
+
+A stopped build reports which stage failed without exposing raw logs. In
+particular, Vitest reporting timeouts are described as a technical test-runner
+problem, not a request to reword the idea. Full diagnostics remain in the private
+run archive. The long AI strength tests yield between deterministic games so
+reporting acknowledgments are serviced even under background CPU scheduling;
+seeds, counts, pass thresholds, and all required checks remain unchanged.
+
+### Screenshots in the conversation
+
+The main app's idea and reply boxes accept up to two PNG, JPEG, or WebP pictures.
+**Add a screenshot** opens the device's picture picker; **Mark where you mean**
+provides an optional red pen with Undo. Existing phone markup works too. Tap a
+sent picture to enlarge it without leaving the app. Pictures are visible to the
+same signed-in family/invite members who can read the card. Playing remains guest
+accessible; pictures are never public preview assets.
+
+The browser resizes to at most 1600 pixels per edge, paints a fresh JPEG (removing
+source metadata), and limits each picture to 400 KB. Text and pictures stay in an
+IndexedDB draft across reloads; a storage failure explicitly asks the user to keep
+the page open. Failed sends retain the draft. Two normalized pictures and text are
+saved atomically in the immutable message's `screenshots` column (migration
+0005), so retrying a message cannot append, replace, or duplicate its pictures.
+Requests are bounded at 1.1 MB; other idea endpoints retain their 16 KB limit.
+
+The protected image route requires current family access. The separate admin
+image route is restricted to an active run's frozen conversation and lease.
+Thread/claim JSON includes image metadata only. The trusted coordinator downloads
+pictures to private `runs/<run>/screenshots/` files, outside its Git checkout,
+and records the message/image/path mapping in `screenshots.json`. All pictures
+in the frozen conversation are retained for follow-ups. The last eight are passed
+with `--image` to both new and resumed Codex turns; the prompt allows read-only
+viewing of earlier manifest images. Image content cannot grant permissions or
+change coordinator instructions. Nothing uploads these files into a PR or preview. Claims advertise
+`supportsScreenshots: true`; an older coordinator cannot claim an idea containing
+pictures. This lets an already-running worker finish its current builds safely
+before the LaunchAgent loads the updated coordinator.
+
+Verification: `npm test`, `node --test scripts/test-ideas-builder.mjs`, and after
+`npm run build`, `node scripts/test-accounts-browser.mjs`. The browser test uses
+local D1, virtual passkeys, and intercepted requests, including markup, image-only
+cards, reload/retry recovery, protected viewing, and 320/390-pixel layouts. It does
+not replace testing a real iPhone's or Pixel's photo picker.

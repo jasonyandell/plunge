@@ -6,14 +6,30 @@ best of luck to the both of you.
 **Play it: https://plunge.texas42.workers.dev** — works in any phone browser,
 installable as an app, plays offline.
 
-**Play with family · Experimental** opens a private shared table in the same app.
-Create a room and send its invite or room code. Family can open their existing
+**Play with family · Experimental** opens a shared family table on the same
+felt as solo play: hints, legal-domino highlighting, mid-hand questions, trick
+history, the post-hand review and the Menu all work there, and your seat is
+always at the bottom.
+Open a table and send its invite or room code. Family can open their existing
 Plunge app, choose **Play with family**, and paste the code or invite; no second
-install or account is needed. Walt fills empty seats. Keep the host's page open
-and screen awake; disconnected people pause the table and refresh rejoins their
-seat. The host can Undo the last human move for everyone, including Walt moves
-that followed it. Earlier attempts stay in history. For Nel-O, win a bid of one
-mark or more and choose Nel-O; your partner sits out. Your solo game stays saved.
+install or account is needed. Nobody hosts: people sit down or leave any time,
+even mid-hand, and Walt plays every chair without a person in it. Whoever is
+present and lowest at the table runs Walt in their browser; if they drop, the
+next person takes over without a pause. Someone who drops keeps their seat for
+twenty seconds, then Walt covers it until they return. Refresh rejoins your seat.
+Anything done to the table is a quick vote: starting, shaking the next hand,
+undoing the last human move, starting over, opening or closing the table, and
+asking someone to step out. Low-stakes votes go ahead after five seconds unless
+anyone says no; alone with Walt they go ahead at once. Shaking the next hand
+waits for a second person to tap it, so nobody loses the result card while
+they are still reading it. A closed table lets
+newcomers knock, and one yes from anyone present lets them in. Asking someone to
+step out needs most of the table. Earlier attempts stay in history. For Nel-O,
+win a bid of one mark or more and choose Nel-O; your partner sits out. Your solo
+game stays saved. Signed-in family (see **Your account**) get a **Family table**
+button on the home screen that always leads to the same standing table, with
+their own chair waiting from any device. [The family table](docs/FAMILY-TABLE.md)
+describes the design.
 
 The live table plays **straight 42** with regular bidding: 30–41, then marks.
 Each player bids once or passes, starting left of the shaker; the winner calls

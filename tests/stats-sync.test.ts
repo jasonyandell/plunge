@@ -17,7 +17,7 @@ beforeAll(async()=>{
   db=await mf.getD1Database('QUESTIONS');
   const ideas=await readFile(new URL('../migrations/0002_family_ideas.sql',import.meta.url),'utf8');
   const [tables,trigger]=ideas.split('CREATE TRIGGER');for(const statement of tables!.split(';').filter(s=>s.trim()))await db.prepare(statement).run();await db.prepare(`CREATE TRIGGER${trigger}`).run();
-  for(const file of ['0003_accounts.sql','0004_hands.sql'])
+  for(const file of ['0003_accounts.sql','0004_family_table.sql','0004_idea_authorizations.sql','0005_idea_screenshots.sql','0006_hands.sql'])
     for(const statement of (await readFile(new URL(`../migrations/${file}`,import.meta.url),'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
   env={QUESTIONS:db,ASSETS:{fetch:async()=>new Response('app')}};
   for(const [id,name,token] of [[mom,'Mom',momToken],[dad,'Dad',dadToken]] as const) {

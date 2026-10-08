@@ -1,11 +1,13 @@
+import type { ScreenshotInfo } from './screenshots';
 export type IdeaStatus = 'queued' | 'building' | 'checking' | 'ready' | 'question' | 'failed' | 'shipped' | 'closed';
 export interface IdeaCard {
   number: number; id: string; name: string; title: string; context: string;
   created: string; updated: string; revision: number; status: IdeaStatus;
   pr: number | null; sha: string | null; preview: string | null;
+  activity?: {lastSeenAt:number|null;observedAt:number};
 }
-export interface IdeaMessage { id: string; role: 'family' | 'builder'; name: string; body: string; created: string }
-export interface IdeaThread { card: IdeaCard; messages: IdeaMessage[] }
+export interface IdeaMessage { id: string; role: 'family' | 'builder'; name: string; body: string; created: string; screenshots?:ScreenshotInfo[] }
+export interface IdeaThread { card: IdeaCard; messages: IdeaMessage[]; permissions?: {scope:'limited'|'repository';accountId:string|null;source:'default'|'owner'|'approval'} }
 export const IDEA_ID = /^[a-f0-9]{32}$/;
 export const IDEA_TOKEN = /^[a-f0-9]{64}$/;
 export const IDEA_STATUS: Record<IdeaStatus, string> = {

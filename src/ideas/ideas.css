@@ -45,3 +45,30 @@
 .idea-trial-back:focus-visible {outline:3px solid #205e49;outline-offset:-2px;}
 .idea-trial iframe {border:0;width:100%;flex:1;min-height:0;background:#174c3d;padding-bottom:env(safe-area-inset-bottom);}
 .idea-trial-notice {color:#fff4de;font-size:15px;line-height:1.4;padding:10px 16px;margin:0;}
+
+.idea-approval{border-top:1px solid var(--line,#c5b68f);padding-top:1rem;margin:1.25rem 0}
+.idea-approval h3{margin:0 0 .5rem}
+
+.idea-activity{display:flex;flex-direction:column;gap:5px;padding:14px 16px;margin:12px 0 20px;border-radius:12px;background:#ece5d6;color:#51432f;font-size:15px;line-height:1.5;}
+.idea-activity.active,.idea-activity.done{background:#e0eee4;color:#205c47;}
+.idea-activity.quiet{background:#f6e7c9;color:#6f4819;}
+.idea-activity-label{display:flex;align-items:center;gap:9px;}
+.idea-activity-dot{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none;}
+.idea-activity.active .idea-activity-dot{animation:idea-working 2s ease-in-out infinite;}
+.idea-activity-time{font-size:13px;}
+.idea-activity.compact{margin:auto 0 0;padding:8px 11px;font-size:14px;}
+@keyframes idea-working{50%{opacity:.35;}}
+@media(prefers-reduced-motion:reduce){.idea-activity.active .idea-activity-dot{animation:none;}}
+
+.screenshot-drafts { display:flex; flex-wrap:wrap; gap:1rem; margin:1rem 0; }
+.screenshot-draft,.idea-picture { max-width:100%; width:240px; }
+.screenshot-draft img,.idea-picture img { display:block; max-width:100%; width:auto; height:auto; max-height:260px; margin:auto; object-fit:contain; border-radius:8px; }
+.idea-picture { background:transparent; border:1px solid #9a8567; border-radius:12px; padding:10px; color:inherit; cursor:pointer; }
+.idea-picture span { display:block; margin-top:8px; }
+.screenshot-actions { display:flex; flex-wrap:wrap; gap:0.7rem; margin-top:1rem; }
+.screenshot-actions .big-btn { flex:1 1 140px; margin:0; }
+.screenshot-dialog { box-sizing:border-box; width:min(760px,calc(100% - 24px)); max-height:calc(100dvh - 24px); overflow:auto; padding:16px; border:0; border-radius:16px; background:#fff8e8; color:#35291c; }
+.screenshot-dialog::backdrop { background:rgb(0 0 0 / 70%); }
+.screenshot-dialog img { display:block; width:100%; height:auto; margin-top:16px; }
+.screenshot-dialog canvas { display:block; max-width:100%; max-height:55dvh; width:auto; height:auto; margin:auto; touch-action:none; }
+.ideas-page input[type="file"][hidden] { display:none; }
