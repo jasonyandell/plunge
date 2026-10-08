@@ -75,7 +75,6 @@ export function statsDb(): Promise<IDBDatabase> {
       if (!stores.contains('analysis')) request.result.createObjectStore('analysis', { keyPath: 'id' });
       if (!stores.contains('meta')) request.result.createObjectStore('meta');
       if (!stores.contains('sync')) request.result.createObjectStore('sync', { keyPath: 'key' });
-      if (!stores.contains('remote')) request.result.createObjectStore('remote', { keyPath: 'key' });
     };
     let blocked = false;
     request.onblocked = () => { blocked = true; opened = undefined; reject(new Error('Close other Plunge tabs to finish updating the stats log.')); };

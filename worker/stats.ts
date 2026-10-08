@@ -5,7 +5,8 @@
  * finished hands (worker/rooms.ts). Both land through `handStatements`: one
  * `hands` row per hand with the facts read from its replay, and one
  * `hand_players` row per seat. First write wins per hand, nothing here ever
- * overwrites, and a repeated upload is acknowledged, never duplicated.
+ * overwrites, and a repeated upload is acknowledged, never duplicated. The
+ * database is the merged view; reading it back is the leaderboard's job.
  */
 import { DEVICE_ID, MAX_UPLOAD_BYTES, UPLOAD_BATCH, handSummary, validHandRecord } from '../src/history/hand-record';
 import type { HandRecord } from '../src/history/legacy';
@@ -13,9 +14,6 @@ import { accountSession, type AccountEnv } from './accounts';
 import type { IdeasDatabase } from './ideas';
 export interface SeatPlayer {kind:'human'|'walt';account?:string|null;device?:string|null;name?:string|null;player?:string|null}
 export interface HandEntry {record:HandRecord;source:'solo'|'room';roomId?:string|null;players:readonly [SeatPlayer,SeatPlayer,SeatPlayer,SeatPlayer]}
-interface Row {id:string;source:'solo'|'room';seat:number;device_id:string|null;payload:string;received:string}
-export interface RemoteHand {id:string;source:'solo'|'room';seat:number;device:string|null;record:HandRecord;received:string}
-const PAGE=200;
 const json=(value:unknown,status=200)=>Response.json(value,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 async function body(request:Request):Promise<Record<string,unknown>> {
   const reader=request.body?.getReader();const decoder=new TextDecoder();let text='',size=0;
@@ -42,15 +40,6 @@ export function handStatements(db:IdeasDatabase,entries:readonly HandEntry[],now
   }
   return statements;
 }
-const remote=(r:Row):RemoteHand=>({id:r.id,source:r.source,seat:r.seat,device:r.device_id,record:JSON.parse(r.payload) as HandRecord,received:r.received});
-const cursor=(r:Row)=>`${r.received}|${r.id}`;
-function parseCursor(value:string|null):[string,string]|null|undefined {
-  if(value===null)return null;
-  const at=value.indexOf('|');
-  if(at<1||at>40||value.length-at>200)return undefined;
-  return [value.slice(0,at),value.slice(at+1)];
-}
-const MINE=`SELECT h.id,h.source,p.seat,p.device_id,h.payload,h.received FROM hand_players p JOIN hands h ON h.id=p.hand_id WHERE p.account_id=?`;
 export async function statsRequest(request:Request,env:AccountEnv):Promise<Response> {
   const url=new URL(request.url),path=url.pathname.slice('/api/stats'.length),db:IdeasDatabase|undefined=env.QUESTIONS;
   if(!db)return path===''&&request.method==='GET'?json({available:false,account:null}):json({error:'This preview keeps stats on your device only.',local_only:true},503);
@@ -62,15 +51,6 @@ export async function statsRequest(request:Request,env:AccountEnv):Promise<Respo
       return json({available:true,account:{id:account.id,name:account.name},hands:totals?.hands??0,devices:totals?.devices??0});
     }
     if(!account)return json({error:'Sign in to connect your stats.'},401);
-    if(path==='/hands'&&request.method==='GET') {
-      const after=parseCursor(url.searchParams.get('after'));
-      if(after===undefined)return json({error:'Invalid page.'},400);
-      const {results}=await (after
-        ? db.prepare(`${MINE} AND (h.received,h.id)>(?,?) ORDER BY h.received,h.id LIMIT ${PAGE+1}`).bind(account.id,...after)
-        : db.prepare(`${MINE} ORDER BY h.received,h.id LIMIT ${PAGE+1}`).bind(account.id)).all<Row>();
-      const page=results.slice(0,PAGE);
-      return json({items:page.map(remote),next:results.length>PAGE?cursor(page[PAGE-1]!):null});
-    }
     if(path==='/hands'&&request.method==='PUT') {
       if(request.headers.get('Origin')!==url.origin)return json({error:'Please use the Plunge app.'},403);
       const data=await body(request);

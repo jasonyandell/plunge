@@ -31,7 +31,6 @@ afterAll(async()=>{await mf?.dispose();});
 
 it('keeps stats on the device while signed out and on database-free previews',async()=>{
   expect(await (await call()).json()).toEqual({available:true,account:null});
-  expect((await call('/hands')).status).toBe(401);
   expect((await call('/hands','PUT',{device:phone,hands:[first]})).status).toBe(401);
   const preview=await worker.fetch(new Request('https://plunge-pr-9.texas42.workers.dev/api/stats'),{ASSETS:env.ASSETS});
   expect(await preview.json()).toEqual({available:false,account:null});
@@ -59,10 +58,9 @@ it('connects a device’s finished hands to the signed-in account once, first wr
   // The same hand again, even with a different end time, is acknowledged and left exactly as first written.
   const again=await (await call('/hands','PUT',{device:phone,hands:[{...first,endedAt:'2026-10-09T00:00:00.000Z'},thrown]},mom)).json() as {stored:string[]};
   expect(again.stored).toEqual([first.id,thrown.id]);
-  const page=await (await call('/hands','GET',undefined,mom)).json() as {items:{device:string;record:HandRecord;received:string}[];next:string|null};
-  expect(page.next).toBeNull();
-  expect(page.items.map(i=>i.record)).toEqual([first,second,thrown]);
-  expect(page.items.every(i=>i.device===phone&&!Number.isNaN(Date.parse(i.received)))).toBe(true);
+  const stored=(await db.prepare('SELECT id,payload,received FROM hands ORDER BY received,id').all()).results as {id:string;payload:string;received:string}[];
+  expect(stored.map(r=>JSON.parse(r.payload) as HandRecord)).toEqual([first,second,thrown]);
+  expect(stored.every(r=>r.id.startsWith(`${phone}:`)&&!Number.isNaN(Date.parse(r.received)))).toBe(true);
   expect(await (await call('','GET',undefined,mom)).json()).toMatchObject({hands:3,devices:1});
 });
 it('merges the account’s devices without letting matching ids overwrite each other',async()=>{
@@ -73,23 +71,16 @@ it('merges the account’s devices without letting matching ids overwrite each o
   expect(thrownRow).toEqual({bidder:null,bid:null,contract:null,result_team:null,thrown_in:1});
   // A hand another account connected first stays with that account; the device is told, not retried forever.
   expect(await (await call('/hands','PUT',{device:phone,hands:[first]},dad)).json()).toEqual({account:'b'.repeat(32),stored:[],rejected:[{id:first.id,error:'This hand is already connected to another account.'}]});
-  const page=await (await call('/hands','GET',undefined,mom)).json() as {items:{device:string;record:HandRecord}[]};
-  expect(page.items).toHaveLength(4);
-  expect(page.items.filter(i=>i.record.id===second.id).map(i=>[i.device,i.record.endedAt]).sort()).toEqual([[phone,second.endedAt],[laptop,other.endedAt]]);
+  const both=(await db.prepare('SELECT id,payload FROM hands WHERE game_id=? ORDER BY id').bind(second.gameId).all()).results as {id:string;payload:string}[];
+  expect(both.map(r=>[r.id,(JSON.parse(r.payload) as HandRecord).endedAt])).toEqual([[`${phone}:${second.id}`,second.endedAt],[`${laptop}:${second.id}`,other.endedAt]]);
   expect(await (await call('','GET',undefined,mom)).json()).toMatchObject({hands:4,devices:2});
-  // Another account sees none of it.
-  expect(await (await call('/hands','GET',undefined,dad)).json()).toEqual({items:[],next:null});
+  // Another account holds none of it.
   expect(await (await call('','GET',undefined,dad)).json()).toMatchObject({hands:0,devices:0});
 });
-it('pages the merged log in a stable order',async()=>{
+it('takes a long device log in batches and refuses an oversized one',async()=>{
   const many=Array.from({length:210},(_,i)=>({...first,id:`bulk-${i}:1`,gameId:`bulk-${i}`,endedAt:`2026-09-${String(1+i%28).padStart(2,'0')}T00:00:00.000Z`}));
   for(let i=0;i<many.length;i+=100){const r=await call('/hands','PUT',{device:laptop,hands:many.slice(i,i+100)},dad);expect(r.status).toBe(200);}
-  const one=await (await call('/hands','GET',undefined,dad)).json() as {items:{record:HandRecord}[];next:string|null};
-  expect(one.items).toHaveLength(200);expect(one.next).not.toBeNull();
-  const two=await (await call(`/hands?after=${encodeURIComponent(one.next!)}`,'GET',undefined,dad)).json() as {items:{record:HandRecord}[];next:string|null};
-  expect(two.items).toHaveLength(10);expect(two.next).toBeNull();
-  expect(new Set([...one.items,...two.items].map(i=>i.record.id)).size).toBe(210);
-  expect((await call('/hands?after=nonsense','GET',undefined,dad)).status).toBe(400);
+  expect(await (await call('','GET',undefined,dad)).json()).toMatchObject({hands:210,devices:1});
   expect((await call('/hands','PUT',{device:laptop,hands:many.concat([first])},dad)).status).toBe(400);
 },30000);
 it('rejects records that are not finished hands, naming them, without dropping the rest',async()=>{

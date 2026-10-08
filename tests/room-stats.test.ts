@@ -84,15 +84,13 @@ it('records a finished room hand once, with every seat, the moment it ends', asy
     { seat: 2, kind: 'human', account_id: null, device_id: null, name: 'Dad', player: null },
     { seat: 3, kind: 'walt', account_id: null, device_id: null, name: null, player: null },
   ]);
-  // The host's account reads the room hand back as one of its own, at its seat.
-  const mine = await (await mf.dispatchFetch(`${origin}/api/stats/hands`, { headers: { Cookie: cookie } })).json() as { items: { id: string; source: string; seat: number; device: string | null }[] };
-  expect(mine.items).toEqual([{ id: hand.id, source: 'room', seat: 0, device: null, record: JSON.parse(String(hand.payload)), received: hand.received }]);
+  // The host's account counts the room hand as its own.
   expect(await (await mf.dispatchFetch(`${origin}/api/stats`, { headers: { Cookie: cookie } })).json()).toMatchObject({ hands: 1, devices: 0 });
   // Dealing the next hand (after the trick-showing pause) records nothing new; the finished hand stays as first written.
   for (let attempt = 0; ; attempt++) {
     a.socket.send(JSON.stringify({ type: 'action', id: `deal-${attempt}`, revision: state.revision, action: { type: 'next-hand' } }));
     const outcome = await a.outcome(`deal-${attempt}`);
-    if (outcome.type === 'ack') break;
+    if (outcome.type !== 'error') break;
     expect(outcome.message).toMatch(/wait for this trick/); await new Promise(r => setTimeout(r, 300));
   }
   state = await a.state(state.revision + 1);

@@ -4,7 +4,7 @@ import { startRegistration, startAuthentication, browserSupportsWebAuthn,
 import { TOKEN_KEY } from '../ideas/client';
 import { LIVE_PLUNGE } from '../ideas/model';
 import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
-import { forgetAccount, statsStatus, syncStats, type StatsStatus } from '../history/stats-sync';
+import { connectStats as connect, forgetAccount, statsStatus, type StatsStatus } from '../history/stats-sync';
 import '../ui/app.css';
 import '../ui/home.css';
 import '../ideas/ideas.css';
@@ -28,7 +28,7 @@ function statsLines(s:StatsStatus):string[] {
   const here=[`${plural(s.device,'finished hand')} on this device`];
   if(s.account){here.push(`${s.connected} connected to your account`);if(s.waiting)here.push(`${s.waiting} waiting to connect`);if(s.rejected)here.push(`${s.rejected} could not be connected and stay here`);}
   const lines=[`${here.join(' · ')}.`];
-  if(s.state==='connected')lines.push(`Your account holds ${plural(s.hands,'hand')} from ${plural(s.devices,'device')}.`);
+  if(s.state==='connected')lines.push(`Your account holds ${plural(s.hands,'hand')}${s.devices>1?` from ${s.devices} devices`:''}, family games included.`);
   if(s.error)lines.push(`${s.error} Your device keeps its hands and retries on its own.`);
   return lines;
 }
@@ -37,7 +37,7 @@ export function AccountPage() {
   const [error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
   const [recover,setRecover]=useState(recoveryFromLink),[recoveryLink,setRecoveryLink]=useState<{name:string;url:string}|null>(null);
   const [stats,setStats]=useState<StatsStatus|null>(null),[connecting,setConnecting]=useState(false);
-  const connectStats=async()=>{setConnecting(true);try{setStats(await syncStats('full'));}catch{/* The device log is unaffected; the next visit retries. */}finally{setConnecting(false);}};
+  const connectStats=async()=>{setConnecting(true);try{setStats(await connect());}catch{/* The device log is unaffected; the next visit retries. */}finally{setConnecting(false);}};
   // Signing in connects this device's finished hands; signed out, the page only counts them.
   useEffect(()=>{if(!state)return;if(state.account)void connectStats();else void forgetAccount().then(statsStatus).then(setStats).catch(()=>{});},[state?.account?.id]);
   const supported=browserSupportsWebAuthn();

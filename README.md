@@ -187,23 +187,13 @@ single resume slot still belongs to the last tab that saved it.
 
 ## Finished-hand stats and your account
 
-The finished-hand log (one record per completed hand: its replay, marks, result,
-and the computer player) is kept on the device and never leaves it while signed
-out. Signing in with the optional passkey account connects that log to the
-account: every hand is uploaded once and marked only after the service names it
-as stored, so a retry never duplicates and an outage never loses anything. The
-device log itself is never changed. Hands from the account's other devices are
-cached locally, so the merged log reads the same on every device, oldest first.
-**Your account** shows how many hands are on this device, how many are
-connected, and how many the account holds across devices; **Connect now**
-retries at once. The game itself only uploads, and only when there is a new
-hand to send: an idle or signed-out tab makes no requests. Family rooms record
-their finished hands directly, one row per seat, so a signed-in person's room
-hands join the same stats without any phone uploading them. Full game history
-and Walt results still stay on the device; the service keeps each hand's plays,
-bid, result, points and tricks, and who sat where, which is what a leaderboard
-needs.
-See [optional accounts](docs/OPTIONAL-ACCOUNTS.md#finished-hand-stats).
+Every finished hand is recorded: solo hands on the device, family-room hands
+by the room itself. Signing in with the optional passkey account uploads the
+device's hands once each (never duplicated, never changed) and ties room hands
+to your seat, so one account's record spans every device and every table. The
+game only uploads when there is a new hand to send; an idle or signed-out tab
+makes no requests. Full game history and Walt results stay on the device. See
+[optional accounts](docs/OPTIONAL-ACCOUNTS.md#finished-hand-stats).
 
 The finished-hand store was rescued from PR #7 / commit
 `03970be4ae9888e8e36b1ced6a2b9bca5cd4fb9a`. The staged-outbox design was checked

@@ -66,9 +66,9 @@ try {
  const dadId=await enroll(dad,'Dad');
  // Signing in connected the device's hand once; the account page says so and D1 holds it.
  await dad.page.getByText('1 finished hand on this device · 1 connected to your account.',{exact:true}).waitFor();
- await dad.page.getByText('Your account holds 1 hand from 1 device.',{exact:true}).waitFor();
+ await dad.page.getByText('Your account holds 1 hand, family games included.',{exact:true}).waitFor();
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM hand_players WHERE account_id=?').bind(dadId).first()).n,1);
- await dad.page.getByRole('button',{name:'Connect now',exact:true}).click();await dad.page.getByText('Your account holds 1 hand from 1 device.',{exact:true}).waitFor();
+ await dad.page.getByRole('button',{name:'Connect now',exact:true}).click();await dad.page.getByText('Your account holds 1 hand, family games included.',{exact:true}).waitFor();
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM hand_players WHERE account_id=?').bind(dadId).first()).n,1);
  await dad.page.getByRole('button',{name:'Ask for family access'}).click();await dad.page.getByRole('button',{name:'Access requested'}).waitFor();
  await owner.page.getByRole('button',{name:'Refresh requests'}).click();
