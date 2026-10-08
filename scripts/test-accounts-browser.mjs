@@ -115,6 +115,7 @@ try {
  // Screenshots through real browser decoding, IndexedDB, authenticated worker, and D1.
  await dad.page.goto(`${origin}/?ideas=1#idea=${ideaId}`);
  await dad.page.getByLabel('Keep the conversation going').fill('The bid should go by these names.');
+ assert.equal(await dad.page.getByLabel('Choose screenshot').isVisible(),false);
  const png=await dad.page.evaluate(()=>{const c=document.createElement('canvas');c.width=1800;c.height=2400;const x=c.getContext('2d');x.fillStyle='#fff8e8';x.fillRect(0,0,c.width,c.height);x.fillStyle='#35291c';x.font='80px sans-serif';x.fillText('Mom       Dad',100,200);x.fillText('Bidding',100,500);return c.toDataURL('image/png').split(',')[1];});
  await dad.page.getByLabel('Choose screenshot').setInputFiles({name:'bidding.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
  await dad.page.getByRole('button',{name:'Mark where you mean'}).click();
