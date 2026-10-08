@@ -129,10 +129,39 @@ or attach PRs to a Codex chat. Logs are in `~/.local/share/plunge-ideas/listener
 and `listener-errors.log`. The LaunchAgent is local configuration, not shipped
 with the website.
 
+### Owner authorization and family approvals
+
+The server records the signed-in account on each family message. The most recent
+request in a claimed conversation receives repository-wide file access when its
+author is still an owner with family access. Names, client-supplied account IDs,
+invitation tokens, and claims made in message text never grant owner authority.
+Existing account-backed messages are migrated using their non-invitation member
+identity; invitation posts remain unprivileged even if named Jason.
+
+On another family member's card, the signed-in owner sees **Approve full access**.
+The button records the owner account and exact conversation revision, then requeues
+a waiting/stopped request without adding a pretend family message. A racing new
+reply or active build rejects the approval. A later family reply requires new
+approval. A new owner-authenticated request authorizes its own turn automatically.
+Approval needs a valid owner session cookie and same-origin request; the private
+builder token is never sent to the browser.
+
+The claim response contains a separate server-generated `authorization` record.
+The coordinator archives it in `scope.json`, applies it to both the current prompt
+and the changed-file check, and sends it on heartbeats and successful completion.
+Owner role/family revocation invalidates that authorization before publication.
+Historical messages and resumed Codex sessions cannot override the current grant.
+
+Repository-wide access includes `worker/`, `migrations/`, configuration, and project
+instructions. It applies only to the isolated checkout: Git internals, secret files,
+credentials, and files outside it remain excluded. The live coordinator runs from
+main, never from model-edited builder code. All builds still produce reviewed PRs;
+this does not grant automatic merge or access to live accounts/services.
+
 ### Apply an approved room scope
 
-Card replies are product instructions, not a mechanism for editing the builder
-policy. When Jason approves the additional room files, record that approval in
+For limited non-owner requests, private per-idea room-file exceptions remain
+available. Card prose alone cannot edit this policy. When Jason approves the additional room files, record that approval in
 the private coordinator configuration for the exact idea, then retry it:
 
 ```sh

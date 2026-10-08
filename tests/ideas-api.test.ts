@@ -20,6 +20,8 @@ beforeAll(async()=>{
   const [tables,trigger]=sql.split('CREATE TRIGGER');
   for(const statement of tables!.split(';').filter(s=>s.trim()))await db.prepare(statement).run();
   await db.prepare(`CREATE TRIGGER${trigger}`).run();
+  for(const file of ['0003_accounts.sql','0004_idea_authorizations.sql'])
+    for(const statement of (await readFile(new URL(`../migrations/${file}`,import.meta.url),'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
   env={QUESTIONS:db,IDEAS_ADMIN_TOKEN:admin,ASSETS:{fetch:async()=>new Response('app')}};
   mom=await (await call('/admin/members','POST',{name:'Mom'},admin)).json() as typeof mom;
   dad=await (await call('/admin/members','POST',{name:'Dad'},admin)).json() as typeof dad;
@@ -30,7 +32,7 @@ describe('family idea conversations and automatic builds',()=>{
     expect((await call('','GET',undefined,'')).status).toBe(401);
     expect((await call('/admin/claim','POST',{runId:id(99)},mom.token)).status).toBe(403);
     expect((await call(`/${id(1)}`,'PUT',{body:'Idea',context:'Phone'},mom.token,'https://elsewhere.test')).status).toBe(403);
-    expect(await (await call('/me')).json()).toEqual({id:mom.id,name:'Mom'});
+    expect(await (await call('/me')).json()).toEqual({id:mom.id,name:'Mom',owner:false});
   });
   it('creates multiple cards and makes lost-response retries idempotent',async()=>{
     for(const n of [1,2])expect((await call(`/${id(n)}`,'PUT',{body:`I cannot see my bid ${n}`,context:'iPhone 320×780'})).status).toBe(200);

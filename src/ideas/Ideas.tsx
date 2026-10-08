@@ -11,7 +11,7 @@ export function Ideas() {
   const [name,setName] = useState(''), [error,setError] = useState(''), [busy,setBusy] = useState(false);
   const [cards,setCards] = useState<IdeaCard[]>([]), [loaded,setLoaded] = useState(false), [next,setNext] = useState<number|null>(null);
   const [selected,setSelected] = useState(cardFromHash), [thread,setThread] = useState<IdeaThread|null>(null);
-  const [saved,setSaved] = useState('');
+  const [saved,setSaved] = useState(''), [owner,setOwner] = useState(false);
   const trial=useIdeaPreview();
   const generation = useRef(0), olderLoaded=useRef(false);
   useEffect(() => {
@@ -24,12 +24,12 @@ export function Ideas() {
     const refresh = async () => {
       if (running) return; running=true;
       try {
-        const me = await ideasApi<{name:string}>(token,'/me');
+        const me = await ideasApi<{name:string;owner?:boolean}>(token,'/me');
         const board = await ideasApi<{cards:IdeaCard[];next:number|null}>(token);
         const current = selected ? await ideasApi<IdeaThread>(token,`/${selected}`) : null;
         if (epoch !== generation.current) return;
-        setName(me.name); setCards(old=>[...board.cards,...old.filter(c=>!board.cards.some(n=>n.id===c.id))]); if(!olderLoaded.current)setNext(board.next); setLoaded(true);setThread(current);setError('');
-      } catch(e) { if(epoch===generation.current) {setError(e instanceof Error ? e.message : 'Please retry.'); if(e instanceof InviteError) setName('');} }
+        setName(me.name);setOwner(me.owner===true); setCards(old=>[...board.cards,...old.filter(c=>!board.cards.some(n=>n.id===c.id))]); if(!olderLoaded.current)setNext(board.next); setLoaded(true);setThread(current);setError('');
+      } catch(e) { if(epoch===generation.current) {setError(e instanceof Error ? e.message : 'Please retry.'); if(e instanceof InviteError) {setName('');setOwner(false);}} }
       finally {running=false;}
     };
     void refresh(); const timer=setInterval(() => void refresh(),15000);
@@ -41,6 +41,16 @@ export function Ideas() {
     setSaved('Saved. Your message is on the card.');
     if(!selected) open(result.card.id);
     setThread(result);
+  };
+  const approve = async () => {
+    if(!thread || busy)return;
+    const id=thread.card.id,epoch=generation.current;
+    setBusy(true);setError('');
+    try {
+      const result=await ideasApi<IdeaThread>(token,`/${id}/approve`,{revision:thread.card.revision},'POST');
+      if(generation.current===epoch){setThread(result);setSaved('Approved. The builder can use all project files for this request.');}
+    } catch(e) {if(generation.current===epoch)setError(e instanceof Error?e.message:'Could not approve. Please retry.');}
+    finally{setBusy(false);}
   };
   const enter = (event: Event) => {event.preventDefault();const key=inviteToken(invite);
     if(!key) {setError('Paste the invite link Jason shared with you.');return;}
@@ -72,6 +82,13 @@ export function Ideas() {
           {thread.card.status==='shipped' && <a class="big-btn" href={LIVE_PLUNGE}>Play the updated game</a>}
           {thread.card.status==='ready' && thread.card.preview && <button class="big-btn" type="button" disabled={busy} onClick={()=>trial.open(thread.card.id)}>Try your change →</button>}
           <ol class="idea-conversation">{thread.messages.map(message=><li key={message.id} class={message.role}><strong>{message.name}</strong><p>{message.body}</p></li>)}</ol>
+          {owner && <section class="idea-approval" aria-label="Builder access"><h3>Builder access</h3>
+            {thread.permissions?.scope==='repository' ? <p>Full project access is approved for this request.</p> : <>
+              <p>Allow the builder to change any project file for the conversation above. New family replies need a fresh approval.</p>
+              <button class="big-btn secondary" type="button" disabled={busy || !['queued','question','failed'].includes(thread.card.status)} onClick={()=>void approve()}>Approve full access</button>
+              {thread.card.status==='building' && <p class="idea-help">You can approve when the current build finishes.</p>}
+            </>}
+          </section>}
           <Composer key={selected} token={token} selected={selected} onBusy={setBusy} onSent={sent} onError={setError} />
         </section> : <p role="status">Opening that idea…</p>}
       </> : <>
