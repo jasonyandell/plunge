@@ -47,7 +47,7 @@ less than 75 seconds old, with its age below. After that the label becomes
 **No recent update**; browser connection failures show **Updates unavailable**.
 Waiting for a reply, queued work, preview checks, and completed builds have
 separate labels. This is coordinator liveness while making/testing a change, not
-a token-level model activity meter. The page polls every 15 seconds and ages its
+a token-level model activity meter. The page polls every five seconds and ages its
 last observation locally, with reduced-motion support. It uses the existing lease
 and heartbeat; it adds no model calls or database migration.
 
@@ -236,3 +236,22 @@ Validated the demo at 390px and 320px: draft reload, both family identities repl
 ### In-app preview navigation checks
 
 Build with `npm run build`, serve with `npm run preview -- --host 127.0.0.1 --port 4178`, then run `node scripts/test-ideas-navigation.mjs`. This uses intercepted idea fixtures and the deployed PR #22 game in Chromium and WebKit. It covers phone layout, actual bidding inside the frame, one app/tab, saved drafts and replies, Back/Forward/reload, direct links, and expired readiness. The browser checks are not physical installed-iPhone validation.
+
+## Conversation feedback
+
+The coordinator posts a receipt as soon as it picks up a card. It forwards only
+short completed public `agent_message` items from the existing Codex JSON stream,
+never reasoning, command output, or the structured final result. The builder is
+prompted to say what it understands before using tools, and to ask a short product
+question when needed. Tests and publishing have explicit progress messages.
+Updates are bounded, ordered, and idempotent under response retries; only the
+current authorized run can append them. They do not increment the family request
+revision. Follow-up messages remain queued for the next turn, and polling preserves
+the unsent draft. Family members can ask to talk an idea through before changes.
+
+A stopped build reports which stage failed without exposing raw logs. In
+particular, Vitest reporting timeouts are described as a technical test-runner
+problem, not a request to reword the idea. Full diagnostics remain in the private
+run archive. The long AI strength tests yield between deterministic games so
+reporting acknowledgments are serviced even under background CPU scheduling;
+seeds, counts, pass thresholds, and all required checks remain unchanged.

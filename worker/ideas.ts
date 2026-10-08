@@ -172,7 +172,7 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
     const active = await db.prepare(`SELECT r.* FROM idea_runs r JOIN ideas i ON i.run_id=r.id WHERE r.id=? AND r.state='active' AND i.lease_until>?`).bind(run,Date.now()).first<Run>();
     return json(active ? {run:active,...await thread(db,active.idea_id,active.through_seq),authorization:await authorization(db,active.idea_id,active.revision,active.through_seq)} : null);
   }
-  const match = /^\/admin\/runs\/([a-f0-9]{32})\/(heartbeat|finish)$/.exec(path);
+  const match = /^\/admin\/runs\/([a-f0-9]{32})\/(heartbeat|progress|finish)$/.exec(path);
   if (match) {
     const run = await db.prepare('SELECT * FROM idea_runs WHERE id=?').bind(match[1]).first<Run>();
     if (!run) return json({error:'Run not found.'},404);
@@ -181,6 +181,17 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
     if (!current) return json({error:'Build lease expired.'},409);
     const authorized=await authorization(db,run.idea_id,run.revision,run.through_seq);
     if(data.authorization && JSON.stringify(data.authorization)!==JSON.stringify(authorized))return json({error:'Build authorization changed.'},409);
+    if (match[2] === 'progress') {
+      const sequence=data.sequence, message=field(data.message,800);
+      if(!Number.isSafeInteger(sequence) || Number(sequence)<0 || Number(sequence)>=20)return json({error:'Invalid update sequence.'},400);
+      const messageId=(await hash(`${run.id}:progress:${sequence}`)).slice(0,32);
+      const result=await db.prepare(`INSERT OR IGNORE INTO idea_messages(id,idea_id,role,body,created)
+        SELECT ?,id,'builder',?,? FROM ideas WHERE run_id=? AND lease_until>? RETURNING id`)
+        .bind(messageId,message,now,run.id,Date.now()).first();
+      // Idempotent retry succeeds, but a replaced/expired worker cannot append.
+      if(!result && !await db.prepare('SELECT id FROM idea_messages WHERE id=?').bind(messageId).first())return json({error:'Build lease expired.'},409);
+      return json({ok:true});
+    }
     if (match[2] === 'heartbeat') {
       const result = await db.prepare('UPDATE ideas SET lease_until=? WHERE run_id=? AND lease_until>? RETURNING id').bind(Date.now()+BUILD_LEASE_MS,run.id,Date.now()).first();
       return json(result ? {ok:true,authorization:authorized} : {error:'Build lease expired.'},result ? 200 : 409);

@@ -189,3 +189,30 @@ test('only server-verified owner authority grants repository scope, including wo
   for(const authorization of [{scope:'repository',accountId:ideaId(1),source:'family'},{scope:'repository',source:'owner'}, {scope:'all'}])
     assert.throws(()=>buildAccess({...job,authorization}),/Invalid server build authorization/);
 });
+
+test('conversation updates stream only public text, preserve order, and retry without duplicate identities',async()=>{
+  const {conversationUpdates}=await import('./ideas/feedback.mjs');
+  const delivered=[],attempts=[];let fail=true;
+  const updates=conversationUpdates(async data=>{attempts.push(data.sequence);if(fail){fail=false;throw Error('lost response');}delivered.push(data);});
+  updates.onEvent({type:'item.completed',item:{id:'secret',type:'reasoning',text:'private reasoning'}});
+  updates.onEvent({type:'item.completed',item:{id:'tool',type:'command_execution',text:'private command'}});
+  updates.onEvent({type:'item.completed',item:{id:'first',type:'agent_message',text:'I understand you want to see your bid.'}});
+  updates.onEvent({type:'item.completed',item:{id:'first',type:'agent_message',text:'Duplicate'}});
+  updates.onEvent({type:'item.completed',item:{id:'result',type:'agent_message',text:'{"kind":"change","message":"not checked yet"}'}});
+  await updates.post('I’m checking the change.');await updates.flush();
+  assert.deepEqual(attempts,[0,0,1]);assert.deepEqual(delivered.map(d=>d.message),['I understand you want to see your bid.','I’m checking the change.']);
+});
+test('progress delivery failures do not prevent subsequent updates and are reported',async()=>{
+  const {conversationUpdates}=await import('./ideas/feedback.mjs');
+  const errors=[],sent=[];const updates=conversationUpdates(async data=>{if(data.sequence===0)throw Error('offline');sent.push(data);},error=>errors.push(error.message));
+  await updates.post('First');await updates.post('Second');assert.deepEqual(errors,['offline']);assert.equal(sent.length,1);
+});
+test('logged subprocess failures retain diagnostics for an honest family explanation',async()=>{
+  const {failureMessage}=await import('./ideas/feedback.mjs');
+  let error;
+  try{await run(process.execPath,['-e','console.log(\'Timeout calling "onTaskUpdate"\');process.exit(1)'],{log:{write:()=>{}}});}catch(e){error=e;}
+  assert.match(error.diagnostic,/onTaskUpdate/);
+  assert.match(failureMessage('tests',error),/test runner stopped responding/);
+  assert.match(failureMessage('tests',Error('failed assertion')),/not passed the automatic checks/);
+  assert.doesNotMatch(failureMessage('making',Error('secret detail')),/secret detail/);
+});

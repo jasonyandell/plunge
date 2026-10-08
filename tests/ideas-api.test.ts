@@ -148,6 +148,28 @@ describe('family idea conversations and automatic builds',()=>{
     current=await (await call(`/${idea}`)).json() as IdeaThread;
     expect(current.card.activity!.lastSeenAt).toBeNull();
   });
+  it('streams idempotent conversation updates only from the live builder without requeueing or losing family replies',async()=>{
+    const idea=id(90),run=id(190),path=`/admin/runs/${run}/progress`;
+    await call(`/${idea}`,'PUT',{body:'Keep my bid visible',context:'Phone'});
+    const job=await (await call('/admin/claim','POST',{runId:run,ideaId:idea},admin)).json() as {authorization:unknown};
+    const update={sequence:0,message:'I understand: keep your own bid visible while others bid.',authorization:job.authorization};
+    expect((await call(path,'POST',update)).status).toBe(403);
+    expect((await call(path,'POST',{...update,authorization:{scope:'repository'}},admin)).status).toBe(409);
+    expect((await call(path,'POST',update,admin)).status).toBe(200);
+    expect((await call(path,'POST',update,admin)).status).toBe(200);
+    let thread=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect(thread.messages.map(m=>m.body)).toEqual(['Keep my bid visible',update.message]);
+    expect(thread.card).toMatchObject({status:'building',revision:1});
+    await call(`/${idea}/messages`,'PUT',{id:id(91),body:'Yes, including when I pass.'});
+    expect((await call(path,'POST',{...update,sequence:1,message:'Checking the change now.'},admin)).status).toBe(200);
+    expect((await call(path,'POST',{...update,sequence:20},admin)).status).toBe(400);
+    expect((await call(path,'POST',{...update,sequence:2,message:'x'.repeat(801)},admin)).status).toBe(400);
+    await finish(190,{status:'question',message:'Would larger letters help too?'});
+    expect((await call(path,'POST',{...update,sequence:2},admin)).status).toBe(409);
+    thread=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect(thread.card).toMatchObject({status:'queued',revision:2});
+    expect(thread.messages.map(m=>m.body)).toContain('Yes, including when I pass.');
+  });
   it('bounds inputs, supports invite revocation, and keeps previews isolated',async()=>{
     expect((await call(`/${id(4)}`,'PUT',{body:'x'.repeat(16001)})).status).toBe(400);
     expect((await call('/admin/revoke','POST',{id:dad.id},admin)).status).toBe(200);

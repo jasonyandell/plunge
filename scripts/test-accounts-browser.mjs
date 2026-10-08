@@ -79,6 +79,13 @@ try {
  await owner.page.getByText('Working now',{exact:true}).waitFor();
  for(const width of [320,390]){await owner.page.setViewportSize({width,height:844});assert.ok(await owner.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
  await owner.page.screenshot({path:'/tmp/plunge-idea-working.png',fullPage:true});
+ await owner.page.getByLabel('Keep the conversation going').fill('Yes, I mean during bidding.');
+ assert.equal((await builderCall(`runs/${runId}/progress`,{sequence:0,message:'I understand you want to keep your own bid visible while others finish bidding.'})).status,200);
+ await owner.page.getByText('I understand you want to keep your own bid visible while others finish bidding.',{exact:true}).waitFor({timeout:12000});
+ assert.equal(await owner.page.getByLabel('Keep the conversation going').inputValue(),'Yes, I mean during bidding.');
+ await owner.page.getByLabel('Keep the conversation going').fill('');
+ await owner.page.screenshot({path:'/tmp/plunge-idea-conversation.png',fullPage:true});
+
  // Disconnecting must immediately stop presenting the last snapshot as active.
  await owner.context.setOffline(true);
  await owner.page.getByText('Updates unavailable',{exact:true}).waitFor();
