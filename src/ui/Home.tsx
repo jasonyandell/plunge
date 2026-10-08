@@ -49,8 +49,10 @@ export function Home({ app, dispatch, onQuestions, onHistory }: HomeProps) {
         </button>
 
         {nelloAvailable(app.settings) && <p class="setting-hint">Nel-O Preview is on. Change it in Advanced settings.</p>}
-        {ROOMS_ENABLED && <button type="button" class="big-btn secondary" onClick={() => location.assign('?rooms=1')}>Play with family · Experimental</button>}
+        {ROOMS_ENABLED && <button type="button" class="big-btn secondary" onClick={() => { const url=new URL(location.href);url.searchParams.set('rooms','1');location.assign(url.href); }}>Play with family · Experimental</button>}
         <p class="setting-hint">Game history and Walt results stay on this device. Export a backup before clearing browser data.</p>
+        <a class="big-btn secondary" href="?ideas=1" style={{display:"block",boxSizing:"border-box",textAlign:"center",textDecoration:"none"}}>Ideas for Plunge</a>
+        <a class="text-btn" href="?account=1" style={{display:"inline-block",marginTop:"14px"}}>Your account · optional</a>
         <div class="link-row">
           {onHistory && <button type="button" class="text-btn" onClick={onHistory}>Export history</button>}
           {onQuestions && <button type="button" class="text-btn" onClick={onQuestions}>Your questions</button>}

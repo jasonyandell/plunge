@@ -45,7 +45,7 @@ test('preview deploys never touch D1 and always build and check a local-only pre
   assert.equal(grep("// export const PREVIEW_PROTOCOL = 'local-only-v1';\n"), 1);
   // Production keeps its database.
   assert.match(readFileSync(new URL('../.github/workflows/deploy.yml', import.meta.url), 'utf8'),
-    /wrangler d1 migrations apply QUESTIONS --remote\n\s+npx wrangler deploy\n/);
+    /wrangler d1 migrations apply QUESTIONS --remote\n\s+node scripts\/ideas\/install-secret\.mjs\n\s+npx wrangler deploy\n/);
   assert.doesNotMatch(readFileSync(new URL('../.github/workflows/deploy.yml', import.meta.url), 'utf8'), /PLUNGE_QUESTIONS/);
 });
 test('invalid identities cannot select production or perform API calls', async () => {
@@ -187,4 +187,14 @@ test('smoke check refuses production and detects stale code, remote builds, or a
   await assert.rejects(smokePreview(url, sha, replace('/api/questions', () => Response.json({ items: [] }))), /not local-only/);
   await assert.rejects(smokePreview(url, sha, replace('/api/questions',
     () => Response.json({ error: 'Questions are temporarily unavailable.' }, { status: 503 }))), /not local-only/);
+});
+
+test('family builder keys are confined to the main deployment step', () => {
+  const deploy=readFileSync(new URL('../.github/workflows/deploy.yml',import.meta.url),'utf8');
+  const preview=readFileSync(new URL('../.github/workflows/preview.yml',import.meta.url),'utf8');
+  assert.match(deploy,/if: github.ref == 'refs\/heads\/main'/);
+  assert.doesNotMatch(preview,/IDEAS_ADMIN_TOKEN|SOCIAL_LOGIN_CONFIG|install-secret|install-login-config/);
+  const steps=deploy.split('      - name: Prepare question database and deploy');
+  assert.doesNotMatch(steps[0],/IDEAS_ADMIN_TOKEN|SOCIAL_LOGIN_CONFIG/);
+  assert.match(steps[1],/PLUNGE_IDEAS_ADMIN_TOKEN: \$\{\{ secrets.PLUNGE_IDEAS_ADMIN_TOKEN \}\}/);
 });

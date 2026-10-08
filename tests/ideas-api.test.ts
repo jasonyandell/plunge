@@ -1,0 +1,103 @@
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { Miniflare } from 'miniflare';
+import { readFile } from 'node:fs/promises';
+import worker from '../worker/index';
+import type { IdeaThread } from '../src/ideas/model';
+let mf: Miniflare;
+let env: Parameters<typeof worker.fetch>[1];
+const admin='a'.repeat(64), id=(n:number)=>n.toString(16).padStart(32,'0');
+let mom: {id:string;token:string}, dad: {id:string;token:string};
+const call=(path='',method='GET',data?:unknown,token=mom?.token,origin?:string) => worker.fetch(new Request(`https://plunge.test/api/ideas${path}`,{
+  method,headers:{...(token?{Authorization:`Bearer ${token}`} : {}),...(origin?{Origin:origin}:{}),'Content-Type':'application/json'},
+  ...(data===undefined?{}:{body:JSON.stringify(data)}),
+}),env);
+const claim=async(n:number)=> (await call('/admin/claim','POST',{runId:id(n)},admin)).json() as Promise<{run:{id:string;revision:number};card:{id:string};messages:{body:string}[]}|null>;
+const finish=(n:number,data:unknown)=>call(`/admin/runs/${id(n)}/finish`,'POST',data,admin);
+beforeAll(async()=>{
+  mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['QUESTIONS']});
+  const db=await mf.getD1Database('QUESTIONS');
+  const sql=await readFile(new URL('../migrations/0002_family_ideas.sql',import.meta.url),'utf8');
+  const [tables,trigger]=sql.split('CREATE TRIGGER');
+  for(const statement of tables!.split(';').filter(s=>s.trim()))await db.prepare(statement).run();
+  await db.prepare(`CREATE TRIGGER${trigger}`).run();
+  env={QUESTIONS:db,IDEAS_ADMIN_TOKEN:admin,ASSETS:{fetch:async()=>new Response('app')}};
+  mom=await (await call('/admin/members','POST',{name:'Mom'},admin)).json() as typeof mom;
+  dad=await (await call('/admin/members','POST',{name:'Dad'},admin)).json() as typeof dad;
+},20000);
+afterAll(async()=>{await mf?.dispose();});
+describe('family idea conversations and automatic builds',()=>{
+  it('requires a personal invite, keeps builder operations separate, rejects other origins',async()=>{
+    expect((await call('','GET',undefined,'')).status).toBe(401);
+    expect((await call('/admin/claim','POST',{runId:id(99)},mom.token)).status).toBe(403);
+    expect((await call(`/${id(1)}`,'PUT',{body:'Idea',context:'Phone'},mom.token,'https://elsewhere.test')).status).toBe(403);
+    expect(await (await call('/me')).json()).toEqual({id:mom.id,name:'Mom'});
+  });
+  it('creates multiple cards and makes lost-response retries idempotent',async()=>{
+    for(const n of [1,2])expect((await call(`/${id(n)}`,'PUT',{body:`I cannot see my bid ${n}`,context:'iPhone 320×780'})).status).toBe(200);
+    await call(`/${id(1)}`,'PUT',{body:'Do not replace original',context:'other'});
+    const thread=await (await call(`/${id(1)}`)).json() as IdeaThread;
+    expect(thread.messages).toHaveLength(1);expect(thread.card.revision).toBe(1);expect(thread.messages[0]!.body).toBe('I cannot see my bid 1');
+    expect((await call(`/${id(1)}`,'PUT',{body:'Other owner',context:'Phone'},dad.token)).status).toBe(409);
+  });
+  it('claims each card once even with concurrent builders and retries',async()=>{
+    const results=await Promise.all([claim(100),claim(101)]);
+    expect(new Set(results.map(r=>r!.card.id)).size).toBe(2);
+    const again=await claim(100);expect(again!.card.id).toBe(results[0]!.card.id);
+    expect(await claim(102)).toBeNull();
+  });
+  it('preserves replies arriving during a build and schedules another pass',async()=>{
+    const job=(await claim(100))!;
+    await call(`/${job.card.id}/messages`,'PUT',{id:id(20),body:'Can you make it bigger too?'},dad.token);
+    await call(`/${job.card.id}/messages`,'PUT',{id:id(20),body:'Duplicate retry'},dad.token);
+    expect((await finish(100,{status:'checking',message:'The bid is visible.',pr:99,sha:'b'.repeat(40)})).status).toBe(200);
+    await finish(100,{status:'failed',message:'Duplicate must not change state.'});
+    const thread=await (await call(`/${job.card.id}`)).json() as IdeaThread;
+    expect(thread.card.status).toBe('queued');expect(thread.card.revision).toBe(2);expect(thread.messages).toHaveLength(3);
+    expect(thread.messages[1]!.name).toBe('Dad');
+    const next=(await claim(103))!;expect(next.card.id).toBe(job.card.id);expect(next.messages.some(m=>m.body.includes('bigger'))).toBe(true);
+  });
+  it('rejects stale builders after expiry and gives a replacement the conversation',async()=>{
+    const old=(await claim(101))!;
+    await env.QUESTIONS!.prepare('UPDATE ideas SET lease_until=0 WHERE run_id=?').bind(id(101)).run();
+    const next=(await claim(104))!;expect(next.card.id).toBe(old.card.id);
+    expect((await finish(101,{status:'question',message:'Old builder'})).status).toBe(409);
+    expect((await finish(104,{status:'question',message:'Is it the number or the trump that is hard to see?'})).status).toBe(200);
+    const thread=await (await call(`/${old.card.id}`)).json() as IdeaThread;
+    expect(thread.card.status).toBe('question');expect(thread.messages.some(m=>m.body==='Old builder')).toBe(false);
+  });
+  it('waits for the exact live PR build and ignores stale deployment reports',async()=>{
+    const job=(await claim(103))!;
+    await finish(103,{status:'checking',message:'Larger bid ready for checks.',pr:99,sha:'c'.repeat(40)});
+    const publish=()=>call('/admin/publish','POST',{id:job.card.id,sha:'c'.repeat(40),status:'ready'},admin);
+    const fetch=vi.spyOn(globalThis,'fetch');
+    fetch.mockResolvedValueOnce(Response.json({build:'b'.repeat(40),preview_pr:99}));expect((await publish()).status).toBe(409);
+    fetch.mockResolvedValueOnce(Response.json({build:'c'.repeat(40),preview_pr:99}));expect((await publish()).status).toBe(200);
+    fetch.mockRestore();
+    let thread=await (await call(`/${job.card.id}`)).json() as IdeaThread;
+    expect(thread.card.status).toBe('ready');expect(thread.card.preview).toBe('https://plunge-pr-99.texas42.workers.dev');
+    await call(`/${job.card.id}/messages`,'PUT',{id:id(30),body:'One more adjustment'});
+    expect((await call('/admin/publish','POST',{id:job.card.id,sha:'b'.repeat(40),status:'shipped'},admin)).status).toBe(409);
+    await call('/admin/publish','POST',{id:job.card.id,sha:'c'.repeat(40),status:'shipped'},admin);
+    thread=await (await call(`/${job.card.id}`)).json() as IdeaThread;expect(thread.card.status).toBe('queued');
+  });
+  it('targets a specific card and invalidates a preview after a manual PR update',async()=>{
+    const idea=id(50);
+    await call(`/${idea}`,'PUT',{body:'A separate idea',context:'Phone'});
+    const picked=await (await call('/admin/claim','POST',{runId:id(150),ideaId:idea},admin)).json() as {card:{id:string}};
+    expect(picked.card.id).toBe(idea);
+    await finish(150,{status:'checking',message:'Ready for checks.',pr:150,sha:'e'.repeat(40)});
+    const fetch=vi.spyOn(globalThis,'fetch').mockResolvedValueOnce(Response.json({build:'e'.repeat(40),preview_pr:150}));
+    await call('/admin/publish','POST',{id:idea,sha:'e'.repeat(40),status:'ready'},admin);fetch.mockRestore();
+    await call('/admin/refresh','POST',{id:idea,sha:'e'.repeat(40),nextSha:'f'.repeat(40)},admin);
+    const updated=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect(updated.card.status).toBe('checking');expect(updated.card.preview).toBeNull();expect(updated.card.sha).toBe('f'.repeat(40));
+    expect((await call('/admin/publish','POST',{id:idea,sha:'e'.repeat(40),status:'closed'},admin)).status).toBe(409);
+  });
+  it('bounds inputs, supports invite revocation, and keeps previews isolated',async()=>{
+    expect((await call(`/${id(4)}`,'PUT',{body:'x'.repeat(16001)})).status).toBe(400);
+    expect((await call('/admin/revoke','POST',{id:dad.id},admin)).status).toBe(200);
+    expect((await call('','GET',undefined,dad.token)).status).toBe(401);
+    const res=await worker.fetch(new Request('https://preview.test/api/ideas'),{ASSETS:env.ASSETS});expect(res.status).toBe(503);
+    const serialized=JSON.stringify(await (await call()).json());expect(serialized).not.toContain(mom.token);expect(serialized).not.toContain('token_hash');
+  });
+});

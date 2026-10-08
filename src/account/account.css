@@ -1,0 +1,6 @@
+.account-page .account-play {display:block;text-align:center;color:#205e49;margin:24px 0 0;line-height:1.5;min-height:44px;}
+.account-ideas,.account-access {margin-top:28px;}
+.account-member {display:flex;flex-direction:column;gap:8px;border-top:1px solid #cabc9e;padding:20px 0;}
+.account-member span {font-size:14px;line-height:1.4;}.account-member .big-btn {margin-top:8px;}
+
+.account-new {border-top:1px solid #cabc9e;margin-top:26px;padding-top:12px;}.account-help {margin:24px 0;line-height:1.6;}.account-help summary,.account-member summary {cursor:pointer;min-height:44px;}
