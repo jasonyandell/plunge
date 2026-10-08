@@ -2,13 +2,15 @@
 import type { Seat } from '../src/engine';
 import type { Proposal, ProposalKind, ProposalMode } from '../src/room/protocol';
 
-export interface VoteRule { mode: ProposalMode; needs: 'all' | 'one' | 'majority'; window: number }
-/** Low stakes pass unless someone objects within five seconds. Admitting a knock
- * takes one yes; a kick takes most of the table. Tune here, nowhere else. */
+export interface VoteRule { mode: ProposalMode; needs: 'all' | 'one' | 'two' | 'majority'; window: number }
+/** Low stakes pass unless someone objects within five seconds. Shaking the next
+ * hand takes a second person, so nobody loses the result card while still
+ * reading it. Admitting a knock takes one yes; a kick takes most of the table.
+ * Tune here, nowhere else. */
 export const VOTE_RULES: Record<ProposalKind, VoteRule> = {
   start: { mode: 'veto', needs: 'all', window: 5000 },
   restart: { mode: 'veto', needs: 'all', window: 5000 },
-  'next-hand': { mode: 'veto', needs: 'all', window: 5000 },
+  'next-hand': { mode: 'allow', needs: 'two', window: 90000 },
   undo: { mode: 'veto', needs: 'all', window: 5000 },
   open: { mode: 'veto', needs: 'all', window: 5000 },
   close: { mode: 'veto', needs: 'all', window: 5000 },
@@ -29,12 +31,21 @@ export function newProposal(id: string, kind: ProposalKind, by: Seat | null, byN
 export function voters(proposal: Proposal, present: ReadonlySet<Seat>): Seat[] {
   return [...present].filter(seat => seat !== proposal.target).sort();
 }
+/** Yes votes a proposal needs from an electorate of this size. */
+export function neededYes(needs: Proposal['needs'], electorate: number): number {
+  switch (needs) {
+    case 'all': return electorate;
+    case 'one': return 1;
+    case 'two': return Math.min(2, electorate);
+    case 'majority': return Math.floor(electorate / 2) + 1;
+  }
+}
 /** Derived, never stored: the same proposal settles differently as people come and go. */
 export function proposalStatus(proposal: Proposal, present: ReadonlySet<Seat>, now: number): 'open' | 'passed' | 'failed' {
   const electorate = voters(proposal, present);
   if (electorate.some(seat => proposal.votes[seat] === 'no')) return 'failed';
   const yes = electorate.filter(seat => proposal.votes[seat] === 'yes').length;
-  const needed = proposal.needs === 'all' ? electorate.length : proposal.needs === 'one' ? 1 : Math.floor(electorate.length / 2) + 1;
+  const needed = neededYes(proposal.needs, electorate.length);
   if (needed > 0 ? yes >= needed : proposal.mode === 'veto') return 'passed';
   if (now < proposal.deadline) return 'open';
   return proposal.mode === 'veto' ? 'passed' : 'failed';

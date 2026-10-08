@@ -12,7 +12,7 @@ export type Vote = 'yes' | 'no';
 /** veto: passes at the deadline unless someone says no. allow: fails at the deadline unless enough say yes. */
 export type ProposalMode = 'veto' | 'allow';
 export interface Proposal {
-  id: string; kind: ProposalKind; mode: ProposalMode; needs: 'all' | 'one' | 'majority';
+  id: string; kind: ProposalKind; mode: ProposalMode; needs: 'all' | 'one' | 'two' | 'majority';
   /** The seated proposer, or null when a visitor knocks. */
   by: Seat | null; byName: string;
   /** Seat a kick would empty. */
