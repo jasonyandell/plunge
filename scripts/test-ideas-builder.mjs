@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { allowedFile, approvedFiles, buildPrompt, run } from './ideas/builder.mjs';
+import { allowedFile, approvedFiles, buildPrompt, run, modelArgs } from './ideas/builder.mjs';
+test('the launched process receives explicit Astra High settings instead of CLI defaults',async()=>{
+  const args=modelArgs();
+  const output=await run(process.execPath,['-e','process.stdout.write(JSON.stringify(process.argv.slice(1)))','--',...args]);
+  const received=JSON.parse(output);
+  assert.equal(received[received.indexOf('--model')+1],'gpt-6-astra');
+  assert.ok(received.includes('model_reasoning_effort="high"'));
+});
 test('private room-file approval applies only to the selected idea and cannot grant infrastructure access',()=>{
   const config={ideaScopes:{one:['worker/rooms.ts','worker/room-undo.ts']}};
   const files=approvedFiles(config,'one');
