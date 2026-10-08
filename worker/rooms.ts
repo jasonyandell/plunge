@@ -5,6 +5,9 @@ import { catalogueDeal } from '../src/ai/catalogue';
 import type { RoomCommand, RoomCredentials, RoomState } from '../src/room/protocol';
 import { ROOM_ID } from '../src/room/protocol';
 import { roomAuctionConfig, roomUndoTarget, upgradeRoom } from './room-undo';
+import { handRecordOf } from '../src/history/legacy';
+import { handStatements, type HandEntry } from './stats';
+import type { IdeasDatabase } from './ideas';
 
 const TOKEN = /^[a-f0-9]{64}$/;
 const COMMAND_ID = /^[a-zA-Z0-9_-]{1,128}$/;
@@ -28,39 +31,61 @@ async function roomBody(request: Request): Promise<{ name: unknown }> {
 export const randomKey = (bytes: number): string => [...crypto.getRandomValues(new Uint8Array(bytes))]
   .map(value => value.toString(16).padStart(2, '0')).join('');
 
-interface SavedSeat { name: string; token: string }
+interface SavedSeat { name: string; token: string; account?: string | null }
 export interface SavedRoom {
   state: RoomState; players: (SavedSeat | null)[]; accepted: string[]; updated: number;
   /** Actual human decisions in this hand. Missing on rooms saved by older code. */
   humanSteps?: { handNumber: number; indices: number[] };
+  /** Finished hands not yet written to the stats database, and the last hand considered. */
+  pendingHands?: HandEntry[]; recordedHand?: string;
 }
+/** The stats header is set by the worker from the session cookie; a client cannot supply it. */
+export const ACCOUNT_HEADER = 'X-Plunge-Account';
+const MAX_PENDING = 100;
 export function cleanName(value: unknown): string {
   if (typeof value !== 'string') throw new Error('Please enter your name.');
   const name = value.trim().replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 24);
   if (!name) throw new Error('Please enter your name.');
   return name;
 }
-export function createRoom(roomId: string, name: string, token = randomKey(32), now = Date.now()): SavedRoom {
+export function createRoom(roomId: string, name: string, token = randomKey(32), now = Date.now(), account: string | null = null): SavedRoom {
   return { state: { type: 'state', roomId, revision: 0, seed: '', sessionId: '', game: null,
     seats: [null, null, null, null], hostConnected: false, started: false, holdUntil: 0, thinkingSeat: null,
     nativeReceipts: {}, auctionSurveys: {}, retry: null, practiceHands: [], lastUndo: null },
-    players: [{ name: cleanName(name), token }, null, null, null], accepted: [], updated: now };
+    players: [{ name: cleanName(name), token, account }, null, null, null], accepted: [], updated: now };
 }
 export function roomSnapshot(room: SavedRoom, connected: ReadonlySet<Seat>): RoomState {
   return { ...room.state, canUndo: roomUndoTarget(room) !== null, seats: room.players.map((player, seat) => player
     ? { name: player.name, connected: connected.has(seat as Seat) } : null), hostConnected: connected.has(0) };
 }
-export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), now = Date.now()): RoomCredentials {
+export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), now = Date.now(), account: string | null = null): RoomCredentials {
   // Record old human membership before a newcomer takes a formerly Walt seat.
   upgradeRoom(room);
   if (room.state.game && !['hand-over', 'game-over'].includes(room.state.game.phase))
     throw new Error('This hand is in progress. Join after the hand ends.');
   const seat = ([2, 1, 3] as const).find(seat => !room.players[seat]);
   if (seat === undefined) throw new Error('All four seats are taken.');
-  room.players[seat] = { name: cleanName(name), token };
+  room.players[seat] = { name: cleanName(name), token, account };
   room.state = { ...room.state, revision: room.state.revision + 1, thinkingSeat: null };
   room.updated = now;
   return { roomId: room.state.roomId, token, seat };
+}
+/**
+ * The hand that just finished, as a stats entry, or null when it was already
+ * considered or is practice (a takeback happened in it, as in solo play). Each
+ * seat carries its human's name and account, or Walt.
+ */
+export function finishedRoomHand(room: SavedRoom): HandEntry | null {
+  const game = room.state.game;
+  if (!game || (game.phase !== 'hand-over' && game.phase !== 'game-over')) return null;
+  const key = `${room.state.sessionId}:${game.handNumber}`;
+  if (room.recordedHand === key) return null;
+  room.recordedHand = key;
+  if (room.state.retry?.handNumber === game.handNumber) return null;
+  const record = handRecordOf(game, room.state.sessionId, 'room', room.state.practiceHands ?? []);
+  if (!record) return null;
+  const seat = (i: number): HandEntry['players'][number] => { const p = room.players[i]; return p ? { kind: 'human', name: p.name, account: p.account ?? null } : { kind: 'walt' }; };
+  return { record, source: 'room', roomId: room.state.roomId, players: [seat(0), seat(1), seat(2), seat(3)] };
 }
 /** The same guard protects human moves, delayed Walt replies and reconnect retries. */
 export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
@@ -151,7 +176,7 @@ declare const WebSocketPair: { new(): { 0: RoomSocket; 1: RoomSocket } };
 export class PlungeRoom {
   private room: SavedRoom | undefined;
   private readonly ready: Promise<void>;
-  constructor(private readonly ctx: RoomContext) {
+  constructor(private readonly ctx: RoomContext, private readonly env: { QUESTIONS?: IdeasDatabase } = {}) {
     this.ready = ctx.blockConcurrencyWhile(async () => {
       this.room = await ctx.storage.get<SavedRoom>('room');
       if (this.room && upgradeRoom(this.room)) await ctx.storage.put('room', this.room);
@@ -173,6 +198,18 @@ export class PlungeRoom {
     await this.ctx.storage.put('room', this.room);
     await this.nextAlarm();
   }
+  /** Queue a hand that just finished, then write whatever is queued. A failed write is retried on later activity. */
+  private async recordHands(): Promise<void> {
+    if (!this.room) return;
+    const entry = finishedRoomHand(this.room);
+    if (entry) this.room.pendingHands = [...(this.room.pendingHands ?? []).slice(-(MAX_PENDING - 1)), entry];
+    const pending = this.room.pendingHands ?? [];
+    if (!pending.length) return;
+    if (!this.env.QUESTIONS) { if (entry) await this.save(); return; }
+    try { await this.env.QUESTIONS.batch(handStatements(this.env.QUESTIONS, pending)); this.room.pendingHands = []; }
+    catch { /* Kept in storage; the next command or alarm tries again. */ }
+    await this.save();
+  }
   private broadcast(exclude?: RoomSocket): void {
     if (!this.room) return;
     const message = JSON.stringify(roomSnapshot(this.room, this.connected(exclude)));
@@ -187,16 +224,17 @@ export class PlungeRoom {
     if (!match) return json({ error: 'Room not found.' }, 404);
     const roomId = match[1]!, operation = match[2];
     try {
+      const account = request.headers.get(ACCOUNT_HEADER) || null;
       if (operation === 'create' && request.method === 'POST') {
         if (this.room) return json({ error: 'Room already exists.' }, 409);
         const { name } = await roomBody(request);
-        this.room = createRoom(roomId, cleanName(name)); await this.save();
+        this.room = createRoom(roomId, cleanName(name), undefined, undefined, account); await this.save();
         return json({ roomId, token: this.room.players[0]!.token, seat: 0 });
       }
       if (!this.room || this.room.updated + DAY <= Date.now()) return json({ error: 'This room expired. Please create a new one.' }, 404);
       if (operation === 'join' && request.method === 'POST') {
         const { name } = await roomBody(request);
-        const credentials = joinRoom(this.room, cleanName(name)); await this.save(); this.broadcast();
+        const credentials = joinRoom(this.room, cleanName(name), undefined, undefined, account); await this.save(); this.broadcast();
         return json(credentials);
       }
       if (operation !== 'socket' || request.method !== 'GET') return json({ error: 'Method not allowed.' }, 405);
@@ -205,6 +243,8 @@ export class PlungeRoom {
       if (!TOKEN.test(token)) return json({ error: 'Your seat key is missing.' }, 401);
       const seat = this.room.players.findIndex(player => player?.token === token);
       if (seat < 0) return json({ error: 'Your seat key is invalid.' }, 401);
+      // Signing in after taking a seat still connects that seat's hands from here on.
+      if (account && !this.room.players[seat]!.account) this.room.players[seat] = { ...this.room.players[seat]!, account };
       // Refresh replaces this browser's old connection; it cannot create a second actor.
       for (const old of this.ctx.getWebSockets()) if (old.deserializeAttachment().seat === seat) old.close(4001, 'Seat opened in another tab.');
       const pair = new WebSocketPair(), client = pair[0], server = pair[1];
@@ -231,6 +271,7 @@ export class PlungeRoom {
       if (status === 'changed') await this.save();
       socket.send(JSON.stringify({ type: 'ack', id: command.id, revision: this.room.state.revision }));
       this.broadcast();
+      if (status === 'changed') await this.recordHands();
     } catch (error) {
       socket.send(JSON.stringify({ type: 'error', ...(command?.id ? { id: command.id } : {}),
         message: error instanceof Error ? error.message : 'Please reconnect to the room.' }));
@@ -251,14 +292,14 @@ export class PlungeRoom {
         && socket.deserializeAttachment().lastSeen + HEARTBEAT <= Date.now()) socket.close(4002, 'Connection paused. Please reconnect.');
       this.broadcast();
       if (this.connected().size) this.room.updated = Date.now();
-      await this.save(); return;
+      await this.save(); await this.recordHands(); return;
     }
     for (const socket of this.ctx.getWebSockets()) socket.close(4000, 'This room expired.');
     this.room = undefined; await this.ctx.storage.deleteAll();
   }
 }
 
-export async function roomRequest(request: Request, namespace?: RoomsNamespace): Promise<Response> {
+export async function roomRequest(request: Request, namespace?: RoomsNamespace, account: string | null = null): Promise<Response> {
   if (!namespace) return json({ error: 'Family rooms are unavailable in this build.' }, 503);
   const url = new URL(request.url);
   if (url.pathname === '/api/rooms/status' && request.method === 'GET') return json({ experimental: true });
@@ -273,5 +314,9 @@ export async function roomRequest(request: Request, namespace?: RoomsNamespace):
     if (!match || !ROOM_ID.test(match[1]!)) return json({ error: 'Room not found.' }, 404);
     roomId = match[1]!;
   }
-  return namespace.get(namespace.idFromName(roomId)).fetch(new Request(url, request));
+  const headers = new Headers(request.headers);
+  headers.delete(ACCOUNT_HEADER);
+  if (account) headers.set(ACCOUNT_HEADER, account);
+  const forwarded = new Request(url, { method: request.method, headers, body: request.method === 'GET' || request.method === 'HEAD' ? null : request.body });
+  return namespace.get(namespace.idFromName(roomId)).fetch(forwarded);
 }

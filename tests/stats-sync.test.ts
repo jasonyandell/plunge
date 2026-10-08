@@ -16,7 +16,7 @@ beforeAll(async()=>{
   db=await mf.getD1Database('QUESTIONS');
   const ideas=await readFile(new URL('../migrations/0002_family_ideas.sql',import.meta.url),'utf8');
   const [tables,trigger]=ideas.split('CREATE TRIGGER');for(const statement of tables!.split(';').filter(s=>s.trim()))await db.prepare(statement).run();await db.prepare(`CREATE TRIGGER${trigger}`).run();
-  for(const file of ['0003_accounts.sql','0004_account_hands.sql'])
+  for(const file of ['0003_accounts.sql','0004_hands.sql'])
     for(const statement of (await readFile(new URL(`../migrations/${file}`,import.meta.url),'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
   env={QUESTIONS:db,ASSETS:{fetch:async()=>new Response('app')}};
   await db.prepare('INSERT INTO accounts(id,name,created) VALUES(?,?,?)').bind('a'.repeat(32),'Mom',Date.now()).run();
@@ -30,7 +30,7 @@ beforeAll(async()=>{
   }) as typeof fetch;
 },20000);
 afterAll(async()=>{await mf?.dispose();});
-const serverCount=async()=>(await db.prepare('SELECT COUNT(*) n FROM account_hands').first<{n:number}>())!.n;
+const serverCount=async()=>(await db.prepare('SELECT COUNT(*) n FROM hands').first<{n:number}>())!.n;
 
 it('keeps every hand on the device and makes no request while signed out',async()=>{
   await appendHand(first);await appendHand(second);

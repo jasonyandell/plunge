@@ -11,7 +11,13 @@ import { listHands, statsDb, type HandRecord } from './legacy';
 import { UPLOAD_BATCH } from './hand-record';
 import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
 
-export interface RemoteHand { readonly device: string; readonly record: HandRecord; readonly received: string }
+/** A hand the account holds: this device's, another device's, or a family room's. */
+export interface RemoteHand {
+  readonly id: string; readonly source: 'solo' | 'room';
+  /** Where the account's human sat. Their team is seat % 2. */
+  readonly seat: number;
+  readonly device: string | null; readonly record: HandRecord; readonly received: string;
+}
 interface SyncMark { readonly key: string; readonly account: string; readonly id: string; readonly uploaded?: string; readonly rejected?: string }
 interface CachedHand extends RemoteHand { readonly key: string; readonly account: string }
 export interface StatsStatus {
@@ -94,8 +100,9 @@ async function upload(account: string): Promise<number> {
   let sent = 0;
   for (let i = 0; i < pending.length; i += UPLOAD_BATCH) {
     const batch = pending.slice(i, i + UPLOAD_BATCH);
-    const response = await fetch(`${API}/hands`, { method: 'PUT', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ device, hands: batch }), signal: AbortSignal.timeout(15000) });
+    // keepalive: a hand that finishes as the tab closes still gets its one attempt.
+    const response = await fetch(`${API}/hands`, { method: 'PUT', credentials: 'same-origin', cache: 'no-store', keepalive: true,
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device, hands: batch }), signal: AbortSignal.timeout(15000) });
     const ack = await response.json() as { account?: string; stored?: string[]; rejected?: { id: string; error: string }[]; error?: string };
     if (response.status === 401) throw new SignedOut(ack.error ?? 'Sign in to connect your stats.');
     if (!response.ok || ack.account !== account) throw new Error(ack.error ?? `Stats service unavailable (${response.status}).`);
@@ -114,10 +121,10 @@ async function pull(account: string): Promise<number> {
   do {
     const page = await api<{ items: RemoteHand[]; next: string | null }>(`/hands${cursor ? `?after=${encodeURIComponent(cursor)}` : ''}`);
     await run<void>('remote', 'readwrite', (s) => {
-      for (const item of page.items) if (item.device !== device) { pulled++; s.put({ ...item, key: `${account}:${item.device}:${item.record.id}`, account } satisfies CachedHand); }
+      for (const item of page.items) if (item.device !== device) { pulled++; s.put({ ...item, key: `${account}:${item.id}`, account } satisfies CachedHand); }
     });
     const last = page.items.at(-1);
-    if (last) { cursor = `${last.received}|${last.device}|${last.record.id}`; await setMeta(`pulled:${account}`, cursor); }
+    if (last) { cursor = `${last.received}|${last.id}`; await setMeta(`pulled:${account}`, cursor); }
     if (!page.next) break;
   } while (true);
   return pulled;
@@ -181,13 +188,14 @@ export async function statsStatus(): Promise<StatsStatus> {
 }
 
 /**
- * The merged log as this device knows it: its own hands first, then cached
- * hands from the last signed-in account's other devices, oldest first.
+ * The merged log as this device knows it: its own solo hands, then cached
+ * hands from the last signed-in account's other devices and rooms, oldest first.
  */
 export async function listAccountHands(): Promise<RemoteHand[]> {
-  const device = await deviceId(), own = (await listHands()).map((record) => ({ device, record, received: '' }));
+  const device = await deviceId();
+  const own: RemoteHand[] = (await listHands()).map((record) => ({ id: `${device}:${record.id}`, source: 'solo', seat: 0, device, record, received: '' }));
   const account = await meta(ACCOUNT_KEY).catch(() => null);
-  const others = typeof account === 'string' ? (await getAll<CachedHand>('remote')).filter((h) => h.account === account && h.device !== device)
-    .map(({ device: d, record, received }) => ({ device: d, record, received })) : [];
-  return [...own, ...others].sort((a, b) => a.record.endedAt.localeCompare(b.record.endedAt) || a.device.localeCompare(b.device));
+  const others: RemoteHand[] = typeof account === 'string' ? (await getAll<CachedHand>('remote')).filter((h) => h.account === account && h.device !== device)
+    .map(({ id, source, seat, device: d, record, received }) => ({ id, source, seat, device: d, record, received })) : [];
+  return [...own, ...others].sort((a, b) => a.record.endedAt.localeCompare(b.record.endedAt) || a.id.localeCompare(b.id));
 }

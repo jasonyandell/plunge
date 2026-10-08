@@ -1,15 +1,20 @@
 /**
- * Finished-hand stats connected to an account. A signed-in device uploads its
- * local hands log; every device of the account reads the merged log back.
- * First write wins per (account, device, hand): nothing here ever overwrites,
- * and a repeated upload is acknowledged, never duplicated.
+ * Finished hands, one shape for solo play and family rooms.
+ *
+ * A signed-in device uploads its local hands log; a room records its own
+ * finished hands (worker/rooms.ts). Both land through `handStatements`: one
+ * `hands` row per hand with the facts read from its replay, and one
+ * `hand_players` row per seat. First write wins per hand, nothing here ever
+ * overwrites, and a repeated upload is acknowledged, never duplicated.
  */
 import { DEVICE_ID, MAX_UPLOAD_BYTES, UPLOAD_BATCH, handSummary, validHandRecord } from '../src/history/hand-record';
 import type { HandRecord } from '../src/history/legacy';
 import { accountSession, type AccountEnv } from './accounts';
 import type { IdeasDatabase } from './ideas';
-interface Row {device_id:string;hand_id:string;payload:string;received:string}
-export interface RemoteHand {device:string;record:HandRecord;received:string}
+export interface SeatPlayer {kind:'human'|'walt';account?:string|null;device?:string|null;name?:string|null;player?:string|null}
+export interface HandEntry {record:HandRecord;source:'solo'|'room';roomId?:string|null;players:readonly [SeatPlayer,SeatPlayer,SeatPlayer,SeatPlayer]}
+interface Row {id:string;source:'solo'|'room';seat:number;device_id:string|null;payload:string;received:string}
+export interface RemoteHand {id:string;source:'solo'|'room';seat:number;device:string|null;record:HandRecord;received:string}
 const PAGE=200;
 const json=(value:unknown,status=200)=>Response.json(value,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 async function body(request:Request):Promise<Record<string,unknown>> {
@@ -19,15 +24,33 @@ async function body(request:Request):Promise<Record<string,unknown>> {
   if(!data||typeof data!=='object'||Array.isArray(data))throw new SyntaxError('Invalid upload.');
   return data as Record<string,unknown>;
 }
-const remote=(r:Row):RemoteHand=>({device:r.device_id,record:JSON.parse(r.payload) as HandRecord,received:r.received});
-/** Opaque page cursor: the last row's (received, device, hand) in order. */
-const cursor=(r:Row)=>`${r.received}|${r.device_id}|${r.hand_id}`;
-function parseCursor(value:string|null):[string,string,string]|null|undefined {
-  if(value===null)return null;
-  const parts=value.split('|');
-  if(parts.length!==3||!DEVICE_ID.test(parts[1]!)||parts[0]!.length>40||parts[2]!.length>90)return undefined;
-  return parts as [string,string,string];
+/** The stored id: a device's hands are its own, a room's hands are the room's. */
+export const handId=(entry:Pick<HandEntry,'record'|'source'|'roomId'|'players'>)=>entry.source==='room'?`room:${entry.roomId}:${entry.record.id}`:`${entry.players[0].device}:${entry.record.id}`;
+/** Insert statements for finished hands; `INSERT OR IGNORE` keeps the first write of each. */
+export function handStatements(db:IdeasDatabase,entries:readonly HandEntry[],now=new Date().toISOString()) {
+  const statements=[];
+  for(const entry of entries) {
+    const {record,game}=validHandRecord(entry.record),facts=handSummary(record,game),id=handId(entry);
+    statements.push(db.prepare(`INSERT OR IGNORE INTO hands(id,source,game_id,hand_number,room_id,deal,code,ended_at,received,game_over,thrown_in,practice,
+      bidder,bid,contract,declaration,result_team,result_marks,team0_points,team1_points,team0_tricks,team1_tricks,
+      marks_before_0,marks_before_1,marks_after_0,marks_after_1,payload) VALUES(${Array(27).fill('?').join(',')})`)
+      .bind(id,entry.source,record.gameId,record.handNumber,entry.roomId??null,facts.deal,record.code,record.endedAt,now,record.gameOver?1:0,record.thrownIn?1:0,record.practiceHands?1:0,
+        facts.bidder,facts.bid,facts.contract,facts.declaration,facts.resultTeam,facts.resultMarks,facts.points[0],facts.points[1],facts.tricks[0],facts.tricks[1],
+        record.marksBefore[0],record.marksBefore[1],record.marksAfter[0],record.marksAfter[1],JSON.stringify(record)));
+    entry.players.forEach((p,seat)=>statements.push(db.prepare('INSERT OR IGNORE INTO hand_players(hand_id,seat,kind,account_id,device_id,name,player) VALUES(?,?,?,?,?,?,?)')
+      .bind(id,seat,p.kind,p.account??null,p.device??null,p.name??null,p.player??null)));
+  }
+  return statements;
 }
+const remote=(r:Row):RemoteHand=>({id:r.id,source:r.source,seat:r.seat,device:r.device_id,record:JSON.parse(r.payload) as HandRecord,received:r.received});
+const cursor=(r:Row)=>`${r.received}|${r.id}`;
+function parseCursor(value:string|null):[string,string]|null|undefined {
+  if(value===null)return null;
+  const at=value.indexOf('|');
+  if(at<1||at>40||value.length-at>200)return undefined;
+  return [value.slice(0,at),value.slice(at+1)];
+}
+const MINE=`SELECT h.id,h.source,p.seat,p.device_id,h.payload,h.received FROM hand_players p JOIN hands h ON h.id=p.hand_id WHERE p.account_id=?`;
 export async function statsRequest(request:Request,env:AccountEnv):Promise<Response> {
   const url=new URL(request.url),path=url.pathname.slice('/api/stats'.length),db:IdeasDatabase|undefined=env.QUESTIONS;
   if(!db)return path===''&&request.method==='GET'?json({available:false,account:null}):json({error:'This preview keeps stats on your device only.',local_only:true},503);
@@ -35,7 +58,7 @@ export async function statsRequest(request:Request,env:AccountEnv):Promise<Respo
     const account=await accountSession(request,env);
     if(path===''&&request.method==='GET') {
       if(!account)return json({available:true,account:null});
-      const totals=await db.prepare('SELECT COUNT(*) hands, COUNT(DISTINCT device_id) devices FROM account_hands WHERE account_id=?').bind(account.id).first<{hands:number;devices:number}>();
+      const totals=await db.prepare('SELECT COUNT(DISTINCT hand_id) hands, COUNT(DISTINCT device_id) devices FROM hand_players WHERE account_id=?').bind(account.id).first<{hands:number;devices:number}>();
       return json({available:true,account:{id:account.id,name:account.name},hands:totals?.hands??0,devices:totals?.devices??0});
     }
     if(!account)return json({error:'Sign in to connect your stats.'},401);
@@ -43,10 +66,8 @@ export async function statsRequest(request:Request,env:AccountEnv):Promise<Respo
       const after=parseCursor(url.searchParams.get('after'));
       if(after===undefined)return json({error:'Invalid page.'},400);
       const {results}=await (after
-        ? db.prepare(`SELECT device_id,hand_id,payload,received FROM account_hands WHERE account_id=? AND (received,device_id,hand_id)>(?,?,?)
-            ORDER BY received,device_id,hand_id LIMIT ${PAGE+1}`).bind(account.id,...after)
-        : db.prepare(`SELECT device_id,hand_id,payload,received FROM account_hands WHERE account_id=? ORDER BY received,device_id,hand_id LIMIT ${PAGE+1}`).bind(account.id)
-      ).all<Row>();
+        ? db.prepare(`${MINE} AND (h.received,h.id)>(?,?) ORDER BY h.received,h.id LIMIT ${PAGE+1}`).bind(account.id,...after)
+        : db.prepare(`${MINE} ORDER BY h.received,h.id LIMIT ${PAGE+1}`).bind(account.id)).all<Row>();
       const page=results.slice(0,PAGE);
       return json({items:page.map(remote),next:results.length>PAGE?cursor(page[PAGE-1]!):null});
     }
@@ -55,30 +76,31 @@ export async function statsRequest(request:Request,env:AccountEnv):Promise<Respo
       const data=await body(request);
       if(typeof data.device!=='string'||!DEVICE_ID.test(data.device))return json({error:'Invalid device.'},400);
       if(!Array.isArray(data.hands)||data.hands.length>UPLOAD_BATCH)return json({error:`Send up to ${UPLOAD_BATCH} hands at a time.`},400);
-      const now=new Date().toISOString(),stored:string[]=[],rejected:{id:string;error:string}[]=[],statements=[];
+      const device=data.device,entries:HandEntry[]=[],rejected:{id:string;error:string}[]=[];
       for(const value of data.hands) {
         const id=value&&typeof value==='object'&&typeof (value as {id:unknown}).id==='string'?(value as {id:string}).id.slice(0,90):'';
         try {
-          const {record,game}=validHandRecord(value),facts=handSummary(record,game);
-          statements.push(db.prepare(`INSERT OR IGNORE INTO account_hands(account_id,device_id,hand_id,game_id,hand_number,ended_at,game_over,thrown_in,practice,player,
-            deal,bidder,bid,contract,declaration,result_team,result_marks,won,team0_points,team1_points,team0_tricks,team1_tricks,
-            marks_before_0,marks_before_1,marks_after_0,marks_after_1,payload,received) VALUES(${Array(28).fill('?').join(',')})`)
-            .bind(account.id,data.device,record.id,record.gameId,record.handNumber,record.endedAt,record.gameOver?1:0,record.thrownIn?1:0,record.practiceHands?1:0,record.player,
-              facts.deal,facts.bidder,facts.bid,facts.contract,facts.declaration,facts.resultTeam,facts.resultMarks,facts.won,facts.points[0],facts.points[1],facts.tricks[0],facts.tricks[1],
-              record.marksBefore[0],record.marksBefore[1],record.marksAfter[0],record.marksAfter[1],JSON.stringify(record),now));
-          stored.push(record.id);
+          const {record}=validHandRecord(value);
+          // Solo play: the human at seat 0, this device's Walt in the other three.
+          const walt:SeatPlayer={kind:'walt',player:record.player};
+          entries.push({record,source:'solo',players:[{kind:'human',account:account.id,device},walt,walt,walt]});
         } catch(error) {rejected.push({id,error:error instanceof Error?error.message:'Invalid hand record.'});}
       }
-      if(statements.length)await db.batch(statements);
-      // Acknowledge only ids now present for this device, whether this upload or an earlier one wrote them.
-      // (D1 binds at most 100 variables per statement.)
-      const present=new Set<string>();
-      for(let i=0;i<stored.length;i+=90) {
-        const chunk=stored.slice(i,i+90);
-        for(const row of (await db.prepare(`SELECT hand_id FROM account_hands WHERE account_id=? AND device_id=? AND hand_id IN (${chunk.map(()=>'?').join(',')})`)
-          .bind(account.id,data.device,...chunk).all<{hand_id:string}>()).results)present.add(row.hand_id);
+      if(entries.length)await db.batch(handStatements(db,entries));
+      // Acknowledge only hands now connected to this account, whether this upload or an earlier one wrote them.
+      // A hand another account connected first stays with that account. (D1 binds at most 100 variables per statement.)
+      const owners=new Map<string,string|null>();
+      for(let i=0;i<entries.length;i+=90) {
+        const chunk=entries.slice(i,i+90).map(handId);
+        for(const row of (await db.prepare(`SELECT hand_id,account_id FROM hand_players WHERE seat=0 AND hand_id IN (${chunk.map(()=>'?').join(',')})`).bind(...chunk).all<{hand_id:string;account_id:string|null}>()).results)owners.set(row.hand_id,row.account_id);
       }
-      return json({account:account.id,stored:stored.filter(id=>present.has(id)),rejected});
+      const stored:string[]=[];
+      for(const entry of entries) {
+        const owner=owners.get(handId(entry));
+        if(owner===account.id)stored.push(entry.record.id);
+        else if(owner)rejected.push({id:entry.record.id,error:'This hand is already connected to another account.'});
+      }
+      return json({account:account.id,stored,rejected});
     }
     return json({error:'Not found.'},404);
   } catch(error) {return error instanceof SyntaxError?json({error:error.message||'Invalid stats request.'},400):json({error:'Stats are temporarily unavailable. Your device keeps them and can retry.'},503);}

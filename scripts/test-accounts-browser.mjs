@@ -13,7 +13,7 @@ const mf=new Miniflare({modules:true,script:bundled.outputFiles[0].text,compatib
 const db=await mf.getD1Database('QUESTIONS');
 const sql=await readFile('migrations/0002_family_ideas.sql','utf8'),[tables,trigger]=sql.split('CREATE TRIGGER');
 for(const statement of tables.split(';').filter(s=>s.trim()))await db.prepare(statement).run();await db.prepare(`CREATE TRIGGER${trigger}`).run();
-for(const file of ['migrations/0003_accounts.sql','migrations/0004_account_hands.sql'])for(const statement of (await readFile(file,'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
+for(const file of ['migrations/0003_accounts.sql','migrations/0004_hands.sql'])for(const statement of (await readFile(file,'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
 const browser=await chromium.launch();
 const mime={'.html':'text/html','.js':'application/javascript','.css':'text/css','.wasm':'application/wasm','.json':'application/json','.svg':'image/svg+xml','.png':'image/png'};
 async function newPerson() {
@@ -67,9 +67,9 @@ try {
  // Signing in connected the device's hand once; the account page says so and D1 holds it.
  await dad.page.getByText('1 finished hand on this device · 1 connected to your account.',{exact:true}).waitFor();
  await dad.page.getByText('Your account holds 1 hand from 1 device.',{exact:true}).waitFor();
- assert.equal((await db.prepare('SELECT COUNT(*) n FROM account_hands WHERE account_id=?').bind(dadId).first()).n,1);
+ assert.equal((await db.prepare('SELECT COUNT(*) n FROM hand_players WHERE account_id=?').bind(dadId).first()).n,1);
  await dad.page.getByRole('button',{name:'Connect now',exact:true}).click();await dad.page.getByText('Your account holds 1 hand from 1 device.',{exact:true}).waitFor();
- assert.equal((await db.prepare('SELECT COUNT(*) n FROM account_hands WHERE account_id=?').bind(dadId).first()).n,1);
+ assert.equal((await db.prepare('SELECT COUNT(*) n FROM hand_players WHERE account_id=?').bind(dadId).first()).n,1);
  await dad.page.getByRole('button',{name:'Ask for family access'}).click();await dad.page.getByRole('button',{name:'Access requested'}).waitFor();
  await owner.page.getByRole('button',{name:'Refresh requests'}).click();
  const dadCard=owner.page.locator('.account-member').filter({hasText:dadId});await dadCard.getByRole('button',{name:'Grant family access'}).click();

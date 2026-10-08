@@ -42,8 +42,8 @@ export function validHandRecord(value: unknown): { record: HandRecord; game: Gam
 
 /**
  * The plain facts of a finished hand for leaderboards and same-deal play,
- * read from the replay rather than trusted from the device. The human always
- * sits at seat 0, so "we" is team 0. Nothing here needs the replay decoded again.
+ * read from the replay rather than trusted from the device. A seat's team is
+ * seat % 2, so whether a player won is resultTeam === seat % 2.
  */
 export interface HandSummary {
   /** Shaker plus the four dealt hands: everyone who played this exact deal shares it. */
@@ -55,8 +55,6 @@ export interface HandSummary {
   readonly declaration: string | null;
   readonly resultTeam: number | null;
   readonly resultMarks: number | null;
-  /** 1 when our team took the marks, 0 when the other team did, null when thrown in. */
-  readonly won: number | null;
   readonly points: readonly [number, number];
   readonly tricks: readonly [number, number];
 }
@@ -71,7 +69,6 @@ export function handSummary(record: HandRecord, game: GameState): HandSummary {
     declaration: declaration ? (declaration.type === 'pip' ? String(declaration.pip) : declaration.type) : null,
     resultTeam: result?.team ?? null,
     resultMarks: result?.marks ?? null,
-    won: result ? (result.team === 0 ? 1 : 0) : null,
     points: [game.points[0], game.points[1]],
     tricks: [game.tricks.filter((t) => t.winner % 2 === 0).length, game.tricks.filter((t) => t.winner % 2 === 1).length],
   };

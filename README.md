@@ -197,9 +197,12 @@ cached locally, so the merged log reads the same on every device, oldest first.
 **Your account** shows how many hands are on this device, how many are
 connected, and how many the account holds across devices; **Connect now**
 retries at once. The game itself only uploads, and only when there is a new
-hand to send: an idle or signed-out tab makes no requests. Full game history
+hand to send: an idle or signed-out tab makes no requests. Family rooms record
+their finished hands directly, one row per seat, so a signed-in person's room
+hands join the same stats without any phone uploading them. Full game history
 and Walt results still stay on the device; the service keeps each hand's plays,
-bid, result, points and tricks, which is what a leaderboard needs.
+bid, result, points and tricks, and who sat where, which is what a leaderboard
+needs.
 See [optional accounts](docs/OPTIONAL-ACCOUNTS.md#finished-hand-stats).
 
 The finished-hand store was rescued from PR #7 / commit

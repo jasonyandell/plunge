@@ -42,43 +42,51 @@ Command-line equivalents are `grant ACCOUNT_ID` and `revoke ACCOUNT_ID`.
 
 ## Finished-hand stats
 
-The device keeps its finished-hand log (`plunge-stats` in IndexedDB, one record
-per completed solo hand: replay code, marks before and after, result, computer
-player). While signed in, the app connects that log to the account through
+One shape for every finished hand, solo or family room: a `hands` row (the
+replay, the deal key, bidder, bid, contract, declaration, result, points and
+tricks per team, marks before and after, practice and thrown-in flags, and the
+recorder's record verbatim in `payload`) and one `hand_players` row per seat
+(`human` with account, device or name; `walt` with the Walt version when known).
+A player's team is `seat % 2`, so "won" is `result_team = seat % 2`. Everyone who
+played the same deal shares `deal`, which is what a same-hand challenge groups on.
+The worker reads every fact from the replay itself; nothing is trusted from a
+device. Walt's own receipts and estimates never leave the device.
+
+**Solo play.** The device keeps its finished-hand log (`plunge-stats` in
+IndexedDB). While signed in, the app connects that log to the account through
 `/api/stats`:
 
 - **Upload once, first write kept.** Each hand is sent with a random per-install
-  device id and stored under `(account, device, hand)`; a repeat is acknowledged
-  and never overwrites. The device marks a hand connected only after the service
-  names it as stored. Hands the service will not accept (a replay that is not a
-  finished hand) stay on the device and are counted separately.
-- **Merge by account.** Every device of the account uploads to the same table.
-  Two devices that happened to use the same game id keep both hands. Each device
-  pulls the others' hands into a local cache, continuing from where it left off,
-  so the merged log reads the same everywhere and offline.
-- **Nothing while signed out or on previews.** The device log is never changed by
-  sync. Signing out stops uploads; signing in as another account on the same
-  device connects the device's hands to that account too.
+  device id and stored as `device:game:hand`; a repeat is acknowledged and never
+  overwrites. The device marks a hand connected only after the service names it
+  as stored. A hand another account connected first stays with that account and
+  the device is told so. Hands the service will not accept (a replay that is not
+  a finished hand) stay on the device and are counted separately.
 - **Light touch.** The game's timer (every 30 seconds), focus, reconnect and
   each finished hand only *upload*, and only when the device has a hand its last
   known account hasn't acknowledged: an idle or signed-out tab makes no request.
-  An ended session is noticed on the next upload and the device goes quiet until
-  the account page signs in again. The account page (and **Connect now**) does
-  the full pass: who is signed in, upload, pull the other devices, and the
-  account's totals, re-read only when the visit changed something.
+  The upload is sent with `keepalive`, so a hand that finishes as the tab closes
+  still gets its attempt. An ended session is noticed on the next upload and the
+  device goes quiet until the account page signs in again. The account page (and
+  **Connect now**) does the full pass: who is signed in, upload, pull the
+  account's other hands, and the totals, re-read only when the visit changed
+  something.
+- **Nothing while signed out or on previews.** The device log is never changed
+  by sync. Signing out stops uploads.
 
-The migration `0004_account_hands.sql` is applied by the normal deployment. The
-table holds the record verbatim (`payload`) beside columns the worker reads from
-the replay itself, so a leaderboard or a same-deal challenge is plain SQL:
-`deal` (shaker plus the four dealt hands, indexed; everyone who played the same
-deal shares it), `bidder`, `bid` (points as bid, 42 per mark), `contract`,
-`declaration`, `result_team`, `result_marks`, `won` (our team took the marks),
-`team0_points`/`team1_points`, `team0_tricks`/`team1_tricks`, the marks before
-and after, `practice`, `thrown_in` and `game_over`. The human always sits at
-seat 0, so team 0 is "us". Walt's own receipts and estimates never leave the
-device; the replay codes are the human-played hands that labeled data will be
-derived from. `tests/stats-api.test.ts` covers the service and
-`tests/stats-sync.test.ts` the device side against the real worker and D1.
+**Family rooms.** The room's Durable Object records each finished hand itself,
+the moment it ends, with all four seats: a signed-in person's seat carries their
+account (the worker sets it from the session cookie on create, join and
+reconnect; a client cannot supply it), everyone else by name, empty seats as
+Walt. No phone uploads anything, so drop-in, refreshes and flaky connections
+cannot lose a hand. A failed database write is kept in the room and retried on
+the next command or alarm. As in solo play, a hand with a takeback in it is
+practice and is not recorded; later hands of that game carry `practice = 1`.
+
+The migration `0004_hands.sql` is applied by the normal deployment.
+`tests/stats-api.test.ts` covers the service, `tests/stats-sync.test.ts` the
+device side against the real worker and D1, and `tests/room-stats.test.ts` a
+room hand recorded with its seats.
 
 ## Passkeys and the stable install
 

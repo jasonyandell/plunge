@@ -1,7 +1,7 @@
 import { MAX_QUESTION_BYTES, OWNER_TOKEN, QUESTION_ID, publicQuestion, validQuestion, validUpdate,
   type Question, type RemoteQuestion } from '../src/questions/model';
 import { ideasRequest, type IdeasDatabase } from './ideas';
-import { accountsRequest, type AccountEnv } from './accounts';
+import { accountsRequest, accountSession, type AccountEnv } from './accounts';
 import { roomRequest, type RoomsNamespace } from './rooms';
 import { statsRequest } from './stats';
 export { PlungeRoom } from './rooms';
@@ -36,7 +36,8 @@ export default {
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     if (url.pathname === '/api/account' || url.pathname.startsWith('/api/account/')) return accountsRequest(request,env);
     if (url.pathname === '/api/stats' || url.pathname.startsWith('/api/stats/')) return statsRequest(request,env);
-    if (url.pathname === '/api/rooms' || url.pathname.startsWith('/api/rooms/')) return roomRequest(request, env.ROOMS);
+    // A signed-in person's seat carries their account, so room hands join their stats.
+    if (url.pathname === '/api/rooms' || url.pathname.startsWith('/api/rooms/')) return roomRequest(request, env.ROOMS, (await accountSession(request,env).catch(()=>null))?.id ?? null);
     if (url.pathname === '/api/ideas' || url.pathname.startsWith('/api/ideas/')) return ideasRequest(request, env);
     const match=/^\/api\/questions(?:\/([a-f0-9]{32}))?$/.exec(url.pathname);
     if (!match) return json({error:'Not found.'},404);
