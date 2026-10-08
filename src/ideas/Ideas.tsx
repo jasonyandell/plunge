@@ -52,7 +52,7 @@ export function Ideas() {
     <div class="ideas-heading"><p class="eyebrow">Your seat at the drawing table</p><h1>Ideas for Plunge</h1>
       <p>Little fixes. Big ideas. A game that feels more like ours.</p></div>
     {QUESTIONS_LOCAL_ONLY ? <section class="idea-paper"><h2>Keep the conversation going</h2><p>This is a test version of Plunge. Your ideas and replies live together on the main game.</p>
-      <a class="big-btn" href={ideasLink(selected ?? undefined)}>Open your ideas</a></section>
+      <a class="big-btn" href="/?ideas=1&demo=bidding">Try the family ideas demo</a><p><a href={ideasLink(selected ?? undefined)}>Open your live ideas</a></p></section>
     : !name ? <section class="idea-paper"><h2>Come on in</h2><p>Open your personal invite from Jason, or paste it here. We’ll remember you on this device.</p>
       <form onSubmit={enter}><label>Your invite link<input autoComplete="off" type="password" value={invite} onInput={e=>setInvite(e.currentTarget.value)} /></label><button class="big-btn" type="submit">Open my ideas</button></form>
       {token && !error && <p role="status">Opening your ideas…</p>}</section>

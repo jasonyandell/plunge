@@ -120,3 +120,9 @@ It uses separate Mom and Dad browser sessions, multiple ideas, per-card drafts,
 offline retry and 320/390-pixel phone layouts. Service integration tests use real
 Miniflare D1 for ownership, retry, racing claims, replies during builds, lease
 expiry, exact preview identity, stale publication and revocation.
+
+### Bidding walkthrough
+
+Open `/?ideas=1&demo=bidding` for a browser-only demo, also linked from the preview's Ideas page. It starts with an explicitly labeled sample conversation about keeping your bid visible and embeds the existing PR #22 playable preview. Mom/Dad switching, replies, new cards, and drafts are stored under separate `plunge:ideas-demo:*` / `plunge:ideas-demo-draft:*` browser keys. This route does not read invites, call the ideas service, or start builds. PR #22 must remain deployed for the playable part; its link is separate from this walkthrough's PR.
+
+Validated the demo at 390px and 320px: draft reload, both family identities replying, new-card persistence, playable preview bidding, return to conversation, and zero ideas API requests.
