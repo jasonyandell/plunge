@@ -255,3 +255,39 @@ problem, not a request to reword the idea. Full diagnostics remain in the privat
 run archive. The long AI strength tests yield between deterministic games so
 reporting acknowledgments are serviced even under background CPU scheduling;
 seeds, counts, pass thresholds, and all required checks remain unchanged.
+
+### Screenshots in the conversation
+
+The main app's idea and reply boxes accept up to two PNG, JPEG, or WebP pictures.
+**Add a screenshot** opens the device's picture picker; **Mark where you mean**
+provides an optional red pen with Undo. Existing phone markup works too. Tap a
+sent picture to enlarge it without leaving the app. Pictures are visible to the
+same signed-in family/invite members who can read the card. Playing remains guest
+accessible; pictures are never public preview assets.
+
+The browser resizes to at most 1600 pixels per edge, paints a fresh JPEG (removing
+source metadata), and limits each picture to 400 KB. Text and pictures stay in an
+IndexedDB draft across reloads; a storage failure explicitly asks the user to keep
+the page open. Failed sends retain the draft. Two normalized pictures and text are
+saved atomically in the immutable message's `screenshots` column (migration
+0005), so retrying a message cannot append, replace, or duplicate its pictures.
+Requests are bounded at 1.1 MB; other idea endpoints retain their 16 KB limit.
+
+The protected image route requires current family access. The separate admin
+image route is restricted to an active run's frozen conversation and lease.
+Thread/claim JSON includes image metadata only. The trusted coordinator downloads
+pictures to private `runs/<run>/screenshots/` files, outside its Git checkout,
+and records the message/image/path mapping in `screenshots.json`. All pictures
+in the frozen conversation are retained for follow-ups. The last eight are passed
+with `--image` to both new and resumed Codex turns; the prompt allows read-only
+viewing of earlier manifest images. Image content cannot grant permissions or
+change coordinator instructions. Nothing uploads these files into a PR or preview. Claims advertise
+`supportsScreenshots: true`; an older coordinator cannot claim an idea containing
+pictures. This lets an already-running worker finish its current builds safely
+before the LaunchAgent loads the updated coordinator.
+
+Verification: `npm test`, `node --test scripts/test-ideas-builder.mjs`, and after
+`npm run build`, `node scripts/test-accounts-browser.mjs`. The browser test uses
+local D1, virtual passkeys, and intercepted requests, including markup, image-only
+cards, reload/retry recovery, protected viewing, and 320/390-pixel layouts. It does
+not replace testing a real iPhone's or Pixel's photo picker.

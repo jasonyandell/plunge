@@ -20,7 +20,7 @@ beforeAll(async()=>{
   const [tables,trigger]=sql.split('CREATE TRIGGER');
   for(const statement of tables!.split(';').filter(s=>s.trim()))await db.prepare(statement).run();
   await db.prepare(`CREATE TRIGGER${trigger}`).run();
-  for(const file of ['0003_accounts.sql','0004_idea_authorizations.sql'])
+  for(const file of ['0003_accounts.sql','0004_idea_authorizations.sql','0005_idea_screenshots.sql'])
     for(const statement of (await readFile(new URL(`../migrations/${file}`,import.meta.url),'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
   env={QUESTIONS:db,IDEAS_ADMIN_TOKEN:admin,ASSETS:{fetch:async()=>new Response('app')}};
   mom=await (await call('/admin/members','POST',{name:'Mom'},admin)).json() as typeof mom;
@@ -177,4 +177,43 @@ describe('family idea conversations and automatic builds',()=>{
     const res=await worker.fetch(new Request('https://preview.test/api/ideas'),{ASSETS:env.ASSETS});expect(res.status).toBe(503);
     const serialized=JSON.stringify(await (await call()).json());expect(serialized).not.toContain(mom.token);expect(serialized).not.toContain('token_hash');
   });
+});
+
+it('keeps screenshots private, atomic, immutable on retry, and frozen to the claimed conversation',async()=>{
+  const data=await readFile(new URL('./fixtures/screenshot.base64',import.meta.url),'utf8');
+  const idea=id(800),message=id(801),run=id(802);
+  // Isolate this case from the earlier revocation test.
+  const member=await (await call('/admin/members','POST',{name:'Picture sender'},admin)).json() as {token:string};
+  const other=await (await call('/admin/members','POST',{name:'Picture viewer'},admin)).json() as {id:string;token:string};
+  const create=()=>call(`/${idea}`,'PUT',{body:'Put bidding beside these names',screenshots:[{data}]},member.token);
+  expect((await create()).status).toBe(200);
+  const first=await (await create()).json() as IdeaThread;
+  expect(first.card.revision).toBe(1);expect(first.messages).toHaveLength(1);
+  const images=first.messages[0]!.screenshots!;
+  expect(images).toHaveLength(1);expect(images[0]).toMatchObject({width:20,height:30});
+  expect(JSON.stringify(first)).not.toContain(data);
+  const imagePath=`/attachments/${images[0]!.id}`;
+  expect((await call(imagePath,'GET',undefined,'')).status).toBe(401);
+  const picture=await call(imagePath,'GET',undefined,other.token);
+  expect(picture.headers.get('cache-control')).toBe('private, no-store');
+  expect(Buffer.from(await picture.arrayBuffer()).toString('base64')).toBe(data);
+  expect((await call(`/${idea}`,'PUT',{body:'Retry must not add another image',screenshots:[{data},{data}]},member.token)).status).toBe(200);
+  expect(((await (await call(`/${idea}`,'GET',undefined,member.token)).json()) as IdeaThread).messages[0]!.screenshots).toHaveLength(1);
+  expect(await (await call('/admin/claim','POST',{runId:run,ideaId:idea},admin)).json()).toBeNull();
+  const job=await (await call('/admin/claim','POST',{runId:run,ideaId:idea,supportsScreenshots:true},admin)).json() as IdeaThread;
+  expect(job.messages[0]!.screenshots).toEqual(images);
+  const download=(image:string)=>call(`/admin/runs/${run}/attachments/${image}`,'GET',undefined,admin);
+  expect((await download(images[0]!.id)).status).toBe(200);
+  const reply=await (await call(`/${idea}/messages`,'PUT',{id:message,body:'',screenshots:[{data}]},member.token)).json() as IdeaThread;
+  expect(reply.messages[1]!.body).toBe('Screenshot for this idea.');
+  expect((await download(reply.messages[1]!.screenshots![0]!.id)).status).toBe(404);
+  expect((await call(`/admin/runs/${id(803)}/attachments/${images[0]!.id}`,'GET',undefined,admin)).status).toBe(404);
+  await call('/admin/revoke','POST',{id:other.id},admin);
+  expect((await call(imagePath,'GET',undefined,other.token)).status).toBe(401);
+  await env.QUESTIONS!.prepare('UPDATE ideas SET lease_until=0 WHERE run_id=?').bind(run).run();
+  expect((await download(images[0]!.id)).status).toBe(404);
+  for(const screenshots of [[{data:'<svg></svg>'}],[{data:'AAAA'}],[{data:'A'.repeat(540000)}],[{data},{data},{data}]]) {
+    expect((await call(`/${id(804)}`,'PUT',{body:'Rejected picture',screenshots},member.token)).status).toBe(400);
+    expect((await call(`/${id(804)}`,'GET',undefined,member.token)).status).toBe(404);
+  }
 });
