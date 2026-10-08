@@ -21,7 +21,10 @@ anyone says no; alone with Walt they go ahead at once. A closed table lets
 newcomers knock, and one yes from anyone present lets them in. Asking someone to
 step out needs most of the table. Earlier attempts stay in history. For Nel-O,
 win a bid of one mark or more and choose Nel-O; your partner sits out. Your solo
-game stays saved. [The family table](docs/FAMILY-TABLE.md) describes the design.
+game stays saved. Signed-in family (see **Your account**) get a **Family table**
+button on the home screen that always leads to the same standing table, with
+their own chair waiting from any device. [The family table](docs/FAMILY-TABLE.md)
+describes the design.
 
 The live table plays **straight 42** with regular bidding: 30–41, then marks.
 Each player bids once or passes, starting left of the shaker; the winner calls

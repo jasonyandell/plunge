@@ -67,13 +67,24 @@ A kicked or departed key reconnects to a socket that is closed with code 4003
 and the reason on its first ping, so the browser can forget the seat instead of
 reconnecting forever.
 
+## Finding the table
+
+Invite rooms are still random ids that expire after a day idle. Signed-in
+accounts with family access (see [optional accounts](OPTIONAL-ACCOUNTS.md)) also
+get the family's one standing table: `POST /api/rooms/family` finds its room id
+in the `family_table` D1 row, opening a fresh room when none exists or the old
+one expired, and seats the account. A standing table lives thirty days past its
+last activity. Seats there are keyed to the account, so the same person on a
+second device gets the same chair and key back; a browser cannot claim a chair
+by naming an account, because the entry worker sets the identity header only
+after checking the session and strips any copy a client sent. A closed family
+table still asks: the home screen sends the signed-in person to the room, where
+they knock like anyone else. The home screen asks `GET /api/rooms/family`
+whether to show **Family table**, and otherwise remembers the last table this
+browser sat at.
+
 ## Not yet
 
-- **A standing family table.** Rooms are still random ids that expire after a
-  day idle. The plan is one durable table per family owner, discovered through
-  the optional passkey accounts and the family grant, with seats keyed to the
-  account so the same person on two devices is one chair. Until then the home
-  screen can remember the last table this browser sat at.
 - **Spectating.** Visitors receive snapshots but the screen only shows who is
   at the table while they knock.
 - **Runner choice.** The lowest present seat may be the slowest phone. Walt's

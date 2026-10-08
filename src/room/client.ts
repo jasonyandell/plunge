@@ -36,7 +36,16 @@ export function forgetSeat(roomId: string, storage: Storage): void {
 export function lastRoom(storage: Storage): string | null {
   try { const id = storage.getItem(LAST); return id && /^[a-f0-9]{32}$/.test(id) ? id : null; } catch { return null; }
 }
-export class ClosedTableError extends Error { readonly closed = true; }
+export class ClosedTableError extends Error { readonly closed = true; constructor(message: string, readonly roomId?: string) { super(message); } }
+/** The family's standing table, for a signed-in account with family access. */
+export async function familyTable(): Promise<RoomCredentials> {
+  const response = await fetch('/api/rooms/family', { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
+  const body = await response.json() as RoomCredentials & { error?: string; closed?: boolean };
+  if (response.status === 403 && body.closed) throw new ClosedTableError(body.error ?? 'The family table is closed.', body.roomId);
+  if (!response.ok) throw new Error(body.error ?? 'The family table could not be found.');
+  return body;
+}
+export const roomUrl = (roomId: string): string => `${location.pathname}?rooms=1#room=${roomId}`;
 export async function enterRoom(name: string, roomId?: string, knock?: string): Promise<RoomCredentials> {
   const response = await fetch(roomId ? `/api/rooms/${roomId}/join` : '/api/rooms', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, ...(knock ? { knock } : {}) }),

@@ -12,6 +12,9 @@ import { newProposal, objector, PROPOSAL_KINDS, proposalStatus } from './room-vo
 const TOKEN = /^[a-f0-9]{64}$/;
 const COMMAND_ID = /^[a-zA-Z0-9_-]{1,128}$/;
 const DAY = 24 * 60 * 60 * 1000;
+/** A standing family table outlives a quiet month; an invite room lasts a day. */
+const STANDING = 30 * DAY;
+const ACCOUNT_HEADER = 'X-Plunge-Account';
 const HEARTBEAT = 15000;
 /** A seat stays the person's for this long after they drop; then Walt plays it until they return. */
 export const GRACE = 20000;
@@ -20,7 +23,7 @@ const MAX_VISITORS = 8;
 const MAX_MESSAGE = 24000;
 const json = (value: unknown, status = 200) => Response.json(value, { status,
   headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
-async function roomBody(request: Request): Promise<{ name: unknown; knock?: unknown }> {
+async function roomBody(request: Request): Promise<{ name: unknown; knock?: unknown; standing?: unknown }> {
   const reader = request.body?.getReader();
   if (!reader) throw new Error('Please enter your name.');
   let size = 0, text = ''; const decoder = new TextDecoder();
@@ -30,15 +33,26 @@ async function roomBody(request: Request): Promise<{ name: unknown; knock?: unkn
     if (size > 1024) { await reader.cancel(); throw new Error('Room request is too large.'); }
     text += decoder.decode(chunk.value, { stream: true });
   }
-  return JSON.parse(text + decoder.decode()) as { name: unknown; knock?: unknown };
+  return JSON.parse(text + decoder.decode()) as { name: unknown; knock?: unknown; standing?: unknown };
+}
+/** Set only by the entry worker after checking the session; never trusted from a browser. */
+function accountFrom(request: Request): { id: string; name: string } | undefined {
+  try {
+    const value = JSON.parse(request.headers.get(ACCOUNT_HEADER) ?? 'null') as { id?: unknown; name?: unknown } | null;
+    return value && typeof value.id === 'string' && /^[a-f0-9]{32}$/.test(value.id) && typeof value.name === 'string'
+      ? { id: value.id, name: cleanName(value.name) } : undefined;
+  } catch { return undefined; }
 }
 export const randomKey = (bytes: number): string => [...crypto.getRandomValues(new Uint8Array(bytes))]
   .map(value => value.toString(16).padStart(2, '0')).join('');
 
-/** `seen`: last moment this seat was known connected; absence is measured from it. */
-interface SavedSeat { name: string; token: string; seen: number }
+/** `seen`: last moment this seat was known connected; absence is measured from it.
+ * `account`: the signed-in account holding this seat, so the same person on another device gets the same chair. */
+interface SavedSeat { name: string; token: string; seen: number; account?: string }
 export interface SavedRoom {
   state: RoomState; players: (SavedSeat | null)[]; accepted: string[]; updated: number;
+  /** The family's one standing table, found through accounts rather than an invite. */
+  standing?: boolean;
   /** Actual human decisions in this hand. Missing on rooms saved by older code. */
   humanSteps?: { handNumber: number; indices: number[] };
   /** Knocks the table said yes to; each seats one person once. */
@@ -53,13 +67,16 @@ export function cleanName(value: unknown): string {
   if (!name) throw new Error('Please enter your name.');
   return name;
 }
-export function createRoom(roomId: string, name: string, token = randomKey(32), now = Date.now()): SavedRoom {
+export function createRoom(roomId: string, name: string, token = randomKey(32), now = Date.now(),
+  options: { standing?: boolean; account?: string } = {}): SavedRoom {
   return { state: { type: 'state', roomId, revision: 0, seed: '', sessionId: '', game: null,
     seats: [null, null, null, null], runner: null, open: true, visitors: 0, proposal: null, lastVote: null,
     started: false, holdUntil: 0, thinkingSeat: null,
     nativeReceipts: {}, auctionSurveys: {}, retry: null, practiceHands: [], lastUndo: null },
-    players: [{ name: cleanName(name), token, seen: now }, null, null, null], accepted: [], updated: now, admitted: [], former: [] };
+    players: [{ name: cleanName(name), token, seen: now, ...(options.account ? { account: options.account } : {}) }, null, null, null],
+    accepted: [], updated: now, admitted: [], former: [], ...(options.standing ? { standing: true } : {}) };
 }
+export const roomLifetime = (room: SavedRoom): number => room.standing ? STANDING : DAY;
 
 // --- Presence, derived from the sockets the coordinator passes in ------------
 const seated = (room: SavedRoom, connected: ReadonlySet<Seat>): Set<Seat> =>
@@ -80,10 +97,17 @@ export function roomSnapshot(room: SavedRoom, connected: ReadonlySet<Seat>, now 
     seats: room.players.map((player, seat) => player
       ? { name: player.name, connected: connected.has(seat as Seat), away: isAway(room, seat as Seat, connected, now) } : null) };
 }
-/** Sitting down works any time; a hand in progress just hands you the seat's dominoes. */
-export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), now = Date.now(), knock?: string): RoomCredentials {
+/** Sitting down works any time; a hand in progress just hands you the seat's dominoes.
+ * A signed-in account gets its own chair back from any device. */
+export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), now = Date.now(), knock?: string, account?: string): RoomCredentials {
   // Record old human membership before a newcomer takes a formerly Walt seat.
   upgradeRoom(room);
+  const own = account === undefined ? -1 : room.players.findIndex(player => player?.account === account);
+  if (own >= 0) {
+    const player = room.players[own]!;
+    if (player.name !== cleanName(name)) { player.name = cleanName(name); room.state = { ...room.state, revision: room.state.revision + 1 }; room.updated = now; }
+    return { roomId: room.state.roomId, token: player.token, seat: own as Seat };
+  }
   if (!room.state.open) {
     const admission = room.admitted!.findIndex(entry => entry.knock === knock && entry.until > now);
     if (admission < 0) throw new ClosedTable('This table is closed. Knock to ask to come in.');
@@ -91,7 +115,7 @@ export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), n
   }
   const seat = ([2, 1, 3, 0] as const).find(seat => !room.players[seat]);
   if (seat === undefined) throw new Error('All four seats are taken.');
-  room.players[seat] = { name: cleanName(name), token, seen: now };
+  room.players[seat] = { name: cleanName(name), token, seen: now, ...(account ? { account } : {}) };
   room.state = { ...room.state, revision: room.state.revision + 1, thinkingSeat: null };
   room.updated = now;
   return { roomId: room.state.roomId, token, seat };
@@ -326,7 +350,7 @@ export class PlungeRoom {
     if (this.room.state.proposal) deadlines.push(this.room.state.proposal.deadline);
     for (const [seat, player] of this.room.players.entries())
       if (player && !connected.has(seat as Seat) && player.seen + GRACE > now) deadlines.push(player.seen + GRACE);
-    await this.ctx.storage.setAlarm(Math.min(this.room.updated + DAY, ...deadlines));
+    await this.ctx.storage.setAlarm(Math.min(this.room.updated + roomLifetime(this.room), ...deadlines));
   }
   private async save(): Promise<void> {
     if (!this.room) return;
@@ -361,18 +385,21 @@ export class PlungeRoom {
     if (!match) return json({ error: 'Room not found.' }, 404);
     const roomId = match[1]!, operation = match[2];
     try {
+      const account = accountFrom(request);
       if (operation === 'create' && request.method === 'POST') {
         if (this.room) return json({ error: 'Room already exists.' }, 409);
-        const { name } = await roomBody(request);
-        this.room = createRoom(roomId, cleanName(name)); await this.save();
+        const { name, standing } = await roomBody(request);
+        // Only the entry worker, for a family account, opens a standing table.
+        this.room = createRoom(roomId, cleanName(name), undefined, Date.now(), { standing: standing === true && account !== undefined, ...(account ? { account: account.id } : {}) });
+        await this.save();
         return json({ roomId, token: this.room.players[0]!.token, seat: 0 });
       }
-      if (!this.room || this.room.updated + DAY <= Date.now()) return json({ error: 'This room expired. Please create a new one.' }, 404);
+      if (!this.room || this.room.updated + roomLifetime(this.room) <= Date.now()) return json({ error: 'This room expired. Please create a new one.' }, 404);
       if (operation === 'join' && request.method === 'POST') {
         const { name, knock } = await roomBody(request);
         settleRoom(this.room, this.connected(), Date.now());
         try {
-          const credentials = joinRoom(this.room, cleanName(name), undefined, Date.now(), typeof knock === 'string' ? knock : undefined);
+          const credentials = joinRoom(this.room, cleanName(name), undefined, Date.now(), typeof knock === 'string' ? knock : undefined, account?.id);
           await this.sync(true);
           return json(credentials);
         } catch (error) {
@@ -458,7 +485,7 @@ export class PlungeRoom {
   async webSocketError(socket: RoomSocket): Promise<void> { socket.close(1011, 'Please reconnect.'); await this.webSocketClose(socket); }
   async alarm(): Promise<void> {
     await this.ready;
-    if (this.room && this.room.updated + DAY > Date.now()) {
+    if (this.room && this.room.updated + roomLifetime(this.room) > Date.now()) {
       for (const socket of this.live()) if (socket.deserializeAttachment().lastSeen + HEARTBEAT <= Date.now())
         socket.close(CLOSE_PAUSED, 'Connection paused. Please reconnect.');
       if (this.connected().size) this.room.updated = Date.now();
@@ -484,5 +511,47 @@ export async function roomRequest(request: Request, namespace?: RoomsNamespace):
     if (!match || !ROOM_ID.test(match[1]!)) return json({ error: 'Room not found.' }, 404);
     roomId = match[1]!;
   }
-  return namespace.get(namespace.idFromName(roomId)).fetch(new Request(url, request));
+  const forwarded = new Request(url, request);
+  forwarded.headers.delete(ACCOUNT_HEADER);
+  return namespace.get(namespace.idFromName(roomId)).fetch(forwarded);
+}
+
+interface FamilyDatabase { prepare(query: string): { bind(...values: unknown[]): { first<T>(): Promise<T | null>; run(): Promise<unknown> } } }
+/** The family's standing table: one row in D1, one durable room, your own chair from any device. */
+export async function familyTableRequest(request: Request, namespace: RoomsNamespace | undefined, db: FamilyDatabase | undefined,
+  account: { id: string; name: string; family: number; owner: number } | null): Promise<Response> {
+  const url = new URL(request.url);
+  const allowed = !!account && (!!account.family || !!account.owner);
+  // The home screen asks whether to offer the table at all; the answer costs one session lookup.
+  if (request.method === 'GET') return json({ family: allowed && !!namespace && !!db });
+  if (request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
+  const origin = request.headers.get('Origin');
+  if (origin && origin !== url.origin) return json({ error: 'Wrong origin.' }, 403);
+  if (!namespace || !db) return json({ error: 'The family table is unavailable in this build.' }, 503);
+  if (!account) return json({ error: 'Sign in to find the family table.' }, 401);
+  if (!allowed) return json({ error: 'Ask Jason to grant family access from your account.' }, 403);
+  const headers = { 'Content-Type': 'application/json', [ACCOUNT_HEADER]: JSON.stringify({ id: account.id, name: account.name }) };
+  const call = (roomId: string, operation: 'create' | 'join', body: unknown) => namespace.get(namespace.idFromName(roomId))
+    .fetch(new Request(`${url.origin}/api/rooms/${roomId}/${operation}`, { method: 'POST', headers, body: JSON.stringify(body) }));
+  const current = async () => (await db.prepare('SELECT room_id FROM family_table WHERE id = ?').bind('family').first<{ room_id: string }>())?.room_id;
+  let roomId = await current();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (roomId === undefined) {
+      const fresh = randomKey(16);
+      const created = await call(fresh, 'create', { name: account.name, standing: true });
+      if (!created.ok) return json(await created.json(), created.status);
+      await db.prepare('INSERT OR IGNORE INTO family_table(id, room_id, created) VALUES (?, ?, ?)').bind('family', fresh, Date.now()).run();
+      roomId = await current();
+      if (roomId === fresh) return json({ ...(await created.json() as object), roomId });
+      continue; // Someone else opened the table first; sit at theirs.
+    }
+    const joined = await call(roomId, 'join', { name: account.name });
+    if (joined.status === 404) {
+      // The old table expired. Forget it and open another.
+      await db.prepare('DELETE FROM family_table WHERE id = ? AND room_id = ?').bind('family', roomId).run();
+      roomId = await current(); continue;
+    }
+    return json({ ...(await joined.json() as object), roomId }, joined.status);
+  }
+  return json({ error: 'The family table is busy. Please try again.' }, 503);
 }
