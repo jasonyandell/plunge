@@ -25,7 +25,11 @@ drafts. Anyone who receives the invite can use it; keep it within the family.
 ## Automatic builder
 
 `scripts/ideas/builder.mjs` runs one queued conversation per invocation using the
-Mac's existing Codex CLI ChatGPT sign-in and GitHub CLI login. It is intended to
+Mac's existing Codex CLI ChatGPT sign-in and GitHub CLI login. It explicitly
+selects `gpt-6-astra` with `high` reasoning and records the requested settings in
+each run's `model.json`. Private `codexPath` can select a dedicated current CLI;
+this Mac uses `~/.local/share/plunge-ideas/runtime/node_modules/.bin/codex` so an
+older shell CLI cannot silently choose the model. It is intended to
 be called by ordinary local scheduling code. This Mac uses a LaunchAgent every
 15 seconds, with no model invocation for an empty queue. The Mac must be awake,
 logged in, and connected;
@@ -104,6 +108,11 @@ that file's link directly with its intended person. For the installed PWA,
 **Ideas for Plunge** accepts pasting the invite, so it works when the OS opens an
 external link in a different browser. `revoke MEMBER_ID` disables one invite.
 No privileged credential is bundled in the browser or deployed to PR previews.
+
+Use the repository skill `plunge-family-worker` for ongoing operation and recovery.
+The helper `python3 scripts/ideas/service.py status|start|stop|install` manages the
+local job. Install it from the stable checkout, then start it; future logins load
+it automatically. `start` preserves an active build, while `stop` can interrupt it.
 
 The installed macOS job is `~/Library/LaunchAgents/dev.plunge.family-ideas.plist`.
 It invokes `node /Users/jason/code/plunge/scripts/ideas/builder.mjs` every 15 seconds.

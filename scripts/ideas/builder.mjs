@@ -8,6 +8,9 @@ import { randomBytes } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 const REPO = 'jasonyandell/plunge';
 const REMOTE = `https://github.com/${REPO}.git`;
+export const BUILDER_MODEL = 'gpt-6-astra';
+export const BUILDER_EFFORT = 'high';
+export const modelArgs = () => ['--model',BUILDER_MODEL,'-c',`model_reasoning_effort="${BUILDER_EFFORT}"`];
 export const configPath = process.env.PLUNGE_IDEAS_CONFIG || join(homedir(), '.config/plunge-ideas/config.json');
 const uid = () => randomBytes(16).toString('hex');
 const ROOM_SCOPE_FILES = new Set(['worker/rooms.ts', 'worker/room-undo.ts']);
@@ -98,6 +101,7 @@ export async function buildOne(config,job,stateDir) {
   try {
     const extraFiles=approvedFiles(config,job.card.id);
     await writeFile(join(logDir,'scope.json'),JSON.stringify({idea:job.card.id,extraFiles}),{mode:0o600});
+    await writeFile(join(logDir,'model.json'),JSON.stringify({model:BUILDER_MODEL,reasoningEffort:BUILDER_EFFORT}),{mode:0o600});
     // Recover a PR even when its successful creation response or our finish request was lost.
     let branch=`codex/idea-${job.card.id}`;
     const openPrs=JSON.parse(await gh(['pr','list','--repo',REPO,'--state','open','--json','number,headRefName','--limit','100']));
@@ -121,7 +125,7 @@ export async function buildOne(config,job,stateDir) {
       const schemaFile=join(logDir,'result.schema.json'), resultFile=join(logDir,'result.json');
       await writeFile(schemaFile,JSON.stringify(schema));
       const childEnv=Object.fromEntries(['PATH','HOME','USER','TMPDIR','CODEX_HOME'].filter(k=>process.env[k]).map(k=>[k,process.env[k]]));
-      await run('codex',['exec','--ignore-user-config','--sandbox','workspace-write','-c','approval_policy="never"','-c','sandbox_workspace_write.network_access=false','--json','--output-schema',schemaFile,'--output-last-message',resultFile,'-'],
+      await run(config.codexPath || 'codex',['exec',...modelArgs(),'--ignore-user-config','--sandbox','workspace-write','-c','approval_policy="never"','-c','sandbox_workspace_write.network_access=false','--json','--output-schema',schemaFile,'--output-last-message',resultFile,'-'],
         {cwd:checkout,env:childEnv,input:buildPrompt(job,extraFiles),log,timeout:1200000});
       await assertLease();
       await writeFile(join(checkout,'.git/config'),gitConfig);
