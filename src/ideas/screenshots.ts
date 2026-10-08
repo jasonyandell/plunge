@@ -28,7 +28,9 @@ export function jpegSize(bytes:Uint8Array):{width:number;height:number} {
 }
 export function screenshotBytes(data:string):Uint8Array<ArrayBuffer> {
   if(data.length>Math.ceil(MAX_SCREENSHOT_BYTES/3)*4 || (data.length%4!==0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(data)))throw new Error('Invalid screenshot message.');
-  return Uint8Array.from(atob(data),char=>char.charCodeAt(0));
+  const binary=atob(data),bytes=new Uint8Array(binary.length);
+  for(let i=0;i<bytes.length;i++)bytes[i]=binary.charCodeAt(i);
+  return bytes;
 }
 export function validateScreenshots(value:unknown):Array<ScreenshotUpload & {width:number;height:number}> {
   if(value===undefined)return [];
