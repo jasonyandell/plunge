@@ -1,7 +1,9 @@
 import type { RoomCommand, RoomCredentials, RoomMessage, RoomState } from './protocol';
+import { CLOSE_EXPIRED, CLOSE_OTHER_TAB, CLOSE_SEAT_GONE } from './protocol';
 
 export const ROOMS_ENABLED = typeof __ROOMS_ENABLED__ !== 'undefined' && __ROOMS_ENABLED__;
 const KEY = 'plunge:room:';
+const LAST = 'plunge:room:last';
 export function roomFromHash(hash: string): string | null {
   return /^#room=([a-f0-9]{32,64})$/.exec(hash)?.[1] ?? null;
 }
@@ -24,16 +26,30 @@ export function savedSeat(roomId: string, storage: Storage): RoomCredentials | n
 }
 export function saveSeat(seat: RoomCredentials, storage: Storage): void {
   storage.setItem(KEY + seat.roomId, JSON.stringify(seat));
+  storage.setItem(LAST, seat.roomId);
 }
-export async function enterRoom(name: string, roomId?: string): Promise<RoomCredentials> {
+export function forgetSeat(roomId: string, storage: Storage): void {
+  storage.removeItem(KEY + roomId);
+  if (storage.getItem(LAST) === roomId) storage.removeItem(LAST);
+}
+/** The table this browser sat at most recently, so the home screen can offer it. */
+export function lastRoom(storage: Storage): string | null {
+  try { const id = storage.getItem(LAST); return id && /^[a-f0-9]{32}$/.test(id) ? id : null; } catch { return null; }
+}
+export class ClosedTableError extends Error { readonly closed = true; }
+export async function enterRoom(name: string, roomId?: string, knock?: string): Promise<RoomCredentials> {
   const response = await fetch(roomId ? `/api/rooms/${roomId}/join` : '/api/rooms', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, ...(knock ? { knock } : {}) }),
   });
-  const body = await response.json() as RoomCredentials & { error?: string };
+  const body = await response.json() as RoomCredentials & { error?: string; closed?: boolean };
+  if (response.status === 403 && body.closed) throw new ClosedTableError(body.error ?? 'This table is closed.');
   if (!response.ok) throw new Error(body.error ?? 'Could not open the room. Try again.');
   return body;
 }
+export const newVisitorId = (): string => [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, '0')).join('');
 
+/** A seat key, or a visitor id for someone knocking at a closed table. */
+export type RoomIdentity = RoomCredentials | { roomId: string; visitor: string };
 /** Only server snapshots change the game. An uncertain tap retains its id on reconnect. */
 export class RoomConnection {
   private socket: WebSocket | null = null;
@@ -45,20 +61,24 @@ export class RoomConnection {
   private pending = new Map<string, RoomCommand>();
   private acknowledgements = new Map<string, number>();
   private seenRevision = -1;
-  constructor(private credentials: RoomCredentials, private handlers: {
+  constructor(private identity: RoomIdentity, private handlers: {
     state: (state: RoomState) => void; status: (connected: boolean) => void;
     error: (message: string) => void; pending: (pending: boolean) => void;
+    /** The server closed this identity for good: another tab, a seat that is gone, an expired room. */
+    ended?: (code: number, reason: string) => void;
   }) { this.connect(); }
   private connect(): void {
     if (this.stopped) return;
-    const url = new URL(`/api/rooms/${this.credentials.roomId}/socket`, location.href);
+    const url = new URL(`/api/rooms/${this.identity.roomId}/socket`, location.href);
     url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    url.searchParams.set('token', this.credentials.token);
+    if ('token' in this.identity) url.searchParams.set('token', this.identity.token);
+    else url.searchParams.set('visitor', this.identity.visitor);
     const socket = this.socket = new WebSocket(url);
     socket.onopen = () => {
       this.attempts = 0; this.lastPong = Date.now();
       // A valid snapshot, rather than the TCP handshake, enables play.
       for (const command of this.pending.values()) socket.send(JSON.stringify(command));
+      socket.send('ping');
       this.heartbeat = setInterval(() => {
         if (Date.now() - this.lastPong > 15000) { socket.close(); return; }
         if (socket.readyState === WebSocket.OPEN) socket.send('ping');
@@ -89,9 +109,11 @@ export class RoomConnection {
     socket.onclose = event => {
       if (this.heartbeat) clearInterval(this.heartbeat);
       this.handlers.status(false);
-      if (event.code === 4001) {
+      if ([CLOSE_OTHER_TAB, CLOSE_SEAT_GONE, CLOSE_EXPIRED].includes(event.code)) {
         this.stopped = true;
-        this.handlers.error('Your seat is open in another tab. Use that tab, or refresh this one to return here.');
+        if (event.code === CLOSE_OTHER_TAB && !this.handlers.ended)
+          this.handlers.error('Your seat is open in another tab. Use that tab, or refresh this one to return here.');
+        this.handlers.ended?.(event.code, event.reason);
       }
       if (!this.stopped) this.reconnectTimer = setTimeout(() => this.connect(), Math.min(5000, 500 * 2 ** this.attempts++));
     };

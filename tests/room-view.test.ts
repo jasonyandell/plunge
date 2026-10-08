@@ -10,7 +10,7 @@ import { recordHistory, listHistory, snapshotOf } from '../src/history/recorder'
 import { listHands } from '../src/history/legacy';
 import { roomCode, roomFromInput, roomFromHash, savedSeat, saveSeat } from '../src/room/client';
 import { roomHistory } from '../src/room/Rooms';
-import { createRoom, joinRoom, roomSnapshot, commandRoom } from '../worker/rooms';
+import { createRoom, joinRoom, roomSnapshot, commandRoom, settleRoom } from '../worker/rooms';
 
 describe('room presentation and recorder boundaries', () => {
   it('puts every viewer at seat zero with legal actions unchanged through a complete hand', () => {
@@ -73,7 +73,8 @@ describe('room presentation and recorder boundaries', () => {
     const room = createRoom('d'.repeat(32), 'Host', 'e'.repeat(64));
     joinRoom(room, 'Guest', 'f'.repeat(64));
     const connected = new Set<Seat>([0, 2]);
-    commandRoom(room, 0, { type: 'start', id: 'history-start', revision: room.state.revision }, connected, 1000);
+    commandRoom(room, 0, { type: 'propose', kind: 'start', id: 'history-start', revision: room.state.revision }, connected, 1000);
+    settleRoom(room, connected, 6001);
     room.state.sessionId = 'shared-retry-history';
     let moves = 0;
     const finish = () => {
@@ -86,7 +87,8 @@ describe('room presentation and recorder boundaries', () => {
     finish();
     const original = roomHistory(roomSnapshot(room, connected), 2);
     await recordHistory(original);
-    commandRoom(room, 0, { type: 'undo', id: 'history-undo', revision: room.state.revision }, connected, room.state.holdUntil);
+    commandRoom(room, 0, { type: 'propose', kind: 'undo', id: 'history-undo', revision: room.state.revision }, connected, room.state.holdUntil);
+    settleRoom(room, connected, room.state.holdUntil + 6001);
     const undone = roomHistory(roomSnapshot(room, connected), 2);
     expect(undone.game!.handResult).toBeNull();
     expect(undone.settings.nelloPreview).toBe(true);

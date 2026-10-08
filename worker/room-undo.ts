@@ -16,14 +16,21 @@ function humanIndices(room: SavedRoom, game: GameState): number[] {
 /** Preserve existing tokens, accepted ids, game/session identity and active contracts. */
 export function upgradeRoom(room: SavedRoom): boolean {
   const game = room.state.game, upgraded = game ? roomAuctionConfig(game) : game;
-  let changed = upgraded !== game || room.state.retry === undefined || room.state.practiceHands === undefined;
+  let changed = upgraded !== game || room.state.retry === undefined || room.state.practiceHands === undefined
+    || room.state.open === undefined || room.state.proposal === undefined || room.state.lastVote === undefined;
   if (game && room.humanSteps?.handNumber !== game.handNumber) {
     let indices: number[];
     try { indices = humanIndices(room, game); } catch { indices = []; }
     room.humanSteps = { handNumber: game.handNumber, indices }; changed = true;
   }
+  // Rooms saved before the table voted: the host was seat 0 and rooms were always open.
+  for (const player of room.players) if (player && player.seen === undefined) { player.seen = 0; changed = true; }
+  if (!room.admitted) { room.admitted = []; changed = true; }
+  if (!room.former) { room.former = []; changed = true; }
   if (changed) room.state = { ...room.state, game: upgraded, retry: room.state.retry ?? null,
-    practiceHands: room.state.practiceHands ?? [] };
+    practiceHands: room.state.practiceHands ?? [], open: room.state.open ?? true,
+    proposal: room.state.proposal ?? null, lastVote: room.state.lastVote ?? null,
+    runner: room.state.runner ?? null, visitors: room.state.visitors ?? 0 };
   return changed;
 }
 const canonical = (value: unknown): string => JSON.stringify(value, (_key, item: unknown) => item

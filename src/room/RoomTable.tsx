@@ -1,6 +1,6 @@
 import { useState } from 'preact/hooks';
 import { legalDominoes, teamOf, type Action, type Seat } from '../engine';
-import type { RoomState } from './protocol';
+import type { ProposalKind, RoomState } from './protocol';
 import { Domino } from '../ui/Domino';
 import { Tally } from '../ui/Tally';
 import { BidSheet, DeclareSheet } from '../ui/sheets';
@@ -9,30 +9,40 @@ import { rotateGame, relativeSeat } from './view';
 import '../ui/table.css';
 
 const POS = ['bottom', 'left', 'top', 'right'];
-export function RoomTable({ room, seat, enabled, holding, thinking, act, start, undo, pending }: {
+/** Who is playing a seat right now: the person, Walt for an absent person, or Walt. */
+export function seatLabel(room: RoomState, s: Seat, you: Seat | null): string {
+  if (s === you) return 'You';
+  const seat = room.seats[s];
+  if (!seat) return `Walt ${s + 1}`;
+  return seat.away ? `${seat.name} (Walt)` : seat.name;
+}
+export function RoomTable({ room, seat, enabled, holding, thinking, act, propose, pending }: {
   room: RoomState; seat: Seat; enabled: boolean; holding: boolean; thinking: Seat | null;
-  act: (action: Action) => void; start: () => void; undo: () => void; pending: boolean;
+  act: (action: Action) => void; propose: (kind: ProposalKind) => void; pending: boolean;
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const g = room.game!;
   const view = rotateGame(g, seat);
-  const name = (s: Seat) => s === seat ? 'You' : room.seats[s]?.name ?? `Walt ${s + 1}`;
+  const name = (s: Seat) => seatLabel(room, s, seat);
   const legal = new Set(enabled && !holding && g.phase === 'playing' && g.turn === seat ? legalDominoes(g) : []);
   const ownTurn = enabled && !holding && g.turn === seat;
   const sittingOut = g.sittingOut === seat;
+  const deciding = room.proposal !== null;
   const last = holding ? g.tricks.at(-1) : null;
   const plays = last?.plays ?? g.currentTrick;
   const led = ledChip(g, plays);
   const status = g.phase === 'bidding' ? `Hand ${g.handNumber} · Bidding` : g.phase === 'declaring'
     ? `${name(g.declarer!)} won the bid` : g.contract ? `${name(g.declarer!)} bid ${contractLabel(g.contract)}` : 'Hand over';
   const award = `${g.handResult?.marks === 1 ? 'A mark' : `${g.handResult?.marks ?? 0} marks`} for ${g.handResult?.team === teamOf(seat) ? 'us' : 'them'}`;
+  const waitingOn = g.turn !== null && room.seats[g.turn] && !room.seats[g.turn]!.connected && !room.seats[g.turn]!.away ? room.seats[g.turn]!.name : null;
   const opponent = (relative: Seat) => {
     const s = ((seat + relative) % 4) as Seat;
-    const bid = g.bids.find(b => b.seat === s);
+    const bid = g.bids.find(b => b.seat === s), person = room.seats[s];
     return <div class={`seat seat-${POS[relative]}${g.turn === s ? ' active' : ''}${thinking === s ? ' seat-thinking' : ''}${g.sittingOut === s ? ' seat-sitting-out' : ''}`}>
       <div class="seat-name"><span>{name(s)}</span>{relative === 2 && <span class="seat-tag">Your partner</span>}
         {g.sittingOut === s && <span class="seat-tag">Sitting out · Nel-O</span>}
-        {room.seats[s] && !room.seats[s]!.connected && <span class="seat-tag">Rejoining</span>}
+        {person && !person.connected && !person.away && <span class="seat-tag">Rejoining</span>}
+        {person?.away && <span class="seat-tag">Walt is playing</span>}
         {g.shaker === s && <span class="badge shaker" aria-label="Shaker">⚀</span>}
         {bid && ['bidding', 'declaring'].includes(g.phase) && <span class="bubble">{bidLabel(bid.bid)}</span>}
       </div>
@@ -51,7 +61,8 @@ export function RoomTable({ room, seat, enabled, holding, thinking, act, start, 
       <div class="trick-plays">{plays.map((p, i) => <div class={`trick-slot slot-${POS[relativeSeat(p.seat, seat)]}${last?.winner === p.seat ? ' won' : ''}`} key={`${g.handNumber}:${g.tricks.length}:${p.seat}:${p.domino}`}>
         <Domino id={p.domino} orientation="h" />{i === 0 && <span class="led-tag">{name(p.seat)} led</span>}
       </div>)}</div>
-      <div class="trick-note" role="status">{holding ? `${name(last!.winner)} took the trick` : thinking !== null ? `${name(thinking)} is thinking…` : g.turn !== null ? ownTurn ? 'Your turn' : `Waiting for ${name(g.turn)}` : 'Hand over'}</div>
+      <div class="trick-note" role="status">{holding ? `${name(last!.winner)} took the trick` : thinking !== null ? `${name(thinking)} is thinking…`
+        : waitingOn ? `Waiting a moment for ${waitingOn}…` : g.turn !== null ? ownTurn ? 'Your turn' : `Waiting for ${name(g.turn)}` : 'Hand over'}</div>
     </div>{opponent(3)}</div>
       <div class={`hand-area${sittingOut ? ' hand-sitting-out' : ''}`}><p class={`hand-caption${ownTurn ? ' your-turn' : ''}`}><strong class="you-label">You</strong><span>{room.seats[seat]?.name} · {sittingOut ? 'Sitting out — your partner called Nel-O' : ownTurn && g.phase === 'playing' ? 'Your turn to play' : 'Your hand'}</span></p>
         <div class="hand" aria-label="Your hand">{g.hands[seat]!.map(id => <Domino key={id} id={id} state={legal.has(id) && !pending ? 'legal' : 'idle'} onTap={() => { if (!pending && legal.has(id)) act({ type: 'play', domino: id }); }} />)}</div>
@@ -60,11 +71,11 @@ export function RoomTable({ room, seat, enabled, holding, thinking, act, start, 
     {ownTurn && !pending && g.phase === 'bidding' && <BidSheet key={`${room.sessionId}:${room.revision}`} g={view} showHints={false} sessionId={room.sessionId} onQuestion={() => {}} dispatch={e => { if (e.type === 'human') act(e.action); }} />}
     {ownTurn && !pending && g.phase === 'declaring' && <DeclareSheet key={`${room.sessionId}:${room.revision}`} g={view} showHints={false} sessionId={room.sessionId} onQuestion={() => {}} dispatch={e => { if (e.type === 'human') act(e.action); }} />}
     {!holding && ['hand-over', 'game-over'].includes(g.phase) && <div class="overlay"><div class="card" role="dialog" aria-label={g.phase === 'game-over' ? 'Game over' : 'Hand over'}>
-      <p class="eyebrow">Hand {g.handNumber} · Shared room</p><h2 class="card-title">{g.phase === 'game-over' ? g.winner === teamOf(seat) ? 'Your team won!' : 'Their team won' : award}</h2>
+      <p class="eyebrow">Hand {g.handNumber} · Shared table</p><h2 class="card-title">{g.phase === 'game-over' ? g.winner === teamOf(seat) ? 'Your team won!' : 'Their team won' : award}</h2>
       <p class="card-detail">{g.handResult?.reason}</p><div class="card-tallies"><Tally marks={view.marks[0]} label="Us" /><Tally marks={view.marks[1]} label="Them" /></div>
-      {seat === 0 ? <button class="big-btn" disabled={!enabled || pending} onClick={() => g.phase === 'game-over' ? start() : act({ type: 'next-hand' })}>{g.phase === 'game-over' ? 'Start another game' : 'Shake the next hand'}</button> : <p>Waiting for the host to {g.phase === 'game-over' ? 'start another game' : 'shake the next hand'}.</p>}
-      {seat === 0 && room.canUndo && <button class="text-btn" disabled={!enabled || pending} onClick={undo}>Undo last human move</button>}
-      <p class="hint">{room.retry?.handNumber === g.handNumber ? 'Takeback hand — the original attempt stays in history.' : 'The host can take back the last human move for everyone.'}</p>
+      <button class="big-btn" disabled={!enabled || pending || deciding} onClick={() => propose(g.phase === 'game-over' ? 'start' : 'next-hand')}>{g.phase === 'game-over' ? 'Start another game' : 'Shake the next hand'}</button>
+      {room.canUndo && <button class="text-btn" disabled={!enabled || pending || deciding} onClick={() => propose('undo')}>Undo last human move</button>}
+      <p class="hint">{deciding ? 'The table is deciding…' : room.retry?.handNumber === g.handNumber ? 'Takeback hand — the original attempt stays in history.' : 'Anyone can shake or take back a move; the table gets five seconds to object.'}</p>
     </div></div>}
   </div>;
 }

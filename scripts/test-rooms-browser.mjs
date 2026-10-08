@@ -83,7 +83,7 @@ try {
   assert(soloBefore);
   await host.getByRole('button', { name: 'Play with family · Experimental', exact: true }).click();
   await host.getByRole('textbox', { name: 'Your name' }).fill('Host'); await host.getByRole('button', { name: 'Create a private room' }).click();
-  await until(async () => (await state(host))?.hostConnected);
+  await until(async () => (await state(host))?.runner === 0);
   await host.getByRole('button', { name: 'Copy invite link' }).click();
   const invite = await host.getByRole('textbox', { name: 'Invite link' }).inputValue();
   const code = await host.getByRole('textbox', { name: 'Room code', exact: true }).inputValue();
@@ -140,11 +140,11 @@ try {
   for (const page of pages) if (await page.getByRole('button', { name: 'Dismiss', exact: true }).count()) await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
   // Host leaves deliberately; the guest must visibly pause instead of forking.
   const hostUrl = host.url(); await host.goto('about:blank');
-  await until(async () => !(await state(guest))?.hostConnected);
+  await until(async () => (await state(guest))?.runner === 2);
   await guest.getByRole('status').filter({ hasText: 'Waiting for the host' }).waitFor();
   const paused = (await state(guest)).revision; await new Promise(r => setTimeout(r, 800));
   assert.equal((await state(guest)).revision, paused); await snapshot(guest, 'host-disconnected.png');
-  await host.goto(hostUrl); await until(async () => (await state(host))?.hostConnected && (await state(guest))?.hostConnected);
+  await host.goto(hostUrl); await until(async () => (await state(host))?.runner === 0 && (await state(guest))?.runner === 0);
   check('Host disconnect visibly paused the game; reopening resumed the saved room.');
   // Drive humans through legal, visible controls. Empty seats remain real Walt.
   const words = ['blank','one','two','three','four','five','six'];
