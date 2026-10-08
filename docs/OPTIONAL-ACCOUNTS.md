@@ -9,9 +9,9 @@ player's chosen password manager; availability on another device depends on that
 manager and device. The existing private family invites remain an alternative.
 
 Signing in identifies the account. Jason separately grants access to family ideas.
-Every account has a stable random ID for future stats ownership. This change does
-not collect, upload, or link existing game history and does not implement stats
-sync. Creating a second account—even with the same name—creates a separate identity.
+Every account has a stable random ID that its stats attach to (below).
+Signing in does not upload game history, Walt receipts, or questions. Creating a
+second account—even with the same name—creates a separate identity.
 
 ## Launch and add family
 
@@ -39,6 +39,47 @@ owner; the browser panel grants family access but cannot promote other owners.
 **Remove family access** takes effect on subsequent requests without deleting an
 account or its conversations. Regranting keeps its original identity/authorship.
 Command-line equivalents are `grant ACCOUNT_ID` and `revoke ACCOUNT_ID`.
+
+## Stats
+
+Every hand attempt a human played is recorded: finished hands, and the branches
+left behind by a takeback or an abandoned game. Each is one `hands` row (the
+recorder's record in `payload`, stored exactly as the client sent it, with the
+engine replay of every bid, call and play, the app build and the exact Walt at
+the table (player name, source commit, wasm hash); plus what SQL cannot read
+from that replay: the deal key, whether it finished, bidder, bid, contract,
+declaration, result, points and tricks per team, and the Walt setting for solo
+play) and one `hand_players` row per human seat (account, device or name). The
+server checks only the fields it decodes and strips nothing, so a client can
+attach more detail (hints shown, receipts) without a server change; a record
+is capped at 64 KB. A seat's team is `seat % 2`, so "won" is
+`result_team = seat % 2`. Everyone who played the same deal shares `deal`. Walt's
+own receipts and estimates never leave the device. The database is the merged
+view; a leaderboard reads it directly.
+
+- **Solo play.** The device keeps its hands log (`plunge-stats` in IndexedDB),
+  one record per attempt under its branch id (`game:hand`, or
+  `game-rN:hand` for a retry). While signed in, each hand is uploaded once with
+  a random per-install device id and marked connected only after the service
+  names it as stored; first write is kept and a repeat is acknowledged, never
+  duplicated. Uploads happen after each hand, on focus and on reconnect, and
+  only when something is pending; the upload is sent with `keepalive`. An idle
+  tab sends nothing. Signed out, the one request comes back 401 and nothing is
+  marked.
+- **Greedy.** Whoever is signed in claims the device's hands: a second account
+  on the same device gets them too, and a person's hands on every device are
+  theirs. One seat can carry several accounts; nothing is ever refused.
+- **Family rooms.** The room records each hand itself the moment it ends, and
+  the branch a takeback leaves, with every human seat: a signed-in person's seat
+  carries their account (read from the session cookie on create, join and
+  reconnect), everyone else their name. No phone uploads anything. A failed
+  write is kept in the room and retried on the next command or alarm.
+- **The account page** uploads what is pending and shows the device's counts
+  and the account's total across devices and rooms; **Connect now** repeats it.
+
+`tests/stats-api.test.ts` covers the service, `tests/stats-sync.test.ts` the
+device side against the real worker and D1, and `tests/room-stats.test.ts` a
+room hand and its takeback recorded with their seats.
 
 ## Passkeys and the stable install
 
@@ -106,8 +147,8 @@ checks the separate embedded-preview flow against a local server on port 4178.
 
 Virtual authenticators are not physical-device verification. Before family launch,
 check enrollment, cancellation, returning sign-in, recovery, and installed-app
-behavior on Mom's and Dad's actual devices. Account deletion and stats sync are
-separate future work. The replaced social-login configuration was never activated;
+behavior on Mom's and Dad's actual devices. Account deletion and the scoring
+screen are separate future work. The replaced social-login configuration was never activated;
 no Apple or Google app configuration is required for this version.
 
 References: [SimpleWebAuthn server](https://simplewebauthn.dev/docs/packages/server),

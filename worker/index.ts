@@ -3,6 +3,7 @@ import { MAX_QUESTION_BYTES, OWNER_TOKEN, QUESTION_ID, publicQuestion, validQues
 import { ideasRequest, type IdeasDatabase } from './ideas';
 import { accountSession, accountsRequest, type AccountEnv } from './accounts';
 import { familyTableRequest, liveTablesRequest, roomRequest, type RoomsNamespace } from './rooms';
+import { statsRequest } from './stats';
 export { PlungeRoom } from './rooms';
 
 // PR previews deploy without QUESTIONS; their app keeps questions on the device.
@@ -34,6 +35,7 @@ export default {
     const url=new URL(request.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     if (url.pathname === '/api/account' || url.pathname.startsWith('/api/account/')) return accountsRequest(request,env);
+    if (url.pathname.startsWith('/api/stats/')) return statsRequest(request,env);
     if (url.pathname === '/api/rooms/family') return familyTableRequest(request, env.ROOMS, env.QUESTIONS, await accountSession(request, env));
     if (url.pathname === '/api/rooms/live') return liveTablesRequest(request, env.ROOMS, env.QUESTIONS);
     if (url.pathname === '/api/rooms' || url.pathname.startsWith('/api/rooms/'))

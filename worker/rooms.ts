@@ -8,6 +8,9 @@ import type { ListedTable, Proposal, ProposalKind, RoomCommand, RoomCredentials,
 import { CLOSE_EXPIRED, CLOSE_OTHER_TAB, CLOSE_PAUSED, CLOSE_SEAT_GONE, ROOM_ID, VISITOR_ID } from '../src/room/protocol';
 import { roomAuctionConfig, roomUndoTarget, upgradeRoom } from './room-undo';
 import { newProposal, objector, PROPOSAL_KINDS, proposalStatus } from './room-votes';
+import { handRecordOf } from '../src/history/legacy';
+import { handId, handStatements, type HandEntry } from './stats';
+import type { IdeasDatabase } from './ideas';
 
 const TOKEN = /^[a-f0-9]{64}$/;
 const COMMAND_ID = /^[a-zA-Z0-9_-]{1,128}$/;
@@ -62,6 +65,8 @@ export interface SavedRoom {
   admitted?: { knock: string; name: string; until: number }[];
   /** Keys of seats that were kicked or left, so that browser learns why. */
   former?: { token: string; reason: 'kicked' | 'left' }[];
+  /** Hand attempts already handed to the stats database (worker/stats.ts). */
+  recordedHands?: string[];
 }
 export class ClosedTable extends Error { readonly closed = true; }
 export function cleanName(value: unknown): string {
@@ -91,6 +96,20 @@ export const isAway = (room: SavedRoom, seat: Seat, connected: ReadonlySet<Seat>
 /** Walt drives an empty seat, or an absent person's seat once the grace has passed. */
 export const waltDrives = (room: SavedRoom, seat: Seat, connected: ReadonlySet<Seat>, now: number): boolean =>
   !room.players[seat] || isAway(room, seat, connected, now);
+/**
+ * The hand in `state` as a stats entry, once per attempt: a finished hand, or a
+ * branch being left by a takeback. Null when nothing was played or the attempt
+ * is already recorded. Every human seat carries its name and account.
+ */
+export function roomHandEntry(room: SavedRoom, state: RoomState = room.state): HandEntry | null {
+  const game = state.game;
+  if (!game) return null;
+  const branch = state.retry?.handNumber === game.handNumber ? `${state.sessionId}-r${state.retry.attempt}` : state.sessionId;
+  const record = handRecordOf(game, branch, 'room', state.practiceHands ?? []);
+  if (!record || room.recordedHands?.includes(record.id)) return null;
+  room.recordedHands = [...(room.recordedHands ?? []).slice(-199), record.id];
+  return { record, roomId: state.roomId, players: room.players.flatMap((p, seat) => p ? [{ seat, name: p.name, account: p.account ?? null }] : []) };
+}
 export function runnerOf(room: SavedRoom, connected: ReadonlySet<Seat>): Seat | null {
   return ([0, 1, 2, 3] as const).find(seat => room.players[seat] && connected.has(seat)) ?? null;
 }
@@ -328,6 +347,7 @@ const GONE = { kicked: 'The table asked you to step out.', left: 'You left the t
 interface RoomSocket extends WebSocket { serializeAttachment(value: unknown): void; deserializeAttachment(): Attachment }
 interface RoomStorage {
   get<T>(key: string): Promise<T | undefined>; put(key: string, value: unknown): Promise<void>;
+  list<T>(options: { prefix: string }): Promise<Map<string, T>>; delete(keys: string[]): Promise<number>;
   setAlarm(time: number): Promise<void>; deleteAll(): Promise<void>;
 }
 interface RoomContext {
@@ -340,11 +360,38 @@ declare const WebSocketPair: { new(): { 0: RoomSocket; 1: RoomSocket } };
 export class PlungeRoom {
   private room: SavedRoom | undefined;
   private readonly ready: Promise<void>;
-  constructor(private readonly ctx: RoomContext) {
+  /** The state the stats database has been told about, so each change is judged once. */
+  private seen: RoomState | undefined;
+  constructor(private readonly ctx: RoomContext, private readonly env: { QUESTIONS?: IdeasDatabase } = {}) {
     this.ready = ctx.blockConcurrencyWhile(async () => {
       this.room = await ctx.storage.get<SavedRoom>('room');
       if (this.room && upgradeRoom(this.room)) await ctx.storage.put('room', this.room);
+      this.seen = this.room?.state;
     });
+  }
+  /**
+   * Hand attempts worth keeping since the last look: a finished hand, and the
+   * branch a takeback left (the retry attempt rose on the same hand, however
+   * the table decided it). Each waits under its own storage key until the
+   * stats database takes it, so a failed write is retried on later activity
+   * and never bloats the room record. Database-free builds record nothing.
+   */
+  private async recordHands(): Promise<void> {
+    if (!this.room || !this.env.QUESTIONS) return;
+    const before = this.seen, after = this.room.state;
+    this.seen = after;
+    // Stats never get in the way of play: any failure here is retried on later activity.
+    try {
+      const fresh: HandEntry[] = [];
+      const attempt = (state: RoomState, hand: number) => state.retry?.handNumber === hand ? state.retry.attempt : 0;
+      if (before?.game && after.game && attempt(after, before.game.handNumber) > attempt(before, before.game.handNumber)) { const e = roomHandEntry(this.room, before); if (e) fresh.push(e); }
+      if (after.game && (after.game.phase === 'hand-over' || after.game.phase === 'game-over')) { const e = roomHandEntry(this.room, after); if (e) fresh.push(e); }
+      if (fresh.length) { for (const entry of fresh) await this.ctx.storage.put(`hand:${handId(entry)}`, entry); await this.ctx.storage.put('room', this.room); }
+      const pending = await this.ctx.storage.list<HandEntry>({ prefix: 'hand:' });
+      if (!pending.size) return;
+      await this.env.QUESTIONS.batch(handStatements(this.env.QUESTIONS, [...pending.values()]));
+      await this.ctx.storage.delete([...pending.keys()]);
+    } catch { /* Kept in storage; the next change or alarm tries again. */ }
   }
   private live(exclude?: RoomSocket): RoomSocket[] {
     return this.ctx.getWebSockets().filter(socket => socket !== exclude && socket.readyState === 1);
@@ -374,6 +421,7 @@ export class PlungeRoom {
     const connected = this.connected(exclude);
     if (settleRoom(this.room, connected, Date.now())) changed = true;
     if (changed) await this.save();
+    if (changed) await this.recordHands();
     for (const socket of this.live(exclude)) {
       const { seat, token } = socket.deserializeAttachment();
       if (seat !== null && this.room.players[seat]?.token !== token) {

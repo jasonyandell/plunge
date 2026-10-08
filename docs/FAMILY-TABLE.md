@@ -128,3 +128,8 @@ last activity. The home screen refreshes it every thirty seconds while visible.
   at the table while they knock.
 - **Runner choice.** The lowest present seat may be the slowest phone. Walt's
   decisions are identical everywhere; only the wait differs.
+- **Stats.** The room records every hand attempt itself the moment it ends,
+  and the branch a takeback leaves, with each human seat's name and account
+  (`roomHandEntry`, `docs/OPTIONAL-ACCOUNTS.md` → Stats). Each waits under its
+  own storage key until the stats database takes it, so a failed write is
+  retried on later activity. Database-free builds record nothing.

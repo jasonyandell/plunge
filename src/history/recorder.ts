@@ -3,7 +3,8 @@ import { questionGameId, type AppState } from '../ui/store';
 import { encodeReplay } from '../engine/replay-code';
 import { BUILD_ID } from '../ui/update';
 import { digest, listEstimates, sessionEstimates, sessionReceipts } from '../ai/phone/records';
-import { recordFinishedHand, listHands } from './legacy';
+import { recordHand, listHands } from './legacy';
+import manifest from '../ai/phone/manifest.json';
 
 export function snapshotOf(app: AppState) {
   const g = app.game;
@@ -59,7 +60,12 @@ export async function appendSnapshot(snapshot: Snapshot): Promise<void> {
 const pending = new Map<string, AppState>();
 const staged = new Map<string, string>();
 const STAGING = 'plunge:history:pending:';
-export async function recordHistory(app: AppState): Promise<void> {
+/**
+ * `leaving` marks a state the player is moving away from (a takeback, a
+ * replay, a new game): its hand is logged as far as it went, so undone moves
+ * are kept too. Room hands are recorded by the room itself.
+ */
+export async function recordHistory(app: AppState, leaving = false): Promise<void> {
   const snapshot = snapshotOf(app);
   if (!snapshot) return;
   const key = JSON.stringify(snapshot);
@@ -73,9 +79,10 @@ export async function recordHistory(app: AppState): Promise<void> {
     catch { /* IndexedDB can still succeed independently. */ }
   }
   await appendSnapshot(snapshot);
-  // A retried hand stays in history above, but never enters the finished-hand
-  // log as a fresh result; the original attempt's record is left as written.
-  if (!snapshot.retry && !snapshot.room) await recordFinishedHand(app.game!, app.sessionId, app.settings.difficulty, app.practiceHands ?? []);
+  // Every attempt gets its own record under its branch id; the first attempt's record is left as written.
+  const g = app.game!, done = g.phase === 'hand-over' || g.phase === 'game-over';
+  if (!snapshot.room && (done || leaving)) await recordHand(g, questionGameId(app), app.settings.difficulty, app.practiceHands ?? [],
+    { build: BUILD_ID, walt: { player: manifest.player, source_commit: manifest.source_commit, wasm_sha256: manifest.wasm_sha256 } });
   pending.delete(key);
   const entry = staged.get(key);
   if (entry && typeof localStorage !== 'undefined') localStorage.removeItem(entry);

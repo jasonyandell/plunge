@@ -202,7 +202,7 @@ export function More({ app, dispatch, onQuestions, onHistory }: MoreProps) {
           <h2 id="more-yours">Yours</h2>
           {onQuestions && <button type="button" class="more-row" onClick={onQuestions}>Your questions</button>}
           {onHistory && <button type="button" class="more-row" onClick={onHistory}>Export history</button>}
-          <p class="setting-hint">Game history and Walt results stay on this device. Export a backup before clearing browser data.</p>
+          <p class="setting-hint">Game history and Walt results stay on this device. Export a backup before clearing browser data. Finished-hand stats connect to your account when you sign in.</p>
           <a class="more-row" href="?account=1">Your account · optional</a>
         </section>
 

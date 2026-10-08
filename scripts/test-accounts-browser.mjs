@@ -16,6 +16,8 @@ for(const statement of tables.split(';').filter(s=>s.trim()))await db.prepare(st
 for(const statement of (await readFile('migrations/0003_accounts.sql','utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
 for(const statement of (await readFile('migrations/0004_idea_authorizations.sql','utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
 for(const statement of (await readFile('migrations/0005_idea_screenshots.sql','utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
+for(const statement of (await readFile('migrations/0005_listed_tables.sql','utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
+for(const statement of (await readFile('migrations/0006_hands.sql','utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
 const browser=await chromium.launch();
 const mime={'.html':'text/html','.js':'application/javascript','.css':'text/css','.wasm':'application/wasm','.json':'application/json','.svg':'image/svg+xml','.png':'image/png'};
 async function newPerson() {
@@ -23,7 +25,7 @@ async function newPerson() {
  await context.route('**/*',route=>route.abort());
  await context.route(`${origin}/**`,async route=>{
   const req=route.request(),url=new URL(req.url());
-  if(url.pathname.startsWith('/api/account') || url.pathname.startsWith('/api/ideas')) {
+  if(url.pathname.startsWith('/api/account') || url.pathname.startsWith('/api/ideas') || url.pathname.startsWith('/api/stats')) {
    const response=await mf.dispatchFetch(url.href,{method:req.method(),headers:await req.allHeaders(),...(req.method()==='GET'?{}:{body:req.postData()})});
    const headers=Object.fromEntries(response.headers);headers['set-cookie']=response.headers.getSetCookie().join('\n');
    if(!headers['set-cookie'])delete headers['set-cookie'];
@@ -39,6 +41,15 @@ async function newPerson() {
  let authenticatorId=await add();
  return {context,page,cdp,replace:async()=>{await cdp.send('WebAuthn.removeVirtualAuthenticator',{authenticatorId});authenticatorId=await add();}};
 }
+// One hand already in the device log before sign-in (a real replay from the engine).
+const localHand={schema:'plunge-hand-v1',id:'browser-test:1',gameId:'browser-test',handNumber:1,code:'v1l262414032311110666355514342336561545044210064605352302220.30PPPD064626665636160415340555432435052',
+ endedAt:'2026-10-01T12:00:00.000Z',marksBefore:[0,0],marksAfter:[1,0],gameOver:false,thrownIn:false,player:'native-partner'};
+const seedHand=(record)=>new Promise((resolve,reject)=>{
+ const open=indexedDB.open('plunge-stats',2);
+ open.onupgradeneeded=()=>{for(const [name,options] of [['hands',{keyPath:'id'}],['analysis',{keyPath:'id'}],['meta',undefined],['sync',{keyPath:'key'}]])if(!open.result.objectStoreNames.contains(name))open.result.createObjectStore(name,options);};
+ open.onerror=()=>reject(open.error);
+ open.onsuccess=()=>{const tx=open.result.transaction('hands','readwrite');tx.objectStore('hands').put(record);tx.oncomplete=()=>{open.result.close();resolve();};tx.onerror=()=>reject(tx.error);};
+});
 async function enroll(person,name) {
  await person.page.goto(`${origin}/?account=1`);
  await person.page.getByLabel('What should we call you?').fill(name);
@@ -54,7 +65,15 @@ try {
  const ownerId=await enroll(owner,'Jason');
  const promote=await mf.dispatchFetch(`${origin}/api/account/owner`,{method:'POST',headers:{Authorization:`Bearer ${admin}`},body:JSON.stringify({id:ownerId})});assert.equal(promote.status,200);
  await owner.page.reload();await owner.page.getByRole('heading',{name:'Who’s at the family table?'}).waitFor();
- const dad=await newPerson(),dadId=await enroll(dad,'Dad');
+ const dad=await newPerson();
+ await dad.page.goto(`${origin}/?account=1`);await dad.page.getByText(/Signing in connects the hands/).waitFor();await dad.page.evaluate(seedHand,localHand);
+ const dadId=await enroll(dad,'Dad');
+ // Signing in connected the device's hand once; the account page says so and D1 holds it.
+ await dad.page.getByText('1 hand on this device · 1 connected to your account.',{exact:true}).waitFor();
+ await dad.page.getByText('Your account holds 1 hand, every device and family game included.',{exact:true}).waitFor();
+ assert.equal((await db.prepare('SELECT COUNT(*) n FROM hand_players WHERE account_id=?').bind(dadId).first()).n,1);
+ await dad.page.getByRole('button',{name:'Connect now',exact:true}).click();await dad.page.getByText('Your account holds 1 hand, every device and family game included.',{exact:true}).waitFor();
+ assert.equal((await db.prepare('SELECT COUNT(*) n FROM hand_players WHERE account_id=?').bind(dadId).first()).n,1);
  await dad.page.getByRole('button',{name:'Ask for family access'}).click();await dad.page.getByRole('button',{name:'Access requested'}).waitFor();
  await owner.page.getByRole('button',{name:'Refresh requests'}).click();
  const dadCard=owner.page.locator('.account-member').filter({hasText:dadId});await dadCard.getByRole('button',{name:'Grant family access'}).click();
@@ -177,5 +196,5 @@ try {
  for(const person of [owner,dad])for(const width of [320,390]){await person.page.setViewportSize({width,height:844});assert.ok(await person.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
  await dad.page.screenshot({path:'/tmp/plunge-passkey-account.png',fullPage:true});
  await dad.page.getByRole('button',{name:'Sign out',exact:true}).click();await dad.page.screenshot({path:'/tmp/plunge-passkey-signin.png',fullPage:true});
- console.log('PASS: real browser passkey enrollment/sign-in/add/recovery against account worker and D1; guest play, stable identity, family grants, owner automatic idea access, revision-bound approval button, live/stale/offline activity, reduced motion, phone layout. No production requests.');
+ console.log('PASS: real browser passkey enrollment/sign-in/add/recovery against account worker and D1; guest play, stable identity, family grants, hands connected once, owner automatic idea access, revision-bound approval button, live/stale/offline activity, reduced motion, phone layout. No production requests.');
 }finally{await browser.close();await mf.dispose();}

@@ -63,8 +63,7 @@ asks first, then replays the same deal and shaker with the marks the hand began
 with. Both are also on the end-of-hand and game-over cards, and stop at the
 start of the hand: once the next hand is shaken, earlier hands stay as played.
 Retried hands count as practice and show a small **Practice** label: the first attempt's finished record and saved
-moves stay as written, the retry is kept in exported history, and it isn't added
-to finished-hand stats.
+moves stay as written, and the retry is kept as its own attempt in history and stats.
 
 Completed tricks stay visible for two seconds before gathering toward the winner,
 including tricks that end the hand or match. The result card waits until the trick
@@ -204,6 +203,16 @@ and retains pending captures in the tab; a localStorage outbox recovers unfinish
 IndexedDB writes after reload when storage is available. Simultaneous tabs append
 content-addressed captures without overwriting each other's branches; the existing
 single resume slot still belongs to the last tab that saved it.
+
+## Stats and your account
+
+Every hand attempt is recorded: solo hands on the device, including the moves a
+takeback undid, and family-room hands by the room itself. Signing in with the
+optional passkey account uploads the device's hands once each (never duplicated,
+never changed) and ties room hands to your seat, so one account's record spans
+every device and every table. The game only uploads when there is a new hand to
+send; an idle tab makes no requests. Full game history and Walt results stay on
+the device. See [optional accounts](docs/OPTIONAL-ACCOUNTS.md#stats).
 
 The finished-hand store was rescued from PR #7 / commit
 `03970be4ae9888e8e36b1ced6a2b9bca5cd4fb9a`. The staged-outbox design was checked
