@@ -21,7 +21,7 @@ import {
   HUMAN_SEAT, SEAT_NAMES, nelloAvailable, TRICK_HOLD_MS, bidLabel, contractLabel, declLabel, ledChip, trumpChip,
   canRestart, canUndo, liveDispatch, questionGameId,
 } from './store';
-import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet, RestartConfirm } from './sheets';
+import { BidSummary, BidSheet, DeclareSheet, GameOverSheet, HandOverSheet, RestartConfirm } from './sheets';
 import { TrickHistory } from './TrickHistory';
 import { NativeReview } from './NativeReview';
 import { MoveHint } from './MoveHint';
@@ -162,6 +162,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
           onQuestion={scenario ? undefined : selectQuestion}
         />
       )}
+      {(g.phase === 'bidding' || g.phase === 'declaring') && g.turn !== HUMAN_SEAT && <BidSummary g={g} />}
       <div class="felt">
         <OpponentTop g={g} thinking={thinking} note={seatNote(2)} />
         <div class="middle">
