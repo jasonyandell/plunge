@@ -180,6 +180,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
           <div class="hand-heading">
             <p class={`hand-caption${humanTurn && !showingLast ? ' your-turn' : ''}`} role="status">
               <strong class="you-label">You</strong>
+              {bidBubble(g, HUMAN_SEAT)}
               <span>{humanTurn && !showingLast
                 ? g.currentTrick.length === 0 ? 'Your turn to lead' : 'Your turn to play'
                 : 'Your hand'}</span>
