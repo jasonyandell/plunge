@@ -36,13 +36,13 @@ export function Ideas() {
       } catch(e) { if(epoch===generation.current) {setConnected(false);setError(e instanceof Error ? e.message : 'Please retry.'); if(e instanceof InviteError) {setName('');setOwner(false);}} }
       finally {running=false;}
     };
-    void refresh(); const timer=setInterval(() => void refresh(),15000);
+    void refresh(); const timer=setInterval(() => void refresh(),5000);
     window.addEventListener('online',refresh);window.addEventListener('focus',refresh);
     return () => {generation.current++;clearInterval(timer);window.removeEventListener('online',refresh);window.removeEventListener('focus',refresh);};
   }, [token,selected]);
   const open = (id: string|null) => { history.pushState(null,'',location.pathname+location.search+(id ? `#idea=${id}` : '')); setSelected(id);setThread(null);setError(''); };
   const sent = (result: IdeaThread) => {
-    setSaved('Saved. Your message is on the card.');
+    setSaved(selected && result.card.status==='building' ? 'Your reply is saved for the builder’s next turn.' : 'Saved. The builder will reply here. You can add another thought below.');
     if(!selected) open(result.card.id);
     setThread(result);
   };
@@ -83,7 +83,8 @@ export function Ideas() {
           <IdeaActivity card={thread.card} now={now} connected={connected} />
           {thread.card.status==='shipped' && <a class="big-btn" href={LIVE_PLUNGE}>Play the updated game</a>}
           {thread.card.status==='ready' && thread.card.preview && <button class="big-btn" type="button" disabled={busy} onClick={()=>trial.open(thread.card.id)}>Try your change →</button>}
-          <ol class="idea-conversation">{thread.messages.map(message=><li key={message.id} class={message.role}><strong>{message.name}</strong><p>{message.body}</p></li>)}</ol>
+          <p class="idea-help">You can ask a question or clarify your idea below. {thread.card.status==='building' ? 'Replies will be picked up when this pass finishes.' : 'You can say “let’s talk it through first” before asking for changes.'}</p>
+          <ol class="idea-conversation" aria-label="Conversation">{thread.messages.map(message=><li key={message.id} class={message.role}><strong>{message.name}</strong><p>{message.body}</p></li>)}</ol>
           {owner && <section class="idea-approval" aria-label="Builder access"><h3>Builder access</h3>
             {thread.permissions?.scope==='repository' ? <p>Full project access is approved for this request.</p> : <>
               <p>Allow the builder to change any project file for the conversation above. New family replies need a fresh approval.</p>

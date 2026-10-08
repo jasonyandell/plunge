@@ -17,7 +17,7 @@ export function ideaActivity(card:IdeaCard,elapsedMs=0,connected=true) {
     queued:'Your idea is saved and waiting for the builder.',
     checking:'The change is made. Waiting for preview checks to finish.',
     question:'The builder is waiting for your reply below.',
-    failed:'The builder stopped. Your conversation is saved; you can reply to try again.',
+    failed:'The builder stopped. Read its message below for what happened. Your idea and conversation are saved.',
     ready:'The builder has finished. Your preview is ready to try.',
     shipped:'This change is now part of Plunge.',
     closed:'The builder is not working on this idea.',
