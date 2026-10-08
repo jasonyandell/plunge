@@ -8,7 +8,10 @@ description: Start, inspect, stop, or recover Plunge's local family idea worker 
 The stable coordinator checkout is `/Users/jason/code/plunge`. The worker is an
 ordinary macOS LaunchAgent, `dev.plunge.family-ideas`, checking the persisted idea
 queue every 15 seconds. Idle and preview checks do not invoke an LLM. It starts
-Codex only for a claimed card. It automatically loads after login; it cannot work
+Codex only for a claimed card. Up to three different ideas build concurrently
+(private `maxConcurrent`, integer 1–4, default 3). Replies to the same idea are
+serialized. While builds are active the coordinator keeps polling for new cards;
+a question or failed build does not block other ideas. It automatically loads after login; it cannot work
 while the Mac is asleep, powered off, logged out, or offline. Do not change sleep
 settings or hold a wake lock unless requested.
 
@@ -38,6 +41,17 @@ The builder must explicitly pass `--model gpt-6-astra` and
 do not substitute another model or infer it from the desktop chat. The coordinator
 uses `--ignore-user-config`, so implicit CLI defaults are insufficient.
 
+Every idea keeps one durable Codex session, mapped by
+`~/.local/share/plunge-ideas/ideas/<idea-id>/session.json`. Follow-ups use
+`codex exec resume <exact-id>`, never `--last`. The mapping is written as soon as
+Codex reports its identity, even if the turn later fails. Existing cards adopt their
+latest archived session automatically. Each turn retains an isolated fresh checkout
+of the current idea branch, with explicit `--cd`; old checkouts stay archived.
+Check each run's `session.json` for its actual ID and `resumed` flag. If a saved
+session is missing/corrupt, diagnose it rather than silently resetting conversation
+history or substituting another idea's session. Do not manually resume an idea
+while its worker is active.
+
 Each run writes requested settings to `model.json`. Verify actual settings from
 the Codex session's `turn_context`: find its session ID in the run's JSONL
 `build.log`, then locate the matching rollout under `~/.codex/sessions` (or the
@@ -60,9 +74,11 @@ Run archives: `~/.local/share/plunge-ideas/runs/<run-id>/`, containing `request.
 `publication.json`. Listener output is `listener.log` and `listener-errors.log`
 in the parent directory. Preserve archives, including unsuccessful checkouts.
 
-Inspect the latest request/result and verify the process is stopped. A model
-relaunch may start from the full saved card conversation in a fresh checkout;
-do not claim it resumed unpublished edits. Existing open PR branches are continued.
+Inspect the idea's latest request/result and verify its process is stopped.
+The scheduler may still be working on other ideas; do not stop all of them just
+to retry one failed card. A retry resumes that idea's session in a fresh checkout
+of its branch. Unpublished edits remain archived, so do not claim they were carried
+forward. Existing open PR branches are continued.
 Use `node scripts/ideas/admin.mjs retry IDEA_ID` from the stable checkout to requeue
 a failed or question-state card. The endpoint rejects active builds; never bypass
 that guard or clear a lock whose process is still alive. A crashed build lease can

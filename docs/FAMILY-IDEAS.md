@@ -117,7 +117,12 @@ it automatically. `start` preserves an active build, while `stop` can interrupt 
 The installed macOS job is `~/Library/LaunchAgents/dev.plunge.family-ideas.plist`.
 It invokes `node /Users/jason/code/plunge/scripts/ideas/builder.mjs` every 15 seconds.
 Launchd does not overlap instances of the same job, and the coordinator also keeps
-a process lock. The previous Codex heartbeat is paused. Idle checks and preview
+a process lock. Within that coordinator, up to three different ideas build at once.
+It keeps polling every 15 seconds while builds are active and fills a free slot
+as soon as a build finishes. Replies to one idea remain serial. The private
+`maxConcurrent` setting accepts 1–4 (default 3); it never comes from family text.
+The service excludes locally active ideas from claims, including expired leases,
+so a slow build cannot accidentally start another turn of its own session. The previous Codex heartbeat is paused. Idle checks and preview
 checks use ordinary code; only a claimed family request starts Codex. Results
 appear on the idea card; this local scheduler does not send chat notifications
 or attach PRs to a Codex chat. Logs are in `~/.local/share/plunge-ideas/listener.log`
@@ -147,6 +152,24 @@ Optional `PLUNGE_IDEAS_CONFIG` selects a private config file for local tests.
 A config's `origin` must be production or localhost. `stateDir` selects a private
 run archive. `onlyIdea` can restrict a diagnostic invocation to one card id.
 These settings never come from family text.
+
+### One Codex session per idea
+
+`~/.local/share/plunge-ideas/ideas/<idea-id>/session.json` maps a card to its durable
+Codex session. The coordinator records `thread.started` immediately, including
+failed/interrupted attempts, and resumes that exact ID on later replies. It never
+uses `--last`. Existing cards adopt the newest recorded session from their run
+archives. Missing/corrupt saved session identities fail visibly rather than silently
+routing a reply to another conversation.
+
+Each turn still receives its own isolated checkout of the idea's current PR branch
+(or main before publication), and its complete card conversation. Explicit `--cd`
+and the same Astra High, workspace-write, no-network and no-approval settings apply
+to resumed turns. Earlier checkouts remain archived; unpublished failed edits are
+not automatically copied forward. Published changes continue on the same PR.
+A per-run `session.json` records the actual returned session ID and whether it was
+resumed. This mapping survives scheduler restarts and Mac logins. The session can
+wait without a Codex process or LLM usage until another family message arrives.
 
 ## Verify locally
 

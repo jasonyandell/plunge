@@ -47,3 +47,125 @@ test('failed subprocesses stop the coordinator',async()=>{
 test('a timed-out command cannot claim success by handling SIGTERM',async()=>{
   await assert.rejects(run(process.execPath,['-e',"process.on('SIGTERM',()=>process.exit(0));setInterval(()=>{},1000)"],{timeout:100}),/exited/);
 });
+
+// Deferred builds let us assert overlap and ordering without timing model calls.
+const deferred=()=>{let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};};
+const until=async(check)=>{for(let n=0;n<200;n++){if(check())return;await new Promise(r=>setTimeout(r,5));}assert.fail('condition did not become true');};
+const ideaId=n=>n.toString(16).padStart(32,'0');
+const sessionId=n=>`00000000-0000-4000-8000-${n.toString(16).padStart(12,'0')}`;
+const jobFor=(n,revision=1)=>({card:{id:ideaId(n)},run:{id:ideaId(100*n+revision)}});
+
+test('different ideas overlap, replies serialize, failures release slots and new arrivals start during a long build',async()=>{
+  const {coordinate}=await import('./ideas/runtime.mjs');
+  const queue=[jobFor(1),jobFor(2),jobFor(3),jobFor(1,2)];
+  const started=[],gates=new Map(),active=new Set(),errors=[];
+  let peak=0,inspections=0;
+  const worker=coordinate({limit:2,pollMs:5,
+    claim:async excluded=>{const i=queue.findIndex(job=>!excluded.includes(job.card.id));return i<0?null:queue.splice(i,1)[0];},
+    inspect:async()=>{inspections++;},onError:error=>errors.push(error.message),
+    build:async job=>{
+      assert.ok(!active.has(job.card.id),'one build per idea');
+      active.add(job.card.id);peak=Math.max(peak,active.size);started.push(job);
+      const gate=deferred();gates.set(job.run.id,gate);
+      try{await gate.promise;}finally{active.delete(job.card.id);}
+    }});
+  await until(()=>started.length===2);
+  assert.deepEqual(started.map(j=>j.card.id),[ideaId(1),ideaId(2)]);
+  gates.get(jobFor(2).run.id).reject(new Error('isolated build failure'));
+  await until(()=>started.length===3);
+  assert.equal(started[2].card.id,ideaId(3));
+  gates.get(jobFor(3).run.id).resolve();
+  await until(()=>active.size===1);
+  queue.push(jobFor(4)); // Arrives while idea 1 is still working and its reply is pending.
+  await until(()=>started.length===4);
+  assert.equal(started[3].card.id,ideaId(4));
+  gates.get(jobFor(4).run.id).resolve();
+  gates.get(jobFor(1).run.id).resolve();
+  await until(()=>started.length===5);
+  assert.equal(started[4].run.id,jobFor(1,2).run.id);
+  gates.get(jobFor(1,2).run.id).resolve();
+  await worker;
+  assert.equal(peak,2);assert.ok(inspections>1);assert.deepEqual(errors,['isolated build failure']);
+});
+
+test('shutdown waits for active builds and does not claim another idea',async()=>{
+  const {coordinate}=await import('./ideas/runtime.mjs');
+  const controller=new AbortController(),gate=deferred();let claims=0,done=false;
+  const worker=coordinate({limit:1,pollMs:5,signal:controller.signal,
+    claim:async()=>{claims++;return jobFor(claims);},build:()=>gate.promise}).then(()=>{done=true;});
+  await until(()=>claims===1);
+  controller.abort();await new Promise(r=>setTimeout(r,10));
+  assert.equal(done,false);gate.resolve();await worker;assert.equal(claims,1);
+});
+
+test('parallelism has a bounded private default',async()=>{
+  const {concurrency}=await import('./ideas/runtime.mjs');
+  assert.equal(concurrency({}),3);
+  for(const value of [0,5,1.5,'3'])assert.throws(()=>concurrency({maxConcurrent:value}));
+});
+
+test('session routing survives restarts, isolates ideas, and rejects a mismatched resume',async()=>{
+  const {mkdtemp,mkdir,readFile,rm,writeFile,stat}=await import('node:fs/promises');
+  const {tmpdir}=await import('node:os');const {join}=await import('node:path');
+  const {loadIdeaSession,sessionRecorder}=await import('./ideas/runtime.mjs');
+  const root=await mkdtemp(join(tmpdir(),'plunge-sessions-'));
+  try{
+    const dirs=[join(root,'first'),join(root,'second'),join(root,'reply')];for(const dir of dirs)await mkdir(dir);
+    const first=jobFor(1),second=jobFor(2);
+    assert.equal(await loadIdeaSession(root,first.card.id),null);
+    const save1=sessionRecorder(root,first,dirs[0],null);
+    save1({type:'thread.started',thread_id:sessionId(1)});
+    sessionRecorder(root,second,dirs[1],null)({type:'thread.started',thread_id:sessionId(2)});
+    const previous=await loadIdeaSession(root,first.card.id);
+    const saveReply=sessionRecorder(root,jobFor(1,2),dirs[2],previous);
+    assert.throws(()=>saveReply({type:'thread.started',thread_id:sessionId(2)}),/expected idea session/);
+    saveReply({type:'thread.started',thread_id:sessionId(1)});
+    assert.equal((await loadIdeaSession(root,first.card.id)).sessionId,sessionId(1));
+    assert.equal((await loadIdeaSession(root,second.card.id)).sessionId,sessionId(2));
+    assert.equal(JSON.parse(await readFile(join(dirs[2],'session.json'))).resumed,true);
+    const file=join(root,'ideas',first.card.id,'session.json');
+    if(process.platform!=='win32')assert.equal((await stat(file)).mode & 0o777,0o600);
+    await writeFile(file,'corrupt');await assert.rejects(loadIdeaSession(root,first.card.id));
+  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('existing cards adopt their archived Codex session without altering the old checkout',async()=>{
+  const {mkdtemp,mkdir,writeFile,readFile,rm,utimes}=await import('node:fs/promises');
+  const {tmpdir}=await import('node:os');const {join}=await import('node:path');
+  const {loadIdeaSession}=await import('./ideas/runtime.mjs');
+  const root=await mkdtemp(join(tmpdir(),'plunge-legacy-'));
+  try{
+    for(const n of [1,2]){
+      const dir=join(root,'runs',ideaId(n));await mkdir(dir,{recursive:true});
+      await writeFile(join(dir,'request.json'),JSON.stringify({card:{id:ideaId(10)}}));
+      await writeFile(join(dir,'build.log'),'npm output\n'+JSON.stringify({type:'thread.started',thread_id:sessionId(n)})+'\n');
+      await utimes(join(dir,'build.log'),n,n);
+      await writeFile(join(dir,'unfinished.txt'),'preserve');
+    }
+    assert.equal((await loadIdeaSession(root,ideaId(10))).sessionId,sessionId(2));
+    assert.equal(await readFile(join(root,'runs',ideaId(2),'unfinished.txt'),'utf8'),'preserve');
+  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('resume passes the exact idea session and new checkout while retaining Astra High and sandbox settings',async()=>{
+  const {codexArgs}=await import('./ideas/builder.mjs');
+  const args=codexArgs({checkout:'/a separate/checkout',schemaFile:'/schema',resultFile:'/result',sessionId:sessionId(1)});
+  const output=await run(process.execPath,['-e','process.stdout.write(JSON.stringify(process.argv.slice(1)))','--',...args]);
+  const received=JSON.parse(output);
+  assert.deepEqual(received.slice(-3),['resume',sessionId(1),'-']);
+  assert.equal(received[received.indexOf('--cd')+1],'/a separate/checkout');
+  assert.equal(received[received.indexOf('--model')+1],'gpt-6-astra');
+  assert.ok(received.includes('model_reasoning_effort="high"'));
+  assert.ok(received.includes('approval_policy="never"'));
+  assert.ok(received.includes('sandbox_workspace_write.network_access=false'));
+  assert.equal(received[received.indexOf('--sandbox')+1],'workspace-write');
+});
+
+test('Codex event capture handles chunk boundaries and never treats stderr as session identity',async()=>{
+  const seen=[];
+  const code=`process.stdout.write('{"type":"thread.');setTimeout(()=>{process.stdout.write('started","thread_id":"${sessionId(1)}"}\\n');process.stderr.write('not JSON');},10)`;
+  await run(process.execPath,['-e',code],{onEvent:event=>seen.push(event)});
+  assert.deepEqual(seen,[{type:'thread.started',thread_id:sessionId(1)}]);
+  await assert.rejects(run(process.execPath,['-e',`console.log('{"type":"thread.started"}');setInterval(()=>{},1000)`],
+    {onEvent:()=>{throw new Error('reject bad identity');}}),/reject bad identity/);
+});

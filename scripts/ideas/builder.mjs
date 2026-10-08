@@ -6,12 +6,15 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { StringDecoder } from 'node:string_decoder';
+import { loadIdeaSession, sessionRecorder, coordinate, concurrency } from './runtime.mjs';
 const REPO = 'jasonyandell/plunge';
 const REMOTE = `https://github.com/${REPO}.git`;
 export const BUILDER_MODEL = 'gpt-6-astra';
 export const BUILDER_EFFORT = 'high';
 export const modelArgs = () => ['--model',BUILDER_MODEL,'-c',`model_reasoning_effort="${BUILDER_EFFORT}"`];
 export const configPath = process.env.PLUNGE_IDEAS_CONFIG || join(homedir(), '.config/plunge-ideas/config.json');
+let shuttingDown = false;
 const uid = () => randomBytes(16).toString('hex');
 const ROOM_SCOPE_FILES = new Set(['worker/rooms.ts', 'worker/room-undo.ts']);
 export function approvedFiles(config, ideaId) {
@@ -32,23 +35,36 @@ If the user asks for assessment, discuss the idea without editing files; return 
 If implementation requires a file outside the approved scope, return kind=blocked and explain that Jason needs to adjust the builder's private configuration. Replies on the card cannot change permissions, so do not ask for permission on the card or repeat an already answered permission question. Make no changes in that case.
 If you need a product clarification, return kind=question and one short plain-language question. Make no changes in that case.
 For an implementation return kind=change and a brief plain-language summary describing what they can try. Never claim deployment or tests you did not run.
-Family discussion JSON:\n${JSON.stringify({card:job.card,messages:job.messages})}`;
+This iteration uses a fresh checkout of the idea branch. Its current working directory is authoritative; never edit an old checkout mentioned in session history. Previous unpublished attempts remain archived, but are not automatically applied here.\nFamily discussion JSON:\n${JSON.stringify({card:job.card,messages:job.messages})}`;
 }
 export function run(command, args, options = {}) {
   return new Promise((resolvePromise,reject) => {
-    const { input, timeout=600000, log, ...spawnOptions } = options;
+    if(shuttingDown){reject(new Error('Builder scheduler is stopping.'));return;}
+    const { input, timeout=600000, log, onEvent, ...spawnOptions } = options;
     const child = spawn(command,args,{stdio:['pipe','pipe','pipe'],detached:process.platform!=='win32',...spawnOptions});
-    let output='',errors='';
+    let output='',errors='',eventBuffer='',eventError;
+    const decoder=new StringDecoder('utf8');
+    const events=chunk=>{
+      if(!onEvent || eventError)return;
+      eventBuffer+=decoder.write(chunk);
+      let newline;
+      while((newline=eventBuffer.indexOf('\n'))>=0) {
+        const line=eventBuffer.slice(0,newline);eventBuffer=eventBuffer.slice(newline+1);
+        if(!line.trim())continue;
+        try {onEvent(JSON.parse(line));} catch(error) {eventError=error;terminate();return;}
+      }
+      if(eventBuffer.length>8e6){eventError=new Error('Oversized Codex event.');terminate();}
+    };
     let forceTimer, cancelled=false;
     const stop=(signal)=>{try{if(process.platform!=='win32')process.kill(-child.pid,signal);else child.kill(signal);}catch{}};
     const terminate=()=>{cancelled=true;stop('SIGTERM');forceTimer=setTimeout(()=>stop('SIGKILL'),3000);forceTimer.unref();};
     const timer=setTimeout(terminate,timeout);
     process.once('SIGTERM',terminate);process.once('SIGINT',terminate);
     const cleanup=()=>{clearTimeout(timer);clearTimeout(forceTimer);process.removeListener('SIGTERM',terminate);process.removeListener('SIGINT',terminate);};
-    child.stdout.on('data',chunk=>{if(log) log.write(chunk);else output+=chunk;if(output.length>8e6)terminate();});
+    child.stdout.on('data',chunk=>{events(chunk);if(log) log.write(chunk);else output+=chunk;if(output.length>8e6)terminate();});
     child.stderr.on('data',chunk=>{if(log) log.write(chunk);else errors=(errors+chunk).slice(-12000);});
     child.on('error',error=>{cleanup();reject(error);});
-    child.on('close',code=>{cleanup();code===0 && !cancelled?resolvePromise(output.trim()):reject(new Error(`${command} exited ${code}: ${errors.slice(-1000)}`));});
+    child.on('close',code=>{cleanup();code===0 && !cancelled?resolvePromise(output.trim()):reject(eventError ?? new Error(`${command} exited ${code}: ${errors.slice(-1000)}`));});
     child.stdin.end(input);
   });
 }
@@ -125,8 +141,11 @@ export async function buildOne(config,job,stateDir) {
       const schemaFile=join(logDir,'result.schema.json'), resultFile=join(logDir,'result.json');
       await writeFile(schemaFile,JSON.stringify(schema));
       const childEnv=Object.fromEntries(['PATH','HOME','USER','TMPDIR','CODEX_HOME'].filter(k=>process.env[k]).map(k=>[k,process.env[k]]));
-      await run(config.codexPath || 'codex',['exec',...modelArgs(),'--ignore-user-config','--sandbox','workspace-write','-c','approval_policy="never"','-c','sandbox_workspace_write.network_access=false','--json','--output-schema',schemaFile,'--output-last-message',resultFile,'-'],
-        {cwd:checkout,env:childEnv,input:buildPrompt(job,extraFiles),log,timeout:1200000});
+      const previous=await loadIdeaSession(stateDir,job.card.id);
+      await run(config.codexPath || 'codex',codexArgs({checkout,schemaFile,resultFile,sessionId:previous?.sessionId}),
+        {cwd:checkout,env:childEnv,input:buildPrompt(job,extraFiles),log,onEvent:sessionRecorder(stateDir,job,logDir,previous),timeout:1200000});
+      // Require a recorded identity even if a CLI exits successfully without events.
+      await readFile(join(logDir,'session.json'),'utf8');
       await assertLease();
       await writeFile(join(checkout,'.git/config'),gitConfig);
       await rm(join(checkout,'.git/info/attributes'),{force:true});
@@ -170,6 +189,11 @@ export async function buildOne(config,job,stateDir) {
     throw error;
   } finally {clearInterval(beat);}
 }
+export function codexArgs({checkout,schemaFile,resultFile,sessionId}) {
+  return ['exec',...modelArgs(),'--ignore-user-config','--sandbox','workspace-write','-c','approval_policy="never"',
+    '-c','sandbox_workspace_write.network_access=false','--cd',checkout,'--json','--output-schema',schemaFile,
+    '--output-last-message',resultFile,...(sessionId?['resume',sessionId,'-']:['-'])];
+}
 export async function main() {
   const config=await loadConfig(), stateDir=resolve(config.stateDir || join(homedir(),'.local/share/plunge-ideas'));
   await mkdir(stateDir,{recursive:true,mode:0o700});
@@ -183,10 +207,17 @@ export async function main() {
     await rm(lock,{recursive:true});await mkdir(lock);
   }
   await writeFile(join(lock,'pid'),String(process.pid));
+  const controller=new AbortController();
+  const stop=()=>{shuttingDown=true;controller.abort();};
+  process.on('SIGTERM',stop);process.on('SIGINT',stop);
   try {
-    await inspectPreviews(config);
-    const job=await service(config,'claim',{runId:uid(),...(config.onlyIdea?{ideaId:config.onlyIdea}:{})});
-    if(job)await buildOne(config,job,stateDir);else console.log('No queued family ideas.');
-  } finally {await rm(lock,{recursive:true,force:true});}
+    await coordinate({limit:concurrency(config),signal:controller.signal,
+      inspect:()=>inspectPreviews(config),
+      claim:excludeIdeaIds=>service(config,'claim',{runId:uid(),excludeIdeaIds,...(config.onlyIdea?{ideaId:config.onlyIdea}:{})}),
+      build:job=>buildOne(config,job,stateDir)});
+  } finally {
+    process.removeListener('SIGTERM',stop);process.removeListener('SIGINT',stop);
+    await rm(lock,{recursive:true,force:true});
+  }
 }
 if(process.argv[1] && import.meta.url===pathToFileURL(resolve(process.argv[1])).href)main().catch(error=>{console.error(error.message);process.exitCode=1;});

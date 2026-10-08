@@ -112,14 +112,18 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
   if (path === '/admin/revoke') { await db.prepare('UPDATE idea_members SET revoked=1 WHERE id=?').bind(id(data.id)).run(); return json({ok:true}); }
   if (path === '/admin/claim') {
     const requested=data.ideaId===undefined ? null : id(data.ideaId);
+    const excluded=data.excludeIdeaIds ?? [];
+    if(!Array.isArray(excluded) || excluded.length>4) throw new Error('Invalid excluded idea identifiers.');
+    const excludedIds=JSON.stringify(excluded.map(id));
     const run = id(data.runId), until = Date.now() + 180000;
     const previous = await db.prepare('SELECT * FROM idea_runs WHERE id=?').bind(run).first<Run>();
     if (!previous) {
       // The conditional UPDATE serializes competing builders. A run id makes lost HTTP responses retryable.
       await db.batch([
         db.prepare(`UPDATE ideas SET run_id=?,lease_until=?,status='building' WHERE id=(SELECT id FROM ideas
-          WHERE (status='queued' OR (status='building' AND lease_until<?)) AND (? IS NULL OR id=?) ORDER BY updated,number LIMIT 1)
-          AND NOT EXISTS(SELECT 1 FROM idea_runs WHERE id=?)`).bind(run,until,Date.now(),requested,requested,run),
+          WHERE (status='queued' OR (status='building' AND lease_until<?)) AND (? IS NULL OR id=?)
+          AND id NOT IN (SELECT value FROM json_each(?)) ORDER BY updated,number LIMIT 1)
+          AND NOT EXISTS(SELECT 1 FROM idea_runs WHERE id=?)`).bind(run,until,Date.now(),requested,requested,excludedIds,run),
         db.prepare(`INSERT OR IGNORE INTO idea_runs(id,idea_id,revision,through_seq,created)
           SELECT ?,id,revision,(SELECT COALESCE(MAX(seq),0) FROM idea_messages WHERE idea_id=ideas.id),? FROM ideas WHERE run_id=?`).bind(run,now,run),
       ]);
