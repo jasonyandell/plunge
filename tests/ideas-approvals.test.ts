@@ -33,6 +33,7 @@ beforeAll(async()=>{
   await db.prepare("INSERT INTO idea_messages(id,idea_id,member_id,role,body,created) VALUES(?,?,?,'family','Legacy','now')").bind(id(n),id(n),member).run();
  }
  await migrate('0004_idea_authorizations.sql');
+ await migrate('0005_idea_screenshots.sql');
 },20000);
 afterAll(async()=>{await mf?.dispose();});
 it('preserves verified legacy authorship without trusting matching invitation names',async()=>{

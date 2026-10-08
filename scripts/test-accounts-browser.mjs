@@ -15,6 +15,7 @@ const sql=await readFile('migrations/0002_family_ideas.sql','utf8'),[tables,trig
 for(const statement of tables.split(';').filter(s=>s.trim()))await db.prepare(statement).run();await db.prepare(`CREATE TRIGGER${trigger}`).run();
 for(const statement of (await readFile('migrations/0003_accounts.sql','utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
 for(const statement of (await readFile('migrations/0004_idea_authorizations.sql','utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
+for(const statement of (await readFile('migrations/0005_idea_screenshots.sql','utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
 const browser=await chromium.launch();
 const mime={'.html':'text/html','.js':'application/javascript','.css':'text/css','.wasm':'application/wasm','.json':'application/json','.svg':'image/svg+xml','.png':'image/png'};
 async function newPerson() {
@@ -26,7 +27,7 @@ async function newPerson() {
    const response=await mf.dispatchFetch(url.href,{method:req.method(),headers:await req.allHeaders(),...(req.method()==='GET'?{}:{body:req.postData()})});
    const headers=Object.fromEntries(response.headers);headers['set-cookie']=response.headers.getSetCookie().join('\n');
    if(!headers['set-cookie'])delete headers['set-cookie'];
-   await route.fulfill({status:response.status,headers,body:await response.text()});return;
+   await route.fulfill({status:response.status,headers,body:Buffer.from(await response.arrayBuffer())});return;
   }
   const path=resolve('dist',url.pathname==='/'?'index.html':url.pathname.slice(1));
   if(!path.startsWith(resolve('dist')+'/'))return route.abort();
@@ -110,6 +111,53 @@ try {
  await owner.page.getByRole('button',{name:'Make an idea card'}).click();
  await owner.page.getByText('Full project access is approved for this request.',{exact:true}).waitFor();
  assert.equal(await owner.page.getByRole('button',{name:'Approve full access'}).count(),0);
+
+ // Screenshots through real browser decoding, IndexedDB, authenticated worker, and D1.
+ await dad.page.goto(`${origin}/?ideas=1#idea=${ideaId}`);
+ await dad.page.getByLabel('Keep the conversation going').fill('The bid should go by these names.');
+ const png=await dad.page.evaluate(()=>{const c=document.createElement('canvas');c.width=1800;c.height=2400;const x=c.getContext('2d');x.fillStyle='#fff8e8';x.fillRect(0,0,c.width,c.height);x.fillStyle='#35291c';x.font='80px sans-serif';x.fillText('Mom       Dad',100,200);x.fillText('Bidding',100,500);return c.toDataURL('image/png').split(',')[1];});
+ await dad.page.getByLabel('Choose screenshot').setInputFiles({name:'bidding.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
+ await dad.page.getByRole('button',{name:'Mark where you mean'}).click();
+ const canvas=dad.page.getByLabel('Draw a red mark on your screenshot');
+ await dad.page.getByRole('button',{name:'Done marking'}).waitFor();
+ const box=await canvas.boundingBox();
+ await dad.page.mouse.move(box.x+box.width*0.1,box.y+box.height*0.15);await dad.page.mouse.down();
+ await dad.page.mouse.move(box.x+box.width*0.8,box.y+box.height*0.15,{steps:8});await dad.page.mouse.up();
+ assert.ok(await canvas.evaluate(c=>{const x=c.getContext('2d'),p=x.getImageData(c.width*0.4,c.height*0.15,1,1).data;return p[0]>180&&p[1]<100;}));
+ await dad.page.getByRole('button',{name:'Undo mark'}).click();
+ assert.ok(await canvas.evaluate(c=>c.getContext('2d').getImageData(c.width*0.4,c.height*0.15,1,1).data[1]>100));
+ await dad.page.mouse.move(box.x+box.width*0.1,box.y+box.height*0.15);await dad.page.mouse.down();await dad.page.mouse.move(box.x+box.width*0.8,box.y+box.height*0.15,{steps:8});await dad.page.mouse.up();
+ await dad.page.screenshot({path:'/tmp/plunge-screenshot-marking.png'});
+ await dad.page.getByRole('button',{name:'Done marking'}).click();
+ const marked=await dad.page.getByAltText('Screenshot 1 to send').getAttribute('src');
+ assert.ok(marked.startsWith('data:image/jpeg;base64,'));
+ await dad.page.reload();await dad.page.getByRole('button',{name:'Send reply'}).waitFor();
+ assert.equal(await dad.page.getByLabel('Keep the conversation going').inputValue(),'The bid should go by these names.');
+ assert.equal(await dad.page.getByAltText('Screenshot 1 to send').getAttribute('src'),marked);
+ const fail=route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Test connection lost. Please retry.'})});
+ await dad.page.route(`**/api/ideas/${ideaId}/messages`,fail);
+ await dad.page.getByRole('button',{name:'Send reply'}).click();await dad.page.getByRole('alert').filter({hasText:'Test connection lost'}).waitFor();
+ assert.equal(await dad.page.getByAltText('Screenshot 1 to send').getAttribute('src'),marked);
+ await dad.page.unroute(`**/api/ideas/${ideaId}/messages`,fail);
+ await dad.page.getByRole('button',{name:'Send reply'}).click();await dad.page.getByText('The bid should go by these names.',{exact:true}).waitFor();
+ await dad.page.getByRole('button',{name:'Enlarge screenshot'}).waitFor();
+ assert.equal(await dad.page.getByAltText('Screenshot 1 to send').count(),0);
+ const pictureThread=await dad.page.evaluate(async id=>(await (await fetch(`/api/ideas/${id}`)).json()),ideaId);
+ const image=pictureThread.messages.at(-1).screenshots[0];assert.equal(image.height,1600);assert.equal(image.width,1200);
+ assert.equal((await mf.dispatchFetch(`${origin}/api/ideas/attachments/${image.id}`)).status,401);
+ await owner.page.goto(`${origin}/?ideas=1#idea=${ideaId}`);await owner.page.getByRole('button',{name:'Enlarge screenshot'}).click();
+ await owner.page.getByAltText('Attached screenshot, enlarged').waitFor();
+ assert.ok(await owner.page.getByAltText('Attached screenshot, enlarged').evaluate(img=>img.complete&&img.naturalWidth===1200));
+ await owner.page.getByRole('button',{name:'Close screenshot'}).click();
+ for(const width of [320,390]){await dad.page.setViewportSize({width,height:844});assert.ok(await dad.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
+ await dad.page.screenshot({path:'/tmp/plunge-screenshot-conversation.png',fullPage:true});
+ // An image-only first message is useful too.
+ await dad.page.getByRole('button',{name:'Another idea'}).click();
+ await dad.page.waitForFunction(()=>!document.querySelector('input[type=file]').disabled);
+ await dad.page.getByLabel('Choose screenshot').setInputFiles({name:'bidding.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
+ await dad.page.getByRole('button',{name:'Make an idea card'}).click();
+ await dad.page.getByRole('heading',{name:'Screenshot for this idea.',exact:true}).waitFor();
+ console.log('PASS: screenshot upload/resize, red pen/undo, reload recovery, failed-send recovery, protected family viewing, image-only idea, narrow phone layouts.');
  await owner.page.goto(`${origin}/?account=1`);await owner.page.getByRole('heading',{name:'Who’s at the family table?'}).waitFor();
  await dad.page.goto(`${origin}/?account=1`);await dad.page.getByRole('heading',{name:'Hi, Dad.',exact:true}).waitFor();
  await dad.page.getByRole('button',{name:'Sign out',exact:true}).click();

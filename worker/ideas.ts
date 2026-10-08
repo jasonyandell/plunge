@@ -1,3 +1,4 @@
+import { screenshotBytes, validateScreenshots, type StoredScreenshot } from '../src/ideas/screenshots';
 import { accountSession } from './accounts';
 import { IDEA_ID, IDEA_TOKEN, previewFor, type IdeaCard } from '../src/ideas/model';
 interface Statement {
@@ -25,11 +26,11 @@ function field(value: unknown, max: number, min = 1): string {
   return value.trim();
 }
 function id(value: unknown): string { if (typeof value !== 'string' || !IDEA_ID.test(value)) throw new Error('Invalid request identifier.'); return value; }
-async function body(request: Request): Promise<Record<string, unknown>> {
+async function body(request: Request, limit=16000): Promise<Record<string, unknown>> {
   const reader = request.body?.getReader(); if (!reader) throw new Error('Missing message.');
   let size = 0, text = ''; const decoder = new TextDecoder();
   while (true) { const next = await reader.read(); if (next.done) break; size += next.value.byteLength;
-    if (size > 16000) { await reader.cancel(); throw new Error('Message is too large.'); }
+    if (size > limit) { await reader.cancel(); throw new Error('Message is too large.'); }
     text += decoder.decode(next.value, { stream: true }); }
   const result: unknown = JSON.parse(text + decoder.decode());
   if (!result || typeof result !== 'object' || Array.isArray(result)) throw new Error('Invalid message.');
@@ -50,9 +51,11 @@ async function authorization(db:IdeasDatabase,idea:string,revision:number,throug
 async function thread(db: IdeasDatabase, idea: string, through = Number.MAX_SAFE_INTEGER) {
   const card = await db.prepare(`${cards} WHERE i.id=?`).bind(idea).first<CardRow>();
   if (!card) return null;
-  const { results: messages } = await db.prepare(`SELECT x.id,x.role,COALESCE(m.name,'Plunge builder') name,x.body,x.created
-    FROM idea_messages x LEFT JOIN idea_members m ON m.id=x.member_id WHERE x.idea_id=? AND x.seq<=? ORDER BY x.seq`).bind(idea, through).all();
-  return { card:activityCard(card), messages, permissions:await authorization(db,idea,card.revision,through) };
+  const { results: messages } = await db.prepare(`SELECT x.id,x.role,COALESCE(m.name,'Plunge builder') name,x.body,x.created,
+    (SELECT json_group_array(json_object('id',json_extract(value,'$.id'),'width',json_extract(value,'$.width'),'height',json_extract(value,'$.height')))
+      FROM json_each(x.screenshots)) screenshots
+    FROM idea_messages x LEFT JOIN idea_members m ON m.id=x.member_id WHERE x.idea_id=? AND x.seq<=? ORDER BY x.seq`).bind(idea, through).all<{id:string;role:string;name:string;body:string;created:string;screenshots:string}>();
+  return { card:activityCard(card), messages:messages.map(({screenshots,...message})=>({...message,screenshots:JSON.parse(screenshots)})), permissions:await authorization(db,idea,card.revision,through) };
 }
 export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Response> {
   if (!env.QUESTIONS || !env.IDEAS_ADMIN_TOKEN) return json({ error: 'Ideas are not available here yet.' }, 503);
@@ -70,6 +73,8 @@ export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Res
     const member = session ? (session.family && session.member_id ? {id:session.member_id,name:session.name} : null)
       : IDEA_TOKEN.test(token) ? await db.prepare('SELECT id,name FROM idea_members WHERE token_hash=? AND revoked=0').bind(await hash(token)).first<Member>() : null;
     if (!member) return json({ error: session ? 'Ask Jason to grant family access from your account.' : 'Sign in or open your family invite to join.' }, session ? 403 : 401);
+    const imageMatch=/^\/attachments\/([a-f0-9]{32})$/.exec(path);
+    if(imageMatch && request.method==='GET')return await screenshotResponse(db,imageMatch[1]!);
     if (path === '/me' && request.method === 'GET') return json({...member,owner:!!session?.owner});
     if (path === '' && request.method === 'GET') {
       const before = Number(url.searchParams.get('before') ?? Number.MAX_SAFE_INTEGER);
@@ -105,8 +110,12 @@ export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Res
       return json(current);
     }
     if (request.method !== 'PUT' || match[2]==='/approve') return json({ error: 'Method not allowed.' }, 405);
-    const data = await body(request), now = new Date().toISOString();
-    const text = field(data.body, 3000);
+    const data = await body(request,1_100_000), now = new Date().toISOString();
+    const uploads=validateScreenshots(data.screenshots);
+    const messageKey=match[2] ? id(data.id) : idea;
+    const screenshots=JSON.stringify(await Promise.all(uploads.map(async(image,index)=>({...image,id:(await hash(`${messageKey}:screenshot:${index}`)).slice(0,32)}))));
+    const emptyText=data.body===undefined || (typeof data.body==='string' && !data.body.trim());
+    const text = field(emptyText && uploads.length ? 'Screenshot for this idea.' : data.body, 3000);
     if (!match[2]) {
       const context = field(data.context ?? 'No device details', 500);
       const previous = await db.prepare('SELECT member_id FROM ideas WHERE id=?').bind(idea).first<{ member_id: string }>();
@@ -115,8 +124,8 @@ export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Res
       if ((count?.n ?? 0) >= 20) return json({ error: 'Twenty ideas today! Please add more tomorrow.' }, 429);
       await db.batch([
         db.prepare('INSERT OR IGNORE INTO ideas(id,member_id,title,context,created,updated) VALUES(?,?,?,?,?,?)').bind(idea, member.id, text.length>100?text.slice(0,97)+'…':text, context, now, now),
-        db.prepare(`INSERT OR IGNORE INTO idea_messages(id,idea_id,member_id,role,body,created,account_id)
-          SELECT ?,id,?,'family',?,?,? FROM ideas WHERE id=? AND member_id=?`).bind(idea, member.id, text, now, session?.id??null, idea, member.id),
+        db.prepare(`INSERT OR IGNORE INTO idea_messages(id,idea_id,member_id,role,body,created,account_id,screenshots)
+          SELECT ?,id,?,'family',?,?,?,? FROM ideas WHERE id=? AND member_id=?`).bind(idea, member.id, text, now, session?.id??null, screenshots, idea, member.id),
       ]);
       const saved = await db.prepare('SELECT member_id FROM ideas WHERE id=?').bind(idea).first<{member_id:string}>();
       return saved?.member_id === member.id ? json(await thread(db, idea)) : json({error:'Identifier already used.'},409);
@@ -127,14 +136,26 @@ export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Res
     if (!await db.prepare('SELECT id FROM ideas WHERE id=?').bind(idea).first()) return json({error:'Idea not found.'},404);
     const count = await db.prepare('SELECT COUNT(*) n FROM idea_messages WHERE member_id=? AND created>?').bind(member.id, new Date(Date.now() - 3600000).toISOString()).first<{n:number}>();
     if ((count?.n ?? 0) >= 40) return json({error:'Please give the builder a little time before sending more.'},429);
-    await db.prepare("INSERT OR IGNORE INTO idea_messages(id,idea_id,member_id,role,body,created,account_id) VALUES(?,?,?,'family',?,?,?)").bind(messageId,idea,member.id,text,now,session?.id??null).run();
+    await db.prepare("INSERT OR IGNORE INTO idea_messages(id,idea_id,member_id,role,body,created,account_id,screenshots) VALUES(?,?,?,'family',?,?,?,?)").bind(messageId,idea,member.id,text,now,session?.id??null,screenshots).run();
     return json(await thread(db,idea));
   } catch (error) {
     if (error instanceof SyntaxError || (error instanceof Error && /message|identifier/i.test(error.message))) return json({ error: error.message }, 400);
     return json({ error: 'Could not save that yet. Your draft is still here; please retry.' }, 503);
   }
 }
+async function screenshotResponse(db:IdeasDatabase,imageId:string,runId?:string):Promise<Response> {
+  const row=await db.prepare(`SELECT j.value FROM idea_messages m,json_each(m.screenshots) j
+    WHERE json_extract(j.value,'$.id')=? ${runId ? `AND EXISTS(SELECT 1 FROM idea_runs r JOIN ideas i ON i.run_id=r.id
+      WHERE r.id=? AND r.state='active' AND i.lease_until>? AND r.idea_id=m.idea_id AND m.seq<=r.through_seq)` : ''} LIMIT 1`)
+    .bind(imageId,...(runId ? [runId,Date.now()] : [])).first<{value:string}>();
+  if(!row)return json({error:'Screenshot not found.'},404);
+  const image=JSON.parse(row.value) as StoredScreenshot;
+  return new Response(screenshotBytes(image.data),{headers:{'Content-Type':'image/jpeg','Cache-Control':'private, no-store',
+    'X-Content-Type-Options':'nosniff','Content-Disposition':'inline; filename="screenshot.jpg"'}});
+}
 async function adminRequest(request: Request, path: string, db: IdeasDatabase): Promise<Response> {
+  const imageMatch=/^\/admin\/runs\/([a-f0-9]{32})\/attachments\/([a-f0-9]{32})$/.exec(path);
+  if(imageMatch && request.method==='GET')return await screenshotResponse(db,imageMatch[2]!,imageMatch[1]!);
   if (path === '/admin/tracked' && request.method === 'GET') {
     return json((await db.prepare(`${cards} WHERE i.pr IS NOT NULL AND i.status IN ('checking','ready') ORDER BY i.number`).all<CardRow>()).results.map(activityCard));
   }
@@ -163,8 +184,10 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
       await db.batch([
         db.prepare(`UPDATE ideas SET run_id=?,lease_until=?,status='building' WHERE id=(SELECT id FROM ideas
           WHERE (status='queued' OR (status='building' AND lease_until<?)) AND (? IS NULL OR id=?)
-          AND id NOT IN (SELECT value FROM json_each(?)) ORDER BY updated,number LIMIT 1)
-          AND NOT EXISTS(SELECT 1 FROM idea_runs WHERE id=?)`).bind(run,until,Date.now(),requested,requested,excludedIds,run),
+          AND id NOT IN (SELECT value FROM json_each(?))
+          AND (? OR NOT EXISTS(SELECT 1 FROM idea_messages m WHERE m.idea_id=ideas.id AND m.screenshots!='[]'))
+          ORDER BY updated,number LIMIT 1)
+          AND NOT EXISTS(SELECT 1 FROM idea_runs WHERE id=?)`).bind(run,until,Date.now(),requested,requested,excludedIds,data.supportsScreenshots===true?1:0,run),
         db.prepare(`INSERT OR IGNORE INTO idea_runs(id,idea_id,revision,through_seq,created)
           SELECT ?,id,revision,(SELECT COALESCE(MAX(seq),0) FROM idea_messages WHERE idea_id=ideas.id),? FROM ideas WHERE run_id=?`).bind(run,now,run),
       ]);

@@ -56,6 +56,7 @@ beforeAll(async()=>{
   const [tables,trigger]=sql.split('CREATE TRIGGER');for(const statement of tables!.split(';').filter(s=>s.trim()))await db.prepare(statement).run();await db.prepare(`CREATE TRIGGER${trigger}`).run();
   for(const statement of (await readFile(new URL('../migrations/0003_accounts.sql',import.meta.url),'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
   for(const statement of (await readFile(new URL('../migrations/0004_idea_authorizations.sql',import.meta.url),'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
+  for(const statement of (await readFile(new URL('../migrations/0005_idea_screenshots.sql',import.meta.url),'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
   env={QUESTIONS:db,IDEAS_ADMIN_TOKEN:admin,ASSETS:{fetch:async()=>new Response('Game works')}};
 },20000);
 afterAll(async()=>{await mf?.dispose();});

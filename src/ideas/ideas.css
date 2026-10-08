@@ -59,3 +59,15 @@
 .idea-activity.compact{margin:auto 0 0;padding:8px 11px;font-size:14px;}
 @keyframes idea-working{50%{opacity:.35;}}
 @media(prefers-reduced-motion:reduce){.idea-activity.active .idea-activity-dot{animation:none;}}
+
+.screenshot-drafts { display:flex; flex-wrap:wrap; gap:1rem; margin:1rem 0; }
+.screenshot-draft,.idea-picture { max-width:100%; width:240px; }
+.screenshot-draft img,.idea-picture img { display:block; max-width:100%; width:auto; height:auto; max-height:260px; margin:auto; object-fit:contain; border-radius:8px; }
+.idea-picture { background:transparent; border:1px solid #9a8567; border-radius:12px; padding:10px; color:inherit; cursor:pointer; }
+.idea-picture span { display:block; margin-top:8px; }
+.screenshot-actions { display:flex; flex-wrap:wrap; gap:0.7rem; margin-top:1rem; }
+.screenshot-actions .big-btn { flex:1 1 140px; margin:0; }
+.screenshot-dialog { box-sizing:border-box; width:min(760px,calc(100% - 24px)); max-height:calc(100dvh - 24px); overflow:auto; padding:16px; border:0; border-radius:16px; background:#fff8e8; color:#35291c; }
+.screenshot-dialog::backdrop { background:rgb(0 0 0 / 70%); }
+.screenshot-dialog img { display:block; width:100%; height:auto; margin-top:16px; }
+.screenshot-dialog canvas { display:block; max-width:100%; max-height:55dvh; width:auto; height:auto; margin:auto; touch-action:none; }
