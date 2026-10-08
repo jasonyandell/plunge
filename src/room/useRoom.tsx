@@ -18,6 +18,7 @@ import { ClosedTableError, enterRoom, familyProbe, forgetSeat, newVisitorId, Roo
   ROOMS_ENABLED, savedSeat, saveSeat, type RoomIdentity } from './client';
 import { relativeSeat, roomHistory } from './view';
 import { describeResult, VoteBar } from './VoteBar';
+import { RoomHistory } from './RoomHistory';
 import './room.css';
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -47,6 +48,7 @@ export interface RoomShell {
   overlays: ComponentChildren;
   /** Something for the table's menu. */
   menu: ComponentChildren;
+  openHistory: () => void;
   /** Seat whose Walt think is in flight, as the rotated table sees it. */
   thinking: Seat | null;
   /** A note under a rotated seat's name: rejoining, or Walt covering. */
@@ -76,6 +78,7 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
   const [retry, setRetry] = useState(0);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [tableOpen, setTableOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const leaving = useRef(false), joining = useRef(false);
   /** Commands Walt's runner sent on the table's behalf: a stale one is not the person's mistake. */
@@ -252,7 +255,7 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     return null;
   };
   const thinking = table?.thinkingSeat === null || table?.thinkingSeat === undefined || seat === null ? null : relativeSeat(table.thinkingSeat, seat);
-  if (!active) return { active, dispatch, chrome: null, screen: null, overlays: null, menu: null, thinking: null, seatNote: () => null };
+  if (!active) return { active, dispatch, chrome: null, screen: null, overlays: null, menu: null, openHistory: () => {}, thinking: null, seatNote: () => null };
 
   const shown = credentials ? table : visitorRoom;
   const people = shown?.seats.filter(Boolean).length ?? 0;
@@ -262,6 +265,7 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
   const chrome = identity ? <>
     <div class="room-bar"><span>Family table <small>{shown ? shown.open ? 'Open · anyone with the link can sit' : 'Closed · knock to come in' : 'Experimental'}</small></span>
       <button onClick={share}>Invite</button>
+      {credentials && table?.game && <button onClick={() => setHistoryOpen(true)} aria-haspopup="dialog">Prior hands</button>}
       {credentials && <button onClick={() => setTableOpen(true)} aria-label="Table">Table</button>}
       {credentials ? <button onClick={leave}>Leave</button> : <a class="room-bar-link" href={location.pathname}>Back</a>}</div>
     {!online && <div class="room-pause" role="status">Reconnecting… Your game and seat are saved.</div>}
@@ -302,6 +306,7 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     </div></div>
     : null;
   const overlays = <>
+    {historyOpen && table && credentials && <RoomHistory room={table} seat={credentials.seat} onClose={() => setHistoryOpen(false)} />}
     {tableOpen && table && credentials && <div class="overlay room-invite"><div class="card" role="dialog" aria-label="Table"><h2 class="sheet-title">The table</h2>
       <p class="hint">Everything here is a vote. {table.proposal ? 'The table is deciding something now.' : 'Low stakes go ahead unless someone says no within five seconds.'}</p>
       <div class="room-people">{[0,2,1,3].map(s => { const person = table.seats[s]; return <div key={s} class="room-person"><span><strong>{person?.name ?? 'Walt'}</strong>{s === credentials.seat ? ' · You' : person ? person.away ? ' · Walt is playing' : person.connected ? ' · Here' : ' · Rejoining' : ''}</span>
@@ -323,5 +328,5 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     {historyError && <div class="room-error" role="alert"><span>{historyError}</span><button onClick={() => void retryHistory().then(() => setHistoryError(null)).catch(() => {})}>Retry saving</button><button onClick={download}>Export</button></div>}
   </>;
   const menu = credentials ? <button type="button" class="big-btn secondary" onClick={() => setTableOpen(true)}>The table · votes and chairs</button> : null;
-  return { active, dispatch, chrome, screen, overlays, menu, thinking, seatNote };
+  return { active, dispatch, chrome, screen, overlays, menu, openHistory: () => setHistoryOpen(true), thinking, seatNote };
 }

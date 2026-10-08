@@ -63,3 +63,16 @@
 
 .rooms-shell { height: 100%; display: flex; flex-direction: column; }
 .seat-note { background: #286f65; color: var(--cream); }
+
+.room-history { width: min(560px, 94vw); max-height: 90dvh; overflow-y: auto; border: 0; color: var(--brown-9); }
+.room-history::backdrop { background: #0009; }
+.room-history select { width: 100%; min-height: 44px; font: inherit; color: inherit; background: var(--cream); border: 1px solid #a88f69; border-radius: 8px; padding: 8px; }
+.room-history p, .room-history li { overflow-wrap: anywhere; }
+.room-history summary { cursor: pointer; padding: 12px 0; }
+.room-history ol { text-align: left; }
+.room-history .hist-who { max-width: 72px; overflow-wrap: anywhere; white-space: normal; }
+.room-history .hist-plays { min-width: 0; }
+.room-history .hist-cell { min-width: 0; flex: 1; }
+.room-history-deal { margin: 12px 0; }
+.room-history-deal > div { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin-top: 6px; }
+.room-history-deal .dom { width: 44px; }

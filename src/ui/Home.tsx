@@ -15,6 +15,7 @@ import type { ListedTable } from '../room/protocol';
 interface HomeProps {
   app: AppState;
   dispatch: (e: AppEvent) => void;
+  onPriorHands?: () => void;
 }
 
 interface MoreProps extends HomeProps {
@@ -89,7 +90,7 @@ function FamilyEntry() {
 }
 
 /** The front door: one decision, everything else behind More. */
-export function Home({ app, dispatch }: HomeProps) {
+export function Home({ app, dispatch, onPriorHands }: HomeProps) {
   const paused = nelloPaused(app);
   // A finished game stays resumable while its last hand can still be undone or
   // replayed, so a reload doesn't strand those choices on the result card.
@@ -119,6 +120,7 @@ export function Home({ app, dispatch }: HomeProps) {
           Deal me in
         </button>
         {ROOMS_ENABLED && <FamilyEntry />}
+        {app.game && onPriorHands && <button type="button" class="text-btn" aria-haspopup="dialog" onClick={onPriorHands}>Prior hands</button>}
 
         <div class="link-row home-links">
           <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'how' })}>
