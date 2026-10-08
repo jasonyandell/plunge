@@ -69,8 +69,32 @@
 .thinking-switch[aria-checked="true"] .switch-track { background: var(--teal); }
 .thinking-switch[aria-checked="true"] .switch-track > span { transform: translateX(18px); }
 .home-settings > summary { text-align: center; font-size: 13px; color: #725a40; font-weight: 400; }
-.home-settings .native-intro { margin-bottom: 12px; }
+.more-section .native-intro { margin: 14px 0 8px; }
 .home button:focus-visible { outline-color: var(--teal-ink); }
+/* Home stays one decision: Deal in or Resume. Everything else is behind More. */
+.home-family { display: inline-flex; align-items: center; gap: 2px; margin-top: 10px; min-height: 44px; }
+.home-links { margin-top: 14px; padding-top: 4px; border-top: 1px solid #8c6d3b30; }
+.home-links .text-btn { min-height: 44px; }
+
+.more-card { text-align: left; padding-top: 14px; }
+.more-back { min-height: 44px; margin-left: -6px; }
+.more-title {
+  font-family: var(--display, serif);
+  font-size: 34px; font-weight: 500; letter-spacing: -.03em;
+  margin: 2px 0 4px; color: var(--brown-9);
+}
+.more-section { border-top: 1px solid #8c6d3b30; margin-top: 14px; padding-top: 4px; }
+.more-section h2 {
+  font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: #8a6c48; margin: 10px 0 2px;
+}
+.more-row {
+  display: flex; align-items: center; width: 100%; min-height: 44px; padding: 0;
+  border: 0; background: transparent; font: inherit; font-size: 15px; text-align: left;
+  color: var(--teal-ink); text-decoration: none; cursor: pointer;
+}
+.more-section > .setting-hint { margin: 0 0 6px; }
+
 @media (max-height: 680px) {
   .home { padding: 14px 12px; }
   .home-card { padding: 20px 22px 10px; }

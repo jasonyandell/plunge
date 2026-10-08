@@ -24,6 +24,7 @@ import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet, RestartConfirm } 
 import { TrickHistory } from './TrickHistory';
 import { NativeReview } from './NativeReview';
 import { MoveHint } from './MoveHint';
+import { HintsSwitch } from './Home';
 import { isNative } from '../ai/native';
 import './table.css';
 import './questions.css';
@@ -78,6 +79,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion 
   const [playError, setPlayError] = useState<string | null>(null);
   useEffect(() => setPlayError(null), [g, app.settings.showHints]);
   const [histOpen, setHistOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   // A shared hand from a link is shown instead of the player's own game,
   // view-only, and opens straight into review.
   const scenario = app.scenarioGame !== null;
@@ -134,7 +136,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion 
 
   return (
     <div class="table-screen" style={{ '--trick-hold-ms': `${TRICK_HOLD_MS}ms` }}>
-      <StatusStrip g={g} dispatch={dispatch} />
+      <StatusStrip g={g} onMenu={() => setMenuOpen(true)} />
       {!scenario && !review && (
         <div class="hand-tools">
           {practice && <span class="practice-chip" title="Undone or replayed: kept as practice, not counted in stats">Practice</span>}
@@ -238,6 +240,10 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion 
             g={g} nelloPreview={nelloAvailable(app.settings)} onBack={() => setReview(false)} sessionId={app.sessionId} questionGameId={branch}
             receipts={scenario ? {} : app.nativeReceipts} initialFlag={app.scenarioFlag} onQuestion={onQuestion} />
       )}
+      {menuOpen && (
+        <GameMenu app={app} dispatch={dispatch} onClose={() => setMenuOpen(false)}
+          onHome={() => { setMenuOpen(false); dispatch({ type: 'go', screen: 'home' }); }} />
+      )}
       {confirmRestart !== null && !scenario && (
         <RestartConfirm
           onConfirm={() => { dispatch({ type: 'restart-hand', epoch: confirmRestart }); setConfirmRestart(null); }}
@@ -252,14 +258,35 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion 
 
 // ---------------------------------------------------------------------------
 
-function StatusStrip({ g, dispatch }: { g: GameState; dispatch: (e: AppEvent) => void }) {
+/** The table's ☰: decide on hints mid-game, or step back to Home. */
+function GameMenu({ app, dispatch, onClose, onHome }: {
+  app: AppState; dispatch: (e: AppEvent) => void; onClose: () => void; onHome: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    addEventListener('keydown', onKey);
+    return () => removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div class="overlay game-menu-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div class="card game-menu" role="dialog" aria-label="Menu">
+        <HintsSwitch app={app} dispatch={dispatch} />
+        <button type="button" class="big-btn" onClick={onClose}>Keep playing</button>
+        <button type="button" class="big-btn secondary" onClick={onHome}>Back to home</button>
+      </div>
+    </div>
+  );
+}
+
+function StatusStrip({ g, onMenu }: { g: GameState; onMenu: () => void }) {
   return (
     <header class="status">
       <button
         type="button"
         class="menu-btn"
-        aria-label="Back to home"
-        onClick={() => dispatch({ type: 'go', screen: 'home' })}
+        aria-label="Menu"
+        aria-haspopup="dialog"
+        onClick={onMenu}
       >
         &#9776;
       </button>

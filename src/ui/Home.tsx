@@ -1,5 +1,5 @@
 /**
- * Home, How-to-play, and About screens.
+ * Home, More, How-to-play, and About screens.
  */
 
 import type { Difficulty } from '../ai';
@@ -12,13 +12,19 @@ import { ROOMS_ENABLED } from '../room/client';
 interface HomeProps {
   app: AppState;
   dispatch: (e: AppEvent) => void;
+}
+
+interface MoreProps extends HomeProps {
   onQuestions?: () => void;
   onHistory?: () => void;
 }
 
 const DIFFS: readonly Difficulty[] = ['native-partner', 'native-l1'];
 
-export function Home({ app, dispatch, onQuestions, onHistory }: HomeProps) {
+const openRooms = () => { const url = new URL(location.href); url.searchParams.set('rooms', '1'); location.assign(url.href); };
+
+/** The front door: one decision, everything else behind More. */
+export function Home({ app, dispatch }: HomeProps) {
   const paused = nelloPaused(app);
   // A finished game stays resumable while its last hand can still be undone or
   // replayed, so a reload doesn't strand those choices on the result card.
@@ -39,7 +45,7 @@ export function Home({ app, dispatch, onQuestions, onHistory }: HomeProps) {
             Resume your game
           </button>
         )}
-        {paused && <p class="setting-hint">Your Nel-O hand is saved. {NATIVE_TABLE ? 'Resume it in the browser with Nel-O Preview enabled.' : 'Enable Nel-O Preview in Advanced settings to resume.'}</p>}
+        {paused && <p class="setting-hint">Your Nel-O hand is saved. {NATIVE_TABLE ? 'Resume it in the browser with Nel-O Preview enabled.' : 'Turn on Nel-O Preview under More to resume.'}</p>}
         <button
           type="button"
           class={resumable ? 'big-btn secondary' : 'big-btn'}
@@ -47,37 +53,38 @@ export function Home({ app, dispatch, onQuestions, onHistory }: HomeProps) {
         >
           Deal me in
         </button>
+        {ROOMS_ENABLED && (
+          <button type="button" class="text-btn home-family" aria-label="Play with family · Experimental" onClick={openRooms}>
+            Play with family <small class="preview-badge">Experimental</small>
+          </button>
+        )}
 
-        {nelloAvailable(app.settings) && <p class="setting-hint">Nel-O Preview is on. Change it in Advanced settings.</p>}
-        {ROOMS_ENABLED && <button type="button" class="big-btn secondary" onClick={() => { const url=new URL(location.href);url.searchParams.set('rooms','1');location.assign(url.href); }}>Play with family · Experimental</button>}
-        <p class="setting-hint">Game history and Walt results stay on this device. Export a backup before clearing browser data.</p>
-        <a class="big-btn secondary" href="?ideas=1" style={{display:"block",boxSizing:"border-box",textAlign:"center",textDecoration:"none"}}>Ideas for Plunge</a>
-        <a class="text-btn" href="?account=1" style={{display:"inline-block",marginTop:"14px"}}>Your account · optional</a>
-        <div class="link-row">
-          {onHistory && <button type="button" class="text-btn" onClick={onHistory}>Export history</button>}
-          {onQuestions && <button type="button" class="text-btn" onClick={onQuestions}>Your questions</button>}
+        <div class="link-row home-links">
           <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'how' })}>
             How to play
           </button>
-          <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'about' })}>
-            About
+          <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'more' })}>
+            More{nelloAvailable(app.settings) && <small class="preview-badge">Nel-O</small>}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
 
-        <div class="setting">
-          <button type="button" role="switch" class="thinking-switch"
-            aria-checked={app.settings.showHints} aria-describedby="show-hints-description"
-            onClick={() => dispatch({ type: 'set-show-hints', enabled: !app.settings.showHints })}>
-            <span>Show hints</span>
-            <span class="switch-track" aria-hidden="true"><span /></span>
-          </button>
-          <p id="show-hints-description" class="setting-hint">
-            Bidding, trump and move advice, plus legal-domino highlighting. Saved on this device.
-          </p>
-        </div>
+/** Settings, your saved things, and the rest of Plunge. */
+export function More({ app, dispatch, onQuestions, onHistory }: MoreProps) {
+  return (
+    <div class="home">
+      <div class="home-card more-card">
+        <button type="button" class="text-btn more-back" onClick={() => dispatch({ type: 'go', screen: 'home' })}>
+          &larr; Back
+        </button>
+        <h1 class="more-title">More</h1>
 
-        <details class="disclosure home-settings">
-          <summary>Advanced settings</summary>
+        <section class="more-section" aria-labelledby="more-settings">
+          <h2 id="more-settings">Settings</h2>
+          <HintsSwitch app={app} dispatch={dispatch} />
           <div class="setting">
             <span class="setting-label">Computer player</span>
             <p class="setting-hint">Walt plays the three computer seats. Choose which version to use.</p>
@@ -128,8 +135,39 @@ export function Home({ app, dispatch, onQuestions, onHistory }: HomeProps) {
             {' '}It uses only its own hand and the public plays. After a hand,
             “See how it went” lets you inspect its estimates and share a move.
           </p>
-        </details>
+        </section>
+
+        <section class="more-section" aria-labelledby="more-yours">
+          <h2 id="more-yours">Yours</h2>
+          {onQuestions && <button type="button" class="more-row" onClick={onQuestions}>Your questions</button>}
+          {onHistory && <button type="button" class="more-row" onClick={onHistory}>Export history</button>}
+          <p class="setting-hint">Game history and Walt results stay on this device. Export a backup before clearing browser data.</p>
+          <a class="more-row" href="?account=1">Your account · optional</a>
+        </section>
+
+        <section class="more-section" aria-labelledby="more-plunge">
+          <h2 id="more-plunge">Plunge</h2>
+          <a class="more-row" href="?ideas=1">Ideas for Plunge</a>
+          <button type="button" class="more-row" onClick={() => dispatch({ type: 'go', screen: 'about' })}>About</button>
+        </section>
       </div>
+    </div>
+  );
+}
+
+/** Show hints, shared by More and the in-game menu. */
+export function HintsSwitch({ app, dispatch }: HomeProps) {
+  return (
+    <div class="setting">
+      <button type="button" role="switch" class="thinking-switch"
+        aria-checked={app.settings.showHints} aria-describedby="show-hints-description"
+        onClick={() => dispatch({ type: 'set-show-hints', enabled: !app.settings.showHints })}>
+        <span>Show hints</span>
+        <span class="switch-track" aria-hidden="true"><span /></span>
+      </button>
+      <p id="show-hints-description" class="setting-hint">
+        Bidding, trump and move advice, plus legal-domino highlighting. Saved on this device.
+      </p>
     </div>
   );
 }
@@ -178,7 +216,7 @@ export function HowTo({ dispatch }: { dispatch: (e: AppEvent) => void }) {
 export function About({ dispatch }: { dispatch: (e: AppEvent) => void }) {
   return (
     <div class="doc">
-      <BackBar dispatch={dispatch} title="About" />
+      <BackBar dispatch={dispatch} title="About" back="more" />
       <div class="doc-body">
         <p>
           42 was invented in 1887 in Garner, Texas, by two boys — William Thomas and
@@ -203,14 +241,14 @@ export function About({ dispatch }: { dispatch: (e: AppEvent) => void }) {
   );
 }
 
-function BackBar({ dispatch, title }: { dispatch: (e: AppEvent) => void; title: string }) {
+function BackBar({ dispatch, title, back = 'home' }: { dispatch: (e: AppEvent) => void; title: string; back?: 'home' | 'more' }) {
   return (
     <header class="back-bar">
       <button
         type="button"
         class="text-btn"
-        aria-label="Back to home"
-        onClick={() => dispatch({ type: 'go', screen: 'home' })}
+        aria-label={back === 'home' ? 'Back to home' : 'Back to More'}
+        onClick={() => dispatch({ type: 'go', screen: back })}
       >
         &larr; Back
       </button>

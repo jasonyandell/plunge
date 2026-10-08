@@ -14,7 +14,7 @@ import {
 import {
   BUILD_ID, UPDATE_POLL_MS, fetchRemoteVersion, updateAvailable,
 } from './update';
-import { Home, HowTo, About } from './Home';
+import { Home, HowTo, About, More } from './Home';
 import { Table } from './Table';
 import { codeFromHash, decodeHand } from './share';
 import { decodeObservation } from './observation-link';
@@ -236,16 +236,18 @@ export function App() {
   const screen = (() => {
     switch (app.screen) {
       case 'home':
-        return <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} />;
+        return <Home app={app} dispatch={dispatch} />;
       case 'how':
         return <HowTo dispatch={dispatch} />;
       case 'about':
         return <About dispatch={dispatch} />;
+      case 'more':
+        return <More app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} />;
       case 'table':
         return app.game || app.scenarioGame ? (
           <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} />
         ) : (
-          <Home app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} />
+          <Home app={app} dispatch={dispatch} />
         );
     }
   })();
