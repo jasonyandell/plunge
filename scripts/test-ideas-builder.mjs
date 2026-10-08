@@ -30,7 +30,7 @@ test('approval is explicit in the prompt and a permission block is not a questio
   assert.equal(allowedFile('worker/accounts.ts',files),false);
 });
 test('the builder only publishes game code and tests, never its infrastructure',()=>{
-  for(const file of ['src/ui/Home.tsx','src/room/RoomTable.tsx','src/engine/game.ts','tests/engine.test.ts'])assert.equal(allowedFile(file),true);
+  for(const file of ['src/ui/Home.tsx','src/room/useRoom.tsx','src/engine/game.ts','tests/engine.test.ts'])assert.equal(allowedFile(file),true);
   for(const file of ['.github/workflows/deploy.yml','worker/ideas.ts','src/ideas/Ideas.tsx','src/ui/AGENTS.md','scripts/ideas/builder.mjs','package.json','public/sw.js'])assert.equal(allowedFile(file),false);
 });
 test('family requests remain quoted data behind fixed coordinator instructions',()=>{

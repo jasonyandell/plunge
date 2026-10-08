@@ -9,7 +9,7 @@ import { initialApp } from '../src/ui/store';
 import { recordHistory, listHistory, snapshotOf } from '../src/history/recorder';
 import { listHands } from '../src/history/legacy';
 import { roomCode, roomFromInput, roomFromHash, savedSeat, saveSeat } from '../src/room/client';
-import { roomHistory } from '../src/room/Rooms';
+import { roomHistory } from '../src/room/view';
 import { createRoom, joinRoom, roomSnapshot, commandRoom, settleRoom } from '../worker/rooms';
 
 describe('room presentation and recorder boundaries', () => {

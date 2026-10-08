@@ -4,6 +4,19 @@ Drop in, drop out, and decide things together without anyone hosting. This note
 records the design behind `worker/rooms.ts`, `worker/room-votes.ts` and
 `src/room/`. The rules of 42 are unchanged; see [RULES.md](RULES.md).
 
+## One table
+
+The shared table is the ordinary app, not a second screen. The store keeps the
+coordinator's game rotated so you are seat 0 (`rotateGame`), so every screen
+that reads a game state and the settings keeps working: hints, legal-domino
+highlighting, questions, trick history, review, the Menu. `useRoom` owns what
+differs: the socket, who runs Walt, routing your decisions (moves, next hand,
+undo, start) to the room instead of the reducer, the chrome around the felt,
+and recording history with canonical seats. The seat names every screen reads
+are a live binding (`SEAT_NAMES`) that the room sets while it is open. The solo
+save underneath is never written while a table is open; only the hints choice
+travels home.
+
 ## Nobody hosts
 
 The old room had a host: seat 0 ran Walt in their browser, only they could

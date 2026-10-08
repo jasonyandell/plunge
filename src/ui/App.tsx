@@ -9,8 +9,9 @@
 import { useEffect, useReducer, useRef, useState } from 'preact/hooks';
 import type { Seat } from '../engine';
 import {
-  type AppEvent, type AppState, HUMAN_SEAT, TRICK_SHOW_MS, nelloAvailable, aiDelayMs, initialApp, loadApp, pendingAiSeat, questionGameId, reducer, saveApp,
+  type AppEvent, type AppState, HUMAN_SEAT, TRICK_SHOW_MS, nelloAvailable, aiDelayMs, initialApp, loadApp, pendingAiSeat, questionGameId, reducer, saveApp, saveShowHints,
 } from './store';
+import { useRoom } from '../room/useRoom';
 import {
   BUILD_ID, UPDATE_POLL_MS, fetchRemoteVersion, updateAvailable,
 } from './update';
@@ -28,8 +29,10 @@ import { Questions } from './Questions';
 import { attachGame, syncQuestions } from '../questions/client';
 
 export function App() {
-  const [app, dispatch] = useReducer((state: AppState, event: AppEvent) => {
+  const [app, reduce] = useReducer((state: AppState, event: AppEvent) => {
     const next = reducer(state, event);
+    // A shared table records its own canonical history (see useRoom).
+    if (next.room || state.room) return next;
     // Undo and replay never discard: the branch being left is recorded first.
     // (Content-addressed, so an already-saved snapshot isn't duplicated.)
     if ((event.type === 'undo' || event.type === 'restart-hand') && next.game !== state.game) {
@@ -42,11 +45,15 @@ export function App() {
   }, undefined, () =>
     initialApp(typeof localStorage !== 'undefined' ? loadApp(localStorage) : null, location.search),
   );
+  // A family table lives in this same app: your moves go to the room, the rest stays local.
+  const room = useRoom(app, reduce);
+  const dispatch = room.dispatch;
 
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
   const retryRecording = () => void retryHistory().then(() => setHistoryError(null)).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
   useEffect(() => {
+    if (room.active) return;
     void recordHistory(app).then(() => setHistoryError(null)).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
   }, [app.game, app.sessionId, app.nativeReceipts, app.auctionSurveys, app.settings]);
   useEffect(() => {
@@ -149,7 +156,8 @@ export function App() {
   // Persist settings + in-progress game. (A shared hand opened from a link
   // is never part of the save — the player's own game stays underneath.)
   useEffect(() => {
-    if (typeof localStorage !== 'undefined') saveApp(localStorage, app);
+    if (typeof localStorage === 'undefined') return;
+    if (room.active) saveShowHints(localStorage, app.settings.showHints); else saveApp(localStorage, app);
   }, [app.game, app.settings, app.showTrick, app.seed, app.aiMoves, app.nativeReceipts, app.auctionSurveys, app.sessionId,
     app.epoch, app.retry, app.practiceHands]);
 
@@ -234,6 +242,12 @@ export function App() {
   );
 
   const screen = (() => {
+    if (room.active && (room.screen || app.screen === 'table' || app.screen === 'home')) return <>
+      {room.chrome}
+      {room.screen ?? (app.game || app.scenarioGame
+        ? <Table app={app} dispatch={dispatch} thinking={room.thinking} onQuestion={openQuestion} seatNote={room.seatNote} menuExtra={room.menu} />
+        : <div class="room-wait" role="status">Connecting to the table…</div>)}
+    </>;
     switch (app.screen) {
       case 'home':
         return <Home app={app} dispatch={dispatch} />;
@@ -264,6 +278,7 @@ export function App() {
       )}
       {evidenceError && <div class="native-error" role="alert"><span>{evidenceError}</span><button type="button" onClick={() => void retryEvidence().then(() => setEvidenceError(null)).catch(() => {})}>Retry saving</button><button type="button" onClick={downloadHistory}>Export</button></div>}
       {historyError && <div class="native-error" role="alert"><span>{historyError}</span><button type="button" onClick={retryRecording}>Retry saving</button></div>}
+      {room.overlays}
       {updateBanner}
     </>
   );

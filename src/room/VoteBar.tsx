@@ -20,7 +20,7 @@ const ASK: Record<VoteResult['kind'], string> = { start: 'starting', restart: 's
   undo: 'the takeback', open: 'opening the table', close: 'closing the table', kick: 'that', admit: 'letting them in' };
 export function describeResult(r: VoteResult): string {
   if (r.outcome === 'passed') return r.kind === 'admit' ? `${DONE.admit} · the table let ${r.byName} in`
-    : r.kind === 'kick' ? `${r.targetName ?? 'A chair'} stepped out · Walt plays that seat` : `${DONE[r.kind]} · ${r.byName} asked, nobody minded`;
+    : r.kind === 'kick' ? `${r.targetName ?? 'A chair'} stepped out · Walt plays that seat` : `${DONE[r.kind]} · ${r.byName} asked, the table agreed`;
   if (r.outcome === 'failed') return r.noFrom ? `${r.noFrom} said no to ${ASK[r.kind]}` : `Nobody answered ${r.byName} about ${ASK[r.kind]}`;
   return `Nothing left for ${ASK[r.kind]}`;
 }

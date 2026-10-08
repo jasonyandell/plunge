@@ -72,7 +72,7 @@ export class RoomConnection {
   private seenRevision = -1;
   constructor(private identity: RoomIdentity, private handlers: {
     state: (state: RoomState) => void; status: (connected: boolean) => void;
-    error: (message: string) => void; pending: (pending: boolean) => void;
+    error: (message: string, id?: string) => void; pending: (pending: boolean) => void;
     /** The server closed this identity for good: another tab, a seat that is gone, an expired room. */
     ended?: (code: number, reason: string) => void;
   }) { this.connect(); }
@@ -107,7 +107,7 @@ export class RoomConnection {
         }
         else if (message.type === 'error') {
           if (message.id) this.pending.delete(message.id);
-          this.handlers.error(message.message);
+          this.handlers.error(message.message, message.id);
         } else if (message.type === 'ack') {
           if (message.revision <= this.seenRevision) this.pending.delete(message.id);
           else this.acknowledgements.set(message.id, message.revision);

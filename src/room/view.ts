@@ -1,4 +1,6 @@
 import type { GameState, Seat } from '../engine';
+import type { RoomState } from './protocol';
+import { DEFAULT_SETTINGS, initialApp } from '../ui/store';
 export const relativeSeat = (absolute: Seat, viewer: Seat): Seat => ((absolute - viewer + 4) % 4) as Seat;
 /** Presentation only. Wire actions and recorder state always use canonical seats. */
 export function rotateGame(g: GameState, viewer: Seat): GameState {
@@ -11,5 +13,15 @@ export function rotateGame(g: GameState, viewer: Seat): GameState {
     tricks: g.tricks.map(t => ({ ...t, winner: relativeSeat(t.winner, viewer), plays: t.plays.map(play) })),
     marks: teams(g.marks), points: teams(g.points), winner: g.winner === null ? null : ((g.winner + viewer) % 2) as 0 | 1,
     handResult: g.handResult ? { ...g.handResult, declarer: relativeSeat(g.handResult.declarer, viewer), team: ((g.handResult.team + viewer) % 2) as 0 | 1 } : null,
+  };
+}
+
+/** What the recorder keeps for a shared table: canonical seats, hints off, the table's Nel-O rule. */
+export function roomHistory(room: RoomState, localSeat: Seat) {
+  return { ...initialApp(), screen: 'table' as const, settings: { ...DEFAULT_SETTINGS, showHints: false, nelloPreview: room.game?.config.nello === 'open' },
+    seed: room.seed, game: room.game, sessionId: room.sessionId, nativeReceipts: room.nativeReceipts, auctionSurveys: room.auctionSurveys,
+    epoch: room.revision, retry: room.retry ?? null, practiceHands: room.practiceHands ?? [],
+    room: { mode: 'shared-room' as const, localSeat, revision: room.revision,
+      humans: room.seats.flatMap((s, seat) => s ? [{ seat: seat as Seat, name: s.name }] : []) },
   };
 }

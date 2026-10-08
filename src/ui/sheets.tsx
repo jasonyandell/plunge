@@ -158,11 +158,11 @@ export function BidSheet({ g, dispatch, sessionId, questionGameId, onQuestion, s
 function specialHint(b: Bid & { kind: 'marks' }): string {
   switch (b.special) {
     case 'plunge':
-      return "4+ doubles — Gran calls trump and y'all take all 7 tricks.";
+      return `4+ doubles — ${SEAT_NAMES[2]} calls trump and y'all take all 7 tricks.`;
     case 'splash':
-      return '3+ doubles — Gran calls trump; all 7 tricks or bust.';
+      return `3+ doubles — ${SEAT_NAMES[2]} calls trump; all 7 tricks or bust.`;
     case 'nello':
-      return 'Lose every trick; Gran sits this one out.';
+      return `Lose every trick; ${SEAT_NAMES[2]} sits this one out.`;
     default:
       return '';
   }

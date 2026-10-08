@@ -40,17 +40,23 @@ import {
 } from '../engine';
 import { encodeReplay } from '../engine/replay-code';
 import { handStartOf, handSteps, type HandStep } from '../engine/hand-history';
+import type { RoomState } from '../room/protocol';
+import { rotateGame } from '../room/view';
 export { handStartOf, handSteps, type HandStep } from '../engine/hand-history';
 
 export const HUMAN_SEAT = 0 as Seat;
 
 /** Seat 0 = you (bottom). Clockwise: 1 = left, 2 = across, 3 = right. */
-export const SEAT_NAMES: readonly [string, string, string, string] = [
-  'You',
-  'Earl',
-  'Gran',
-  'Ruby',
-];
+export const SOLO_SEAT_NAMES: readonly [string, string, string, string] = ['You', 'Earl', 'Gran', 'Ruby'];
+/**
+ * Who sits where, as the table shows it. Solo play is always Earl, Gran and
+ * Ruby. A shared table sets the family's names (rotated so you are seat 0)
+ * for as long as it is open; every screen reads this live binding.
+ */
+export let SEAT_NAMES: readonly [string, string, string, string] = SOLO_SEAT_NAMES;
+export function setSeatNames(names: readonly [string, string, string, string] | null): void {
+  SEAT_NAMES = names ?? SOLO_SEAT_NAMES;
+}
 
 export type Preset = 'casual' | 'tournament';
 
@@ -98,9 +104,19 @@ export function nelloPaused(s: AppState): boolean {
 
 export type Screen = 'home' | 'table' | 'how' | 'about' | 'more';
 
+export interface SharedRoom {
+  readonly mode: 'shared-room'; readonly localSeat: Seat; readonly revision: number;
+  readonly humans: readonly { seat: Seat; name: string }[];
+  /** The table as the coordinator last sent it, in canonical seats. Live only; never recorded. */
+  readonly table?: RoomState;
+}
 export interface AppState {
-  /** Present only in the experimental room recorder; solo saves stay unchanged. */
-  readonly room?: { readonly mode: 'shared-room'; readonly localSeat: Seat; readonly revision: number; readonly humans: readonly { seat: Seat; name: string }[] };
+  /**
+   * Set while this app shows a shared family table. `game` is then the
+   * coordinator's game rotated so you are seat 0; moves go to the room, not
+   * the reducer, and the solo save underneath stays untouched.
+   */
+  readonly room?: SharedRoom;
   readonly screen: Screen;
   readonly settings: Settings;
   readonly seed: string;
@@ -181,7 +197,13 @@ export type AppEvent =
    */
   | { readonly type: 'undo'; readonly epoch: number }
   /** Replay this exact deal from the start, with the marks it began with. */
-  | { readonly type: 'restart-hand'; readonly epoch: number };
+  | { readonly type: 'restart-hand'; readonly epoch: number }
+  /** Sit at a shared table: the game arrives with the first snapshot. */
+  | { readonly type: 'room-enter'; readonly localSeat: Seat }
+  /** The coordinator's latest view of a shared table. */
+  | { readonly type: 'room-snapshot'; readonly state: RoomState; readonly localSeat: Seat; readonly now?: number }
+  /** Stand up from a shared table; the solo game is reloaded by the page. */
+  | { readonly type: 'room-exit' };
 
 /**
  * The table's dispatch: every human decision carries the generation it was
@@ -228,18 +250,20 @@ export function initialApp(saved?: SavedState | null, search = ''): AppState {
 // ---------------------------------------------------------------------------
 
 function retryable(s: AppState): GameState | null {
-  return s.game && !s.scenarioGame && !nelloPaused(s) ? s.game : null;
+  return s.game && !s.scenarioGame && !nelloPaused(s) && !s.room ? s.game : null;
 }
 
 /**
  * Is there a decision of yours this hand to take back? Exactly when the
  * reducer would act on an Undo — the button is never offered as a no-op.
+ * At a shared table the coordinator decides, and the table votes on it.
  */
 export function canUndo(s: AppState): boolean {
+  if (s.room) return !s.scenarioGame && s.room.table?.canUndo === true;
   return rollbackTarget(s, 'undo') !== null;
 }
 
-/** Has anything happened this hand that replaying it would clear? */
+/** Has anything happened this hand that replaying it would clear? (Never at a shared table.) */
 export function canRestart(s: AppState): boolean {
   return rollbackTarget(s, 'restart') !== null;
 }
@@ -326,7 +350,8 @@ export function trickJustCompleted(prev: GameState, next: GameState): boolean {
  */
 export function pendingAiSeat(s: AppState): Seat | null {
   const g = s.game;
-  if (!g || nelloPaused(s) || s.screen !== 'table' || s.showTrick || s.scenarioGame) return null;
+  // At a shared table the person running Walt submits its moves to the room.
+  if (!g || s.room || nelloPaused(s) || s.screen !== 'table' || s.showTrick || s.scenarioGame) return null;
   if (g.phase !== 'bidding' && g.phase !== 'declaring' && g.phase !== 'playing') return null;
   if (g.turn === null || g.turn === HUMAN_SEAT) return null;
   return g.turn;
@@ -339,6 +364,25 @@ export function aiRand(game: GameState, aiMoves: number): () => number {
 
 export function reducer(s: AppState, e: AppEvent): AppState {
   switch (e.type) {
+    case 'room-enter':
+      return { ...s, screen: 'table', game: null, scenarioGame: null, scenarioFlag: null, showTrick: false, retry: null,
+        practiceHands: [], nativeReceipts: {}, auctionSurveys: {}, aiMoves: 0,
+        room: { mode: 'shared-room', localSeat: e.localSeat, revision: -1, humans: [] } };
+    case 'room-snapshot': {
+      const t = e.state, game = t.game ? rotateGame(t.game, e.localSeat) : null;
+      return { ...s, screen: 'table', game, scenarioGame: null, scenarioFlag: null, aiMoves: 0,
+        // The table's rules decide what is playable, not this phone's preview setting.
+        settings: t.game?.config.nello === 'open' && !s.settings.nelloPreview ? { ...s.settings, nelloPreview: true } : s.settings,
+        seed: t.seed, sessionId: t.sessionId || 'room', nativeReceipts: t.nativeReceipts, auctionSurveys: t.auctionSurveys,
+        epoch: t.revision, retry: t.retry ?? null, practiceHands: t.practiceHands ?? [],
+        showTrick: t.holdUntil > (e.now ?? Date.now()),
+        room: { mode: 'shared-room', localSeat: e.localSeat, revision: t.revision, table: t,
+          humans: t.seats.flatMap((seat, i) => seat ? [{ seat: i as Seat, name: seat.name }] : []) } };
+    }
+    case 'room-exit': {
+      const { room: _room, ...rest } = s;
+      return { ...rest, game: null, screen: 'home' };
+    }
     case 'go':
       // Leaving for home closes any shared-hand review.
       return { ...s, screen: e.screen, scenarioGame: e.screen === 'home' ? null : s.scenarioGame,
@@ -363,6 +407,7 @@ export function reducer(s: AppState, e: AppEvent): AppState {
     case 'set-show-hints':
       return { ...s, settings: { ...s.settings, showHints: e.enabled } };
     case 'new-game':
+      if (s.room) return s; // The table votes to start; the room routes this before the reducer.
       return {
         ...s,
         screen: 'table',
@@ -392,6 +437,7 @@ export function reducer(s: AppState, e: AppEvent): AppState {
     case 'restart-hand':
       return e.epoch === s.epoch ? rollbackTarget(s, 'restart') ?? s : s;
     case 'human': {
+      if (s.room) return s; // Shared-table moves go to the coordinator; only its snapshots change the game.
       if (!s.game || s.scenarioGame || s.showTrick || nelloPaused(s)) return s; // no moves during review, the trick pause, or a disabled preview
       // A tap rendered before an undo or replay never lands afterward, even at an identical position.
       if (stale(s, e.epoch)) return s;
@@ -517,6 +563,14 @@ export function saveApp(storage: StorageLike, s: AppState): void {
   } catch {
     // storage full / private mode — losing the save is fine
   }
+}
+/** A shared table keeps the solo save underneath; only the hints choice travels home. */
+export function saveShowHints(storage: StorageLike, showHints: boolean): void {
+  try {
+    const saved = loadApp(storage);
+    if (!saved) return;
+    storage.setItem(STORAGE_KEY, JSON.stringify({ ...saved, settings: { ...saved.settings, showHints } }));
+  } catch { /* As above. */ }
 }
 
 const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard', 'onyx', 'walt', 'native-l1', 'native-partner'];
@@ -697,12 +751,12 @@ export function gameOverCopy(g: GameState): HandOverCopy {
   if (g.winner === 0) {
     return {
       title: "Y'all win!",
-      detail: 'Gran gives you a wink across the table. That makes ALL.',
+      detail: `${SEAT_NAMES[2]} gives you a wink across the table. That makes ALL.`,
     };
   }
   return {
     title: "They got y'all this time",
-    detail: 'Earl and Ruby tip their hats. Shake it back and run it again.',
+    detail: `${SEAT_NAMES[1]} and ${SEAT_NAMES[3]} tip their hats. Shake it back and run it again.`,
   };
 }
 

@@ -6,7 +6,10 @@ best of luck to the both of you.
 **Play it: https://plunge.texas42.workers.dev** — works in any phone browser,
 installable as an app, plays offline.
 
-**Play with family · Experimental** opens a shared family table in the same app.
+**Play with family · Experimental** opens a shared family table on the same
+felt as solo play: hints, legal-domino highlighting, mid-hand questions, trick
+history, the post-hand review and the Menu all work there, and your seat is
+always at the bottom.
 Open a table and send its invite or room code. Family can open their existing
 Plunge app, choose **Play with family**, and paste the code or invite; no second
 install or account is needed. Nobody hosts: people sit down or leave any time,
