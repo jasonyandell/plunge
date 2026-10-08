@@ -218,6 +218,10 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     setTableOpen(false);
   };
   const vote = (choice: Vote) => { if (online && table?.proposal) send({ type: 'vote', proposal: table.proposal.id, vote: choice }); };
+  const agreeOr = (kind: ProposalKind) => {
+    const open = table?.proposal;
+    if (open?.kind === kind && seat !== null && open.votes[seat] === undefined) vote('yes'); else propose(kind);
+  };
   const leave = () => {
     if (!credentials || !confirm('Leave the table? Walt plays your chair, and anyone can sit there next.')) return;
     leaving.current = true;
@@ -227,8 +231,9 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
   const dispatch = (e: AppEvent): void => {
     if (!active) { reduce(e); return; }
     switch (e.type) {
-      case 'human': if (!table) return; if (e.action.type === 'next-hand') propose('next-hand'); else act(e.action); return;
-      case 'new-game': if (table) propose('start'); return;
+      // Tapping the same button as the person who asked is the second yes.
+      case 'human': if (!table) return; if (e.action.type === 'next-hand') agreeOr('next-hand'); else act(e.action); return;
+      case 'new-game': if (table) agreeOr('start'); return;
       case 'undo': if (table) propose('undo'); return;
       case 'restart-hand': return;
       case 'go': if (e.screen === 'home') { location.assign(location.pathname); return; } reduce(e); return;

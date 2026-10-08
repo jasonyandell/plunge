@@ -9,6 +9,11 @@ const pair = new Set<Seat>([0, 2]);
 function decide(room: SavedRoom, seat: Seat, kind: ProposalKind, connected: ReadonlySet<Seat>, now: number, target?: Seat) {
   const command: RoomCommand = { type: 'propose', id: `${kind}-${room.state.revision}`, revision: room.state.revision, kind, ...(target === undefined ? {} : { target }) };
   const status = commandRoom(room, seat, command, connected, now);
+  // The next hand wants a second person; whoever else is present agrees.
+  if (room.state.proposal?.id === command.id && kind === 'next-hand') {
+    const other = [...connected].find(s => s !== seat && room.players[s]);
+    if (other !== undefined) commandRoom(room, other, { type: 'vote', id: `${command.id}-yes`, proposal: command.id, vote: 'yes' }, connected, now + 1);
+  }
   settleRoom(room, connected, now + 5001);
   return status;
 }
@@ -193,9 +198,15 @@ describe('family table without a host', () => {
     if (saved.state.game!.phase === 'hand-over') {
       const oldHand = saved.state.game!.handNumber;
       expect(() => commandRoom(saved, 2, { type: 'action', id: 'next', revision: saved.state.revision, action: { type: 'next-hand' } }, pair, now)).toThrow(/with the table/);
-      expect(decide(saved, 2, 'next-hand', pair, now)).toBe('changed');
+      // One person asking is not enough while another is still looking at the result.
+      commandRoom(saved, 2, { type: 'propose', id: 'early', revision: saved.state.revision, kind: 'next-hand' }, pair, now);
+      expect(saved.state.proposal).toMatchObject({ kind: 'next-hand', mode: 'allow', needs: 'two' });
+      expect(settleRoom(saved, pair, now + 89999)).toBe(false); expect(saved.state.game!.handNumber).toBe(oldHand);
+      expect(settleRoom(saved, pair, now + 90000)).toBe(true); expect(saved.state.lastVote).toMatchObject({ kind: 'next-hand', outcome: 'failed' });
+      expect(saved.state.game!.handNumber).toBe(oldHand);
+      expect(decide(saved, 2, 'next-hand', pair, now + 90001)).toBe('changed');
       expect(saved.state.game!.handNumber).toBe(oldHand + 1);
-      expect(() => decide(saved, 2, 'next-hand', pair, now + 6000)).toThrow(/not over/);
+      expect(() => decide(saved, 2, 'next-hand', pair, now + 96000)).toThrow(/not over/);
     } else {
       expect(decide(saved, 2, 'start', pair, now)).toBe('changed');
       expect(saved.state.game!.handNumber).toBe(1);
