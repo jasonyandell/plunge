@@ -61,20 +61,34 @@ export function handRecordOf(g: GameState, gameId: string, player: string, pract
 }
 
 let opened: Promise<IDBDatabase> | undefined;
-function db(): Promise<IDBDatabase> {
+/**
+ * The device's stats database. Version 2 adds the account-connection stores
+ * beside the original hands log (src/history/stats-sync.ts); existing hands
+ * are kept exactly as written.
+ */
+export function statsDb(): Promise<IDBDatabase> {
   return opened ??= new Promise((resolve, reject) => {
-    const request = indexedDB.open('plunge-stats', 1);
+    const request = indexedDB.open('plunge-stats', 2);
     request.onupgradeneeded = () => {
-      request.result.createObjectStore('hands', { keyPath: 'id' });
-      request.result.createObjectStore('analysis', { keyPath: 'id' });
+      const stores = request.result.objectStoreNames;
+      if (!stores.contains('hands')) request.result.createObjectStore('hands', { keyPath: 'id' });
+      if (!stores.contains('analysis')) request.result.createObjectStore('analysis', { keyPath: 'id' });
+      if (!stores.contains('meta')) request.result.createObjectStore('meta');
+      if (!stores.contains('sync')) request.result.createObjectStore('sync', { keyPath: 'key' });
+      if (!stores.contains('remote')) request.result.createObjectStore('remote', { keyPath: 'key' });
     };
+    let blocked = false;
+    request.onblocked = () => { blocked = true; opened = undefined; reject(new Error('Close other Plunge tabs to finish updating the stats log.')); };
     request.onsuccess = () => {
+      // A connection that opens after its caller gave up is closed, never leaked.
+      if (blocked) { request.result.close(); return; }
       request.result.onversionchange = () => { request.result.close(); opened = undefined; };
       resolve(request.result);
     };
     request.onerror = () => { opened = undefined; reject(new Error('This browser could not open the stats log.')); };
   });
 }
+const db = statsDb;
 
 /** Append once; a hand already in the log is left exactly as first written. */
 export async function appendHand(record: HandRecord): Promise<void> {

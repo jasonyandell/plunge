@@ -9,9 +9,9 @@ player's chosen password manager; availability on another device depends on that
 manager and device. The existing private family invites remain an alternative.
 
 Signing in identifies the account. Jason separately grants access to family ideas.
-Every account has a stable random ID for future stats ownership. This change does
-not collect, upload, or link existing game history and does not implement stats
-sync. Creating a second account—even with the same name—creates a separate identity.
+Every account has a stable random ID that owns its finished-hand stats (below).
+Signing in does not upload game history, Walt receipts, or questions. Creating a
+second account—even with the same name—creates a separate identity.
 
 ## Launch and add family
 
@@ -39,6 +39,34 @@ owner; the browser panel grants family access but cannot promote other owners.
 **Remove family access** takes effect on subsequent requests without deleting an
 account or its conversations. Regranting keeps its original identity/authorship.
 Command-line equivalents are `grant ACCOUNT_ID` and `revoke ACCOUNT_ID`.
+
+## Finished-hand stats
+
+The device keeps its finished-hand log (`plunge-stats` in IndexedDB, one record
+per completed solo hand: replay code, marks before and after, result, computer
+player). While signed in, the app connects that log to the account through
+`/api/stats`:
+
+- **Upload once, first write kept.** Each hand is sent with a random per-install
+  device id and stored under `(account, device, hand)`; a repeat is acknowledged
+  and never overwrites. The device marks a hand connected only after the service
+  names it as stored. Hands the service will not accept (a replay that is not a
+  finished hand) stay on the device and are counted separately.
+- **Merge by account.** Every device of the account uploads to the same table.
+  Two devices that happened to use the same game id keep both hands. Each device
+  pulls the others' hands into a local cache, continuing from where it left off,
+  so the merged log reads the same everywhere and offline.
+- **Nothing while signed out or on previews.** The device log is never changed by
+  sync. Signing out stops uploads; signing in as another account on the same
+  device connects the device's hands to that account too.
+- The account page shows the counts and offers **Connect now**; the game also
+  connects after each finished hand, every 30 seconds, on focus, and on reconnect.
+
+The migration `0004_account_hands.sql` is applied by the normal deployment. The
+table holds the record verbatim (`payload`) beside indexed columns for a future
+scoring screen; the replay codes are the human-played hands that labeled data
+will be derived from. `tests/stats-api.test.ts` covers the service and
+`tests/stats-sync.test.ts` the device side against the real worker and D1.
 
 ## Passkeys and the stable install
 
@@ -106,8 +134,8 @@ checks the separate embedded-preview flow against a local server on port 4178.
 
 Virtual authenticators are not physical-device verification. Before family launch,
 check enrollment, cancellation, returning sign-in, recovery, and installed-app
-behavior on Mom's and Dad's actual devices. Account deletion and stats sync are
-separate future work. The replaced social-login configuration was never activated;
+behavior on Mom's and Dad's actual devices. Account deletion and the scoring
+screen are separate future work. The replaced social-login configuration was never activated;
 no Apple or Google app configuration is required for this version.
 
 References: [SimpleWebAuthn server](https://simplewebauthn.dev/docs/packages/server),

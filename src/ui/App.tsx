@@ -24,6 +24,7 @@ import { AuctionPreparation } from '../ai/auction-preparation';
 import './app.css';
 import { retryEvidence } from '../ai/phone/records';
 import { recordHistory, retryHistory, exportHistory } from '../history/recorder';
+import { syncStats } from '../history/stats-sync';
 import { Questions } from './Questions';
 import { attachGame, syncQuestions } from '../questions/client';
 
@@ -47,7 +48,11 @@ export function App() {
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
   const retryRecording = () => void retryHistory().then(() => setHistoryError(null)).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
   useEffect(() => {
-    void recordHistory(app).then(() => setHistoryError(null)).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
+    void recordHistory(app).then(() => {
+      setHistoryError(null);
+      // A finished hand joins the signed-in account's stats as soon as it is in the device log.
+      if (app.game && (app.game.phase === 'hand-over' || app.game.phase === 'game-over')) void syncStats().catch(() => {});
+    }).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
   }, [app.game, app.sessionId, app.nativeReceipts, app.auctionSurveys, app.settings]);
   useEffect(() => {
     const evidenceFailure = () => setEvidenceError('A Walt result is only in this tab. Device storage is unavailable; keep the tab open and export your history.');
@@ -65,7 +70,7 @@ export function App() {
   const [questions, setQuestions] = useState<{ id: string | null } | null>(null);
   const openQuestion = (id: string) => setQuestions({ id });
   useEffect(() => {
-    const sync = () => void syncQuestions();
+    const sync = () => { void syncQuestions(); void syncStats().catch(() => {}); };
     const timer = setInterval(sync, 30000);
     window.addEventListener('online', sync);
     window.addEventListener('focus', sync);

@@ -185,6 +185,20 @@ IndexedDB writes after reload when storage is available. Simultaneous tabs appen
 content-addressed captures without overwriting each other's branches; the existing
 single resume slot still belongs to the last tab that saved it.
 
+## Finished-hand stats and your account
+
+The finished-hand log (one record per completed hand: its replay, marks, result,
+and the computer player) is kept on the device and never leaves it while signed
+out. Signing in with the optional passkey account connects that log to the
+account: every hand is uploaded once and marked only after the service names it
+as stored, so a retry never duplicates and an outage never loses anything. The
+device log itself is never changed. Hands from the account's other devices are
+cached locally, so the merged log reads the same on every device, oldest first.
+**Your account** shows how many hands are on this device, how many are
+connected, and how many the account holds across devices; **Connect now**
+retries at once. Full game history and Walt results still stay on the device.
+See [optional accounts](docs/OPTIONAL-ACCOUNTS.md#finished-hand-stats).
+
 The finished-hand store was rescued from PR #7 / commit
 `03970be4ae9888e8e36b1ced6a2b9bca5cd4fb9a`. The staged-outbox design was checked
 against Claude's richer journal on `claude/in-flight-prs-planning-vlkhi2`
