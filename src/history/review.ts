@@ -7,13 +7,19 @@ import type { snapshotOf } from './recorder';
 type Snapshot = NonNullable<ReturnType<typeof snapshotOf>> & { recordedAt?: string };
 const finished = (phase: unknown) => phase === 'hand-over' || phase === 'game-over';
 
-/** One final result per hand, with later practice attempts superseding earlier results. */
-export function soloHandsFromHistory(events: readonly unknown[]): RoomHand[] {
+/** Scope the review before limiting it; older games stay in the underlying records. */
+export function handsForGame(hands: readonly RoomHand[], sessionId: string): RoomHand[] {
+  return hands.filter(hand => hand.sessionId === sessionId)
+    .sort((a, b) => a.game.handNumber - b.game.handNumber).slice(-ROOM_HISTORY_LIMIT);
+}
+
+/** One final result per hand in this game, with later practice attempts superseding earlier results. */
+export function soloHandsFromHistory(events: readonly unknown[], sessionId: string): RoomHand[] {
   const latest = new Map<string, Snapshot>();
   for (const event of events) {
     if (!event || typeof event !== 'object') continue;
     const snapshot = event as Snapshot;
-    if (snapshot.schema !== 'plunge-history-v1' || snapshot.room || typeof snapshot.gameId !== 'string'
+    if (snapshot.schema !== 'plunge-history-v1' || snapshot.room || snapshot.gameId !== sessionId
       || !Number.isSafeInteger(snapshot.handNumber) || snapshot.handNumber < 1) continue;
     const key = `${snapshot.gameId}:${snapshot.handNumber}`, previous = latest.get(key);
     const attempt = snapshot.retry?.attempt ?? 0, previousAttempt = previous?.retry?.attempt ?? 0;
@@ -40,5 +46,5 @@ export function soloHandsFromHistory(events: readonly unknown[]): RoomHand[] {
         winner: snapshot.winner, handResult: snapshot.handResult, thrownIn: snapshot.thrownIn },
     });
   }
-  return hands.slice(-ROOM_HISTORY_LIMIT);
+  return handsForGame(hands, sessionId);
 }

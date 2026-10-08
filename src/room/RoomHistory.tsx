@@ -5,6 +5,7 @@ import { TrickHistory } from '../ui/TrickHistory';
 import { bidLabel, contractLabel, declLabel } from '../ui/store';
 import { ROOM_HISTORY_LIMIT, type RoomHand, type RoomState } from './protocol';
 import { rotateGame } from './view';
+import { handsForGame } from '../history/review';
 
 const handKey = (hand: RoomHand) => `${hand.sessionId}:${hand.game.handNumber}`;
 
@@ -31,30 +32,30 @@ export function HandHistory({ hands, current, sessionId, seat, onClose, solo = f
     element?.showModal();
     return () => element?.close();
   }, []);
-  const recent = hands.slice(-ROOM_HISTORY_LIMIT).reverse();
+  const recent = handsForGame(hands, sessionId).reverse();
   const latestKey = recent[0] ? handKey(recent[0]) : '';
   const [selected, setSelected] = useState(latestKey);
+  useEffect(() => setSelected(''), [sessionId]);
   useEffect(() => { if (!selected && latestKey) setSelected(latestKey); }, [selected, latestKey]);
   const hand = selected ? recent.find(item => handKey(item) === selected) : recent[0];
   const g = hand ? rotateGame(hand.game, seat) : null;
   const names = hand ? [0, 1, 2, 3].map(index => hand.names[(seat + index) % 4]!) : [];
   const teamName = (team: number) => `${names[team]} & ${names[team + 2]}`;
-  const sessions = [...new Set(hands.map(item => item.sessionId))];
   const yourTurn = current?.turn === seat && ['bidding', 'declaring', 'playing'].includes(current.phase);
 
   return <dialog ref={dialog} class="card room-history" aria-labelledby="room-history-title" onClose={onClose}>
     <h2 id="room-history-title" class="card-title">Prior hands</h2>
-    <p class="hint">The latest {ROOM_HISTORY_LIMIT} completed hands {solo ? 'saved on this device.' : 'saved at this table. Everyone can choose the same hand to review.'}</p>
+    <p class="hint">The latest {ROOM_HISTORY_LIMIT} completed hands from this game, newest first.</p>
     <p class="room-notice" role="status">{yourTurn ? 'It’s your turn at the live table.' : current ? 'The live game continues while you review.' : 'Reviewing past hands won’t start a new game.'}</p>
     <button type="button" class="big-btn" onClick={onClose} autoFocus>{solo ? 'Back to the game' : 'Back to the live table'}</button>
     {error && <p role="alert">{error} {onRetry && <button type="button" class="text-btn" onClick={onRetry}>Retry loading</button>}</p>}
     {loading && <p role="status">Loading saved hands…</p>}
-    {recent.length === 0 ? !loading && !error && <p>No completed hands saved yet. Finish a hand to review it here.</p> : <>
+    {recent.length === 0 ? !loading && !error && <p>No completed hands in this game yet. Finish a hand to review it here.</p> : <>
       <label class="room-label">Choose a hand
         <select value={hand ? handKey(hand) : ''} onChange={event => setSelected(event.currentTarget.value)}>
           {!hand && <option value="" disabled>Choose another completed hand</option>}
           {recent.map(item => <option key={handKey(item)} value={handKey(item)}>
-            {item.sessionId === sessionId ? 'Current game' : `Earlier game ${sessions.indexOf(item.sessionId) + 1}`} · Hand {item.game.handNumber}{item.practice ? ' · Practice' : ''}
+            Hand {item.game.handNumber}{item.practice ? ' · Practice' : ''}
           </option>)}
         </select>
       </label>

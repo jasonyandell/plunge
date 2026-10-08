@@ -101,7 +101,7 @@ export function Home({ app, dispatch, onPriorHands }: HomeProps) {
           Deal me in
         </button>
         {ROOMS_ENABLED && <FamilyEntry />}
-        {onPriorHands && <button type="button" class="text-btn" aria-haspopup="dialog" onClick={onPriorHands}>Prior hands</button>}
+        {app.game && onPriorHands && <button type="button" class="text-btn" aria-haspopup="dialog" onClick={onPriorHands}>Prior hands</button>}
 
         <div class="link-row home-links">
           <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'how' })}>
