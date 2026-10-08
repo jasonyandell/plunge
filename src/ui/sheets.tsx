@@ -64,25 +64,6 @@ export function RestartConfirm({ onConfirm, onCancel }: { onConfirm: () => void;
 // Bidding
 // ---------------------------------------------------------------------------
 
-/** Derive all four bids from the current game, including after undo or reconnect. */
-export function BidSummary({ g }: { g: GameState }) {
-  return (
-    <div class="bid-summary" role="status" aria-label="All four bids">
-      <dl>
-        {([0, 1, 2, 3] as const).map(seat => {
-          const placed = g.bids.find(b => b.seat === seat);
-          return (
-            <div key={seat}>
-              <dt>{seat === HUMAN_SEAT ? 'You' : SEAT_NAMES[seat]}</dt>
-              <dd>{placed ? bidLabel(placed.bid) : g.phase === 'bidding' && g.turn === seat ? 'Bidding…' : 'Waiting'}</dd>
-            </div>
-          );
-        })}
-      </dl>
-    </div>
-  );
-}
-
 export function BidSheet({ g, dispatch, sessionId, questionGameId, onQuestion, showHints }: AuctionSheetProps) {
   const bids = legalBids(g);
   const currentBid = highBid(g.bids);
@@ -108,7 +89,6 @@ export function BidSheet({ g, dispatch, sessionId, questionGameId, onQuestion, s
   return (
     <div class="sheet bid-sheet" role="dialog" aria-label="Your bid">
       <h2 class="sheet-title">Your bid</h2>
-      <BidSummary g={g} />
       <p class="hint">{isForcedBidTurn(g) ? 'Everyone passed. You must bid at least 30.' : !canPass ? 'Choose your bid.' : currentBid ? `The bid is ${bidLabel(currentBid.bid)}. Raise it or pass.` : 'Bidding starts at 30. Bid or pass.'}</p>
       {showHints && <BiddingHint g={g} sessionId={sessionId} questionGameId={questionGameId ?? sessionId} onQuestion={onQuestion} />}
       {pt !== null && minPt !== null && maxPt !== null && (
@@ -207,7 +187,6 @@ export function DeclareSheet({ g, dispatch, sessionId, questionGameId, onQuestio
   return (
     <div class="sheet declare-sheet" role="dialog" aria-label="Declare trump">
       <h2 class="sheet-title">{title}</h2>
-      <BidSummary g={g} />
       {forPartner && <p class="hint">Pick from your own hand — no hints across the table.</p>}
       {showHints && <BiddingHint g={g} sessionId={sessionId} questionGameId={questionGameId ?? sessionId} onQuestion={onQuestion} />}
       <div class="decl-grid">

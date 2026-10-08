@@ -35,28 +35,6 @@
   text-align: center;
 }
 
-/* Keep all four bids readable when the controls cover the seat bubbles. */
-.bid-summary {
-  flex-shrink: 0;
-  margin: 6px 8px;
-  padding: 8px 10px;
-  border-radius: 12px;
-  background: var(--cream);
-  color: var(--brown-9);
-  font-size: 14px;
-  line-height: 1.4;
-}
-.bid-summary dl {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 12px;
-  margin: 0;
-}
-.bid-summary dl > div { min-width: 0; overflow-wrap: anywhere; }
-.bid-summary dt { font-weight: 700; }
-.bid-summary dd { margin: 0; }
-.sheet .bid-summary { margin: 0 0 12px; padding: 8px; background: #286f650d; }
-
 /* bid stepper */
 .bid-stepper {
   display: flex;
