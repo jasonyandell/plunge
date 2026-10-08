@@ -11,7 +11,13 @@ export interface IdeasEnv { QUESTIONS?: IdeasDatabase; IDEAS_ADMIN_TOKEN?: strin
 interface Member { id: string; name: string }
 interface Run { id: string; idea_id: string; revision: number; through_seq: number; state: string }
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
-const cards = 'SELECT i.number,i.id,m.name,i.title,i.context,i.created,i.updated,i.revision,i.status,i.pr,i.sha,i.preview FROM ideas i JOIN idea_members m ON m.id=i.member_id';
+const BUILD_LEASE_MS=180000;
+const cards = `SELECT i.number,i.id,m.name,i.title,i.context,i.created,i.updated,i.revision,i.status,i.pr,i.sha,i.preview,CASE WHEN i.status='building' AND i.run_id IS NOT NULL THEN i.lease_until-${BUILD_LEASE_MS} ELSE NULL END heartbeat_at FROM ideas i JOIN idea_members m ON m.id=i.member_id`;
+type CardRow=IdeaCard & {heartbeat_at:number|null};
+function activityCard(row:CardRow):IdeaCard {
+  const {heartbeat_at,...card}=row;
+  return {...card,activity:{lastSeenAt:heartbeat_at,observedAt:Date.now()}};
+}
 const hex = (bytes: Uint8Array) => [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
 const hash = async (value: string) => hex(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))));
 function field(value: unknown, max: number, min = 1): string {
@@ -42,11 +48,11 @@ async function authorization(db:IdeasDatabase,idea:string,revision:number,throug
   return approval?{scope:'repository',accountId:approval.id,source:'approval'}:{scope:'limited',accountId:null,source:'default'};
 }
 async function thread(db: IdeasDatabase, idea: string, through = Number.MAX_SAFE_INTEGER) {
-  const card = await db.prepare(`${cards} WHERE i.id=?`).bind(idea).first<IdeaCard>();
+  const card = await db.prepare(`${cards} WHERE i.id=?`).bind(idea).first<CardRow>();
   if (!card) return null;
   const { results: messages } = await db.prepare(`SELECT x.id,x.role,COALESCE(m.name,'Plunge builder') name,x.body,x.created
     FROM idea_messages x LEFT JOIN idea_members m ON m.id=x.member_id WHERE x.idea_id=? AND x.seq<=? ORDER BY x.seq`).bind(idea, through).all();
-  return { card, messages, permissions:await authorization(db,idea,card.revision,through) };
+  return { card:activityCard(card), messages, permissions:await authorization(db,idea,card.revision,through) };
 }
 export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Response> {
   if (!env.QUESTIONS || !env.IDEAS_ADMIN_TOKEN) return json({ error: 'Ideas are not available here yet.' }, 503);
@@ -68,8 +74,8 @@ export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Res
     if (path === '' && request.method === 'GET') {
       const before = Number(url.searchParams.get('before') ?? Number.MAX_SAFE_INTEGER);
       if (!Number.isSafeInteger(before) || before < 1) return json({ error: 'Invalid page.' }, 400);
-      const { results } = await db.prepare(`${cards} WHERE i.number<? ORDER BY i.number DESC LIMIT 51`).bind(before).all<IdeaCard>();
-      return json({ cards: results.slice(0, 50), next: results.length > 50 ? results[49]!.number : null });
+      const { results } = await db.prepare(`${cards} WHERE i.number<? ORDER BY i.number DESC LIMIT 51`).bind(before).all<CardRow>();
+      return json({ cards: results.slice(0, 50).map(activityCard), next: results.length > 50 ? results[49]!.number : null });
     }
     const match = /^\/([a-f0-9]{32})(\/(?:messages|approve))?$/.exec(path);
     if (!match) return json({ error: 'Not found.' }, 404);
@@ -130,7 +136,7 @@ export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Res
 }
 async function adminRequest(request: Request, path: string, db: IdeasDatabase): Promise<Response> {
   if (path === '/admin/tracked' && request.method === 'GET') {
-    return json((await db.prepare(`${cards} WHERE i.pr IS NOT NULL AND i.status IN ('checking','ready') ORDER BY i.number`).all()).results);
+    return json((await db.prepare(`${cards} WHERE i.pr IS NOT NULL AND i.status IN ('checking','ready') ORDER BY i.number`).all<CardRow>()).results.map(activityCard));
   }
   if (request.method !== 'POST') return json({error:'Method not allowed.'},405);
   const data = await body(request), now = new Date().toISOString();
@@ -150,7 +156,7 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
     const excluded=data.excludeIdeaIds ?? [];
     if(!Array.isArray(excluded) || excluded.length>4) throw new Error('Invalid excluded idea identifiers.');
     const excludedIds=JSON.stringify(excluded.map(id));
-    const run = id(data.runId), until = Date.now() + 180000;
+    const run = id(data.runId), until = Date.now() + BUILD_LEASE_MS;
     const previous = await db.prepare('SELECT * FROM idea_runs WHERE id=?').bind(run).first<Run>();
     if (!previous) {
       // The conditional UPDATE serializes competing builders. A run id makes lost HTTP responses retryable.
@@ -176,7 +182,7 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
     const authorized=await authorization(db,run.idea_id,run.revision,run.through_seq);
     if(data.authorization && JSON.stringify(data.authorization)!==JSON.stringify(authorized))return json({error:'Build authorization changed.'},409);
     if (match[2] === 'heartbeat') {
-      const result = await db.prepare('UPDATE ideas SET lease_until=? WHERE run_id=? AND lease_until>? RETURNING id').bind(Date.now()+180000,run.id,Date.now()).first();
+      const result = await db.prepare('UPDATE ideas SET lease_until=? WHERE run_id=? AND lease_until>? RETURNING id').bind(Date.now()+BUILD_LEASE_MS,run.id,Date.now()).first();
       return json(result ? {ok:true,authorization:authorized} : {error:'Build lease expired.'},result ? 200 : 409);
     }
     const finishedAt=Date.now();

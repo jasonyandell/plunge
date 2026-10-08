@@ -67,6 +67,29 @@ try {
  assert.equal(await dad.page.getByRole('button',{name:'Approve full access'}).count(),0);
  await owner.page.goto(`${origin}/?ideas=1#idea=${ideaId}`);
  await owner.page.getByRole('button',{name:'Approve full access'}).waitFor();
+ const runId='e'.repeat(32);
+ const builderCall=(path,data)=>mf.dispatchFetch(`${origin}/api/ideas/admin/${path}`,{method:'POST',headers:{Authorization:`Bearer ${admin}`},body:JSON.stringify(data)});
+ assert.equal((await builderCall('claim',{ideaId,runId})).status,200);
+ await owner.page.reload();await owner.page.getByText('Working now',{exact:true}).waitFor();
+ await owner.page.emulateMedia({reducedMotion:'reduce'});
+ assert.equal(await owner.page.locator('.idea-activity-dot').evaluate(el=>getComputedStyle(el).animationName),'none');
+ await owner.page.getByRole('button',{name:'All ideas'}).click();
+ await owner.page.locator('.idea-card').getByText('Working now',{exact:true}).waitFor();
+ await owner.page.getByRole('button').filter({has:owner.page.getByRole('heading',{name:'Show account-linked stats.',exact:true})}).click();
+ await owner.page.getByText('Working now',{exact:true}).waitFor();
+ for(const width of [320,390]){await owner.page.setViewportSize({width,height:844});assert.ok(await owner.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
+ await owner.page.screenshot({path:'/tmp/plunge-idea-working.png',fullPage:true});
+ // Disconnecting must immediately stop presenting the last snapshot as active.
+ await owner.context.setOffline(true);
+ await owner.page.getByText('Updates unavailable',{exact:true}).waitFor();
+ await owner.context.setOffline(false);await owner.page.reload();await owner.page.getByText('Working now',{exact:true}).waitFor();
+ await db.prepare('UPDATE ideas SET lease_until=? WHERE id=?').bind(Date.now()+90000,ideaId).run();
+ await owner.page.reload();await owner.page.getByText('No recent update',{exact:true}).waitFor();
+ await owner.page.screenshot({path:'/tmp/plunge-idea-quiet.png',fullPage:true});
+ assert.equal((await builderCall(`runs/${runId}/heartbeat`,{})).status,200);
+ await owner.page.reload();await owner.page.getByText('Working now',{exact:true}).waitFor();
+ assert.equal((await builderCall(`runs/${runId}/finish`,{status:'question',message:'Should these stats include family rooms?'})).status,200);
+ await owner.page.reload();await owner.page.getByText('Waiting for your reply',{exact:true}).waitFor();
  for(const width of [320,390]){await owner.page.setViewportSize({width,height:844});assert.ok(await owner.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
  await owner.page.screenshot({path:'/tmp/plunge-owner-idea-approval.png',fullPage:true});
  await owner.page.getByRole('button',{name:'Approve full access'}).click();
@@ -98,5 +121,5 @@ try {
  for(const person of [owner,dad])for(const width of [320,390]){await person.page.setViewportSize({width,height:844});assert.ok(await person.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
  await dad.page.screenshot({path:'/tmp/plunge-passkey-account.png',fullPage:true});
  await dad.page.getByRole('button',{name:'Sign out',exact:true}).click();await dad.page.screenshot({path:'/tmp/plunge-passkey-signin.png',fullPage:true});
- console.log('PASS: real browser passkey enrollment/sign-in/add/recovery against account worker and D1; guest play, stable identity, family grants, owner automatic idea access, revision-bound approval button, phone layout. No production requests.');
+ console.log('PASS: real browser passkey enrollment/sign-in/add/recovery against account worker and D1; guest play, stable identity, family grants, owner automatic idea access, revision-bound approval button, live/stale/offline activity, reduced motion, phone layout. No production requests.');
 }finally{await browser.close();await mf.dispose();}

@@ -128,6 +128,26 @@ describe('family idea conversations and automatic builds',()=>{
     for(const excludeIdeaIds of [['invalid'],[idea,idea,idea,idea,idea],idea])
       expect((await call('/admin/claim','POST',{runId:id(173),excludeIdeaIds},admin)).status).toBe(400);
   });
+  it('exposes check-in times on the board and conversation, keeps stale activity honest, and clears it on finish',async()=>{
+    const idea=id(80),run=id(180);
+    await call(`/${idea}`,'PUT',{body:'Show progress',context:'Phone'});
+    const before=Date.now();
+    await call('/admin/claim','POST',{runId:run,ideaId:idea},admin);
+    let current=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect(current.card.activity!.lastSeenAt).toBeGreaterThanOrEqual(before);
+    expect(current.card.activity!.observedAt).toBeGreaterThanOrEqual(current.card.activity!.lastSeenAt!);
+    expect(JSON.stringify(current.card)).not.toMatch(/run_id|lease_until|heartbeat_at/);
+    const old=Date.now()-120000;
+    await env.QUESTIONS!.prepare('UPDATE ideas SET lease_until=? WHERE id=?').bind(old+180000,idea).run();
+    const board=await (await call()).json() as {cards:IdeaThread['card'][]};
+    expect(board.cards.find(c=>c.id===idea)!.activity!.lastSeenAt).toBe(old);
+    await call(`/admin/runs/${run}/heartbeat`,'POST',{},admin);
+    current=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect(current.card.activity!.lastSeenAt).toBeGreaterThan(old);
+    await finish(180,{status:'question',message:'Which part should be clearer?'});
+    current=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect(current.card.activity!.lastSeenAt).toBeNull();
+  });
   it('bounds inputs, supports invite revocation, and keeps previews isolated',async()=>{
     expect((await call(`/${id(4)}`,'PUT',{body:'x'.repeat(16001)})).status).toBe(400);
     expect((await call('/admin/revoke','POST',{id:dad.id},admin)).status).toBe(200);
