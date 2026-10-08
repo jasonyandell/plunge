@@ -25,6 +25,7 @@ import { AuctionPreparation } from '../ai/auction-preparation';
 import './app.css';
 import { retryEvidence } from '../ai/phone/records';
 import { recordHistory, retryHistory, exportHistory } from '../history/recorder';
+import { SoloHistory } from './SoloHistory';
 import { Questions } from './Questions';
 import { attachGame, syncQuestions } from '../questions/client';
 
@@ -48,6 +49,8 @@ export function App() {
   // A family table lives in this same app: your moves go to the room, the rest stays local.
   const room = useRoom(app, reduce);
   const dispatch = room.dispatch;
+  const [soloHistoryOpen, setSoloHistoryOpen] = useState(false);
+  const openSoloHistory = () => setSoloHistoryOpen(true);
 
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
@@ -250,7 +253,7 @@ export function App() {
     </>;
     switch (app.screen) {
       case 'home':
-        return <Home app={app} dispatch={dispatch} />;
+        return <Home app={app} dispatch={dispatch} onPriorHands={openSoloHistory} />;
       case 'how':
         return <HowTo dispatch={dispatch} />;
       case 'about':
@@ -259,9 +262,9 @@ export function App() {
         return <More app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} />;
       case 'table':
         return app.game || app.scenarioGame ? (
-          <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} />
+          <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} onHistory={openSoloHistory} />
         ) : (
-          <Home app={app} dispatch={dispatch} />
+          <Home app={app} dispatch={dispatch} onPriorHands={openSoloHistory} />
         );
     }
   })();
@@ -269,6 +272,7 @@ export function App() {
   return (
     <>
       {screen}
+      {soloHistoryOpen && !room.active && <SoloHistory app={app} onClose={() => setSoloHistoryOpen(false)} />}
       {questions && <Questions nelloPreview={nelloAvailable(app.settings)} key={questions.id ?? "list"} initialId={questions.id} onClose={() => setQuestions(null)} dispatch={dispatch} />}
       {nativeError && (
         <div class="native-error" role="alert">

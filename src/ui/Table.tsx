@@ -152,6 +152,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
           {!app.room && <button type="button" class="hand-tool" disabled={!restartReady} onClick={askRestart}>
             &#8635; Play this hand again
           </button>}
+          {!app.room && onHistory && <button type="button" class="hand-tool" aria-haspopup="dialog" onClick={onHistory}>Prior hands</button>}
         </div>
       )}
       {(g.phase === 'playing' || showingLast) && (

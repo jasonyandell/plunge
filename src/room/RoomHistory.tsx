@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { Seat } from '../engine';
+import type { GameState, Seat } from '../engine';
 import { Domino } from '../ui/Domino';
 import { TrickHistory } from '../ui/TrickHistory';
 import { bidLabel, contractLabel, declLabel } from '../ui/store';
@@ -10,12 +10,6 @@ const handKey = (hand: RoomHand) => `${hand.sessionId}:${hand.game.handNumber}`;
 
 /** A local, read-only view of the room's shared record. Never replaces the live game. */
 export function RoomHistory({ room, seat, onClose }: { room: RoomState; seat: Seat; onClose: () => void }) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const element = dialog.current;
-    element?.showModal();
-    return () => element?.close();
-  }, []);
   const hands = [...(room.recentHands ?? [])];
   const current = room.game;
   if (current && (current.phase === 'hand-over' || current.phase === 'game-over')) {
@@ -23,6 +17,20 @@ export function RoomHistory({ room, seat, onClose }: { room: RoomState; seat: Se
       names: room.seats.map((person, index) => person?.name ?? `Walt ${index + 1}`),
       practice: room.practiceHands?.includes(current.handNumber) ?? false });
   }
+  return <HandHistory hands={hands} current={current} sessionId={room.sessionId} seat={seat} onClose={onClose} />;
+}
+
+/** Shared presentation for saved solo hands and the family table's record. */
+export function HandHistory({ hands, current, sessionId, seat, onClose, solo = false, loading = false, error = null, onRetry }: {
+  hands: readonly RoomHand[]; current: GameState | null; sessionId: string; seat: Seat; onClose: () => void;
+  solo?: boolean; loading?: boolean; error?: string | null; onRetry?: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const element = dialog.current;
+    element?.showModal();
+    return () => element?.close();
+  }, []);
   const recent = hands.slice(-ROOM_HISTORY_LIMIT).reverse();
   const latestKey = recent[0] ? handKey(recent[0]) : '';
   const [selected, setSelected] = useState(latestKey);
@@ -36,15 +44,17 @@ export function RoomHistory({ room, seat, onClose }: { room: RoomState; seat: Se
 
   return <dialog ref={dialog} class="card room-history" aria-labelledby="room-history-title" onClose={onClose}>
     <h2 id="room-history-title" class="card-title">Prior hands</h2>
-    <p class="hint">The latest {ROOM_HISTORY_LIMIT} completed hands saved at this table. Everyone can choose the same hand to review.</p>
-    <p class="room-notice" role="status">{yourTurn ? 'It’s your turn at the live table.' : 'The live game continues while you review.'}</p>
-    <button type="button" class="big-btn" onClick={onClose} autoFocus>Back to the live table</button>
-    {recent.length === 0 ? <p>No completed hands saved yet. Finish a hand to review it here.</p> : <>
+    <p class="hint">The latest {ROOM_HISTORY_LIMIT} completed hands {solo ? 'saved on this device.' : 'saved at this table. Everyone can choose the same hand to review.'}</p>
+    <p class="room-notice" role="status">{yourTurn ? 'It’s your turn at the live table.' : current ? 'The live game continues while you review.' : 'Reviewing past hands won’t start a new game.'}</p>
+    <button type="button" class="big-btn" onClick={onClose} autoFocus>{solo ? 'Back to the game' : 'Back to the live table'}</button>
+    {error && <p role="alert">{error} {onRetry && <button type="button" class="text-btn" onClick={onRetry}>Retry loading</button>}</p>}
+    {loading && <p role="status">Loading saved hands…</p>}
+    {recent.length === 0 ? !loading && !error && <p>No completed hands saved yet. Finish a hand to review it here.</p> : <>
       <label class="room-label">Choose a hand
         <select value={hand ? handKey(hand) : ''} onChange={event => setSelected(event.currentTarget.value)}>
           {!hand && <option value="" disabled>Choose another completed hand</option>}
           {recent.map(item => <option key={handKey(item)} value={handKey(item)}>
-            {item.sessionId === room.sessionId ? 'Current game' : `Earlier game ${sessions.indexOf(item.sessionId) + 1}`} · Hand {item.game.handNumber}{item.practice ? ' · Practice' : ''}
+            {item.sessionId === sessionId ? 'Current game' : `Earlier game ${sessions.indexOf(item.sessionId) + 1}`} · Hand {item.game.handNumber}{item.practice ? ' · Practice' : ''}
           </option>)}
         </select>
       </label>
