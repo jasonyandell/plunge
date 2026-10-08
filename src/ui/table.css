@@ -546,3 +546,9 @@
   font-size: 11px;
   font-weight: 650;
 }
+
+/* ---------- ☰ menu ---------- */
+
+.game-menu-overlay { z-index: 45; }
+.game-menu { text-align: left; }
+.game-menu .setting { margin: 0 0 18px; }

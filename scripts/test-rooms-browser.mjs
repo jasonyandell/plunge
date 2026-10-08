@@ -76,6 +76,7 @@ try {
   };
   await host.goto(url);
   await host.getByRole('button', { name: 'Deal me in', exact: true }).click();
+  await host.getByRole('button', { name: 'Menu', exact: true }).click();
   await host.getByRole('button', { name: 'Back to home', exact: true }).click();
   await host.getByRole('button', { name: 'Resume your game', exact: true }).waitFor();
   const soloBefore = await host.evaluate(() => localStorage.getItem('plunge:save:v1'));
@@ -251,7 +252,7 @@ try {
   await host.goto(url); await host.getByRole('button', { name: 'Resume your game', exact: true }).waitFor();
   assert.equal(await host.evaluate(() => localStorage.getItem('plunge:save:v1')), soloBefore);
   await host.getByRole('button', { name: 'Resume your game', exact: true }).click();
-  await host.getByRole('button', { name: 'Back to home', exact: true }).waitFor();
+  await host.getByRole('button', { name: 'Menu', exact: true }).waitFor();
   check('Leaving the family room restored the original resumable solo game.');
   await writeFile(join(output, 'receipt.json'), JSON.stringify(receipts, null, 2));
   console.log(`Browser evidence: ${output}`);
