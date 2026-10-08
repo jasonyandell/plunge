@@ -5,6 +5,8 @@ import type { HandRetry } from '../ui/store';
 export interface RoomCredentials { roomId: string; token: string; seat: Seat }
 /** `away`: absent long enough that Walt plays this seat until the person returns. */
 export interface RoomSeat { name: string; connected: boolean; away: boolean }
+/** A table on the home screen's list: who is here now, and whether the door is open. */
+export interface ListedTable { roomId: string; standing: boolean; open: boolean; started: boolean; updated: number; seats: ({ name: string; connected: boolean } | null)[] }
 
 /** Everything the table decides together goes through one proposal at a time. */
 export type ProposalKind = 'start' | 'restart' | 'next-hand' | 'undo' | 'open' | 'close' | 'kick' | 'admit';

@@ -4,7 +4,7 @@ import { applyAction, legalActions, newGame, PLUNGE_CONFIG, type Action, type Ga
 import { handSteps } from '../src/engine/hand-history';
 import { catalogueDeal } from '../src/ai/catalogue';
 import type { AuctionEvidence } from '../src/ai/auction';
-import type { Proposal, ProposalKind, RoomCommand, RoomCredentials, RoomState, VoteResult } from '../src/room/protocol';
+import type { ListedTable, Proposal, ProposalKind, RoomCommand, RoomCredentials, RoomState, VoteResult } from '../src/room/protocol';
 import { CLOSE_EXPIRED, CLOSE_OTHER_TAB, CLOSE_PAUSED, CLOSE_SEAT_GONE, ROOM_ID, VISITOR_ID } from '../src/room/protocol';
 import { roomAuctionConfig, roomUndoTarget, upgradeRoom } from './room-undo';
 import { newProposal, objector, PROPOSAL_KINDS, proposalStatus } from './room-votes';
@@ -21,6 +21,9 @@ export const GRACE = 20000;
 const ADMISSION = 5 * 60 * 1000;
 const MAX_VISITORS = 8;
 const MAX_MESSAGE = 24000;
+/** The home screen lists this many of the newest listed tables, and keeps a quiet one this long. */
+const MAX_LISTED = 12;
+const QUIET = 60 * 60 * 1000;
 const json = (value: unknown, status = 200) => Response.json(value, { status,
   headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 async function roomBody(request: Request): Promise<{ name: unknown; knock?: unknown; standing?: unknown }> {
@@ -67,10 +70,12 @@ export function cleanName(value: unknown): string {
   if (!name) throw new Error('Please enter your name.');
   return name;
 }
+/** A table opened by a signed-in family member is listed for anyone to find, so it
+ * starts closed: newcomers knock until the table votes it open. An invite room stays open. */
 export function createRoom(roomId: string, name: string, token = randomKey(32), now = Date.now(),
   options: { standing?: boolean; account?: string } = {}): SavedRoom {
   return { state: { type: 'state', roomId, revision: 0, seed: '', sessionId: '', game: null,
-    seats: [null, null, null, null], runner: null, open: true, visitors: 0, proposal: null, lastVote: null,
+    seats: [null, null, null, null], runner: null, open: !options.account, visitors: 0, proposal: null, lastVote: null,
     started: false, holdUntil: 0, thinkingSeat: null,
     nativeReceipts: {}, auctionSurveys: {}, retry: null, practiceHands: [], lastUndo: null },
     players: [{ name: cleanName(name), token, seen: now, ...(options.account ? { account: options.account } : {}) }, null, null, null],
@@ -97,8 +102,13 @@ export function roomSnapshot(room: SavedRoom, connected: ReadonlySet<Seat>, now 
     seats: room.players.map((player, seat) => player
       ? { name: player.name, connected: connected.has(seat as Seat), away: isAway(room, seat as Seat, connected, now) } : null) };
 }
+/** What the home screen shows about a table: who is here and whether the door is open. */
+export function roomListing(room: SavedRoom, connected: ReadonlySet<Seat>, now = Date.now()): ListedTable {
+  return { roomId: room.state.roomId, standing: !!room.standing, open: room.state.open, started: room.state.started, updated: room.updated,
+    seats: room.players.map((player, seat) => player ? { name: player.name, connected: connected.has(seat as Seat) && !isAway(room, seat as Seat, connected, now) } : null) };
+}
 /** Sitting down works any time; a hand in progress just hands you the seat's dominoes.
- * A signed-in account gets its own chair back from any device. */
+ * A signed-in account gets its own chair back from any device, and always has one at the standing table. */
 export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), now = Date.now(), knock?: string, account?: string): RoomCredentials {
   // Record old human membership before a newcomer takes a formerly Walt seat.
   upgradeRoom(room);
@@ -108,7 +118,8 @@ export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), n
     if (player.name !== cleanName(name)) { player.name = cleanName(name); room.state = { ...room.state, revision: room.state.revision + 1 }; room.updated = now; }
     return { roomId: room.state.roomId, token: player.token, seat: own as Seat };
   }
-  if (!room.state.open) {
+  // The standing table is the family's: a signed-in member sits without knocking. Everyone else meets the door.
+  if (!room.state.open && !(account && room.standing)) {
     const admission = room.admitted!.findIndex(entry => entry.knock === knock && entry.until > now);
     if (admission < 0) throw new ClosedTable('This table is closed. Knock to ask to come in.');
     room.admitted!.splice(admission, 1);
@@ -381,7 +392,7 @@ export class PlungeRoom {
   }
   async fetch(request: Request): Promise<Response> {
     await this.ready;
-    const url = new URL(request.url), match = /^\/api\/rooms\/([a-f0-9]{32})(?:\/(create|join|socket))?$/.exec(url.pathname);
+    const url = new URL(request.url), match = /^\/api\/rooms\/([a-f0-9]{32})(?:\/(create|join|socket|peek))?$/.exec(url.pathname);
     if (!match) return json({ error: 'Room not found.' }, 404);
     const roomId = match[1]!, operation = match[2];
     try {
@@ -390,16 +401,19 @@ export class PlungeRoom {
         if (this.room) return json({ error: 'Room already exists.' }, 409);
         const { name, standing } = await roomBody(request);
         // Only the entry worker, for a family account, opens a standing table.
-        this.room = createRoom(roomId, cleanName(name), undefined, Date.now(), { standing: standing === true && account !== undefined, ...(account ? { account: account.id } : {}) });
+        // A signed-in person sits under their account name, whatever the browser typed.
+        this.room = createRoom(roomId, account?.name ?? cleanName(name), undefined, Date.now(), { standing: standing === true && account !== undefined, ...(account ? { account: account.id } : {}) });
         await this.save();
         return json({ roomId, token: this.room.players[0]!.token, seat: 0 });
       }
       if (!this.room || this.room.updated + roomLifetime(this.room) <= Date.now()) return json({ error: 'This room expired. Please create a new one.' }, 404);
+      // Only the entry worker's listing reaches `peek`; browsers see tables through it.
+      if (operation === 'peek' && request.method === 'GET') return json(roomListing(this.room, this.connected(), Date.now()));
       if (operation === 'join' && request.method === 'POST') {
         const { name, knock } = await roomBody(request);
         settleRoom(this.room, this.connected(), Date.now());
         try {
-          const credentials = joinRoom(this.room, cleanName(name), undefined, Date.now(), typeof knock === 'string' ? knock : undefined, account?.id);
+          const credentials = joinRoom(this.room, account?.name ?? cleanName(name), undefined, Date.now(), typeof knock === 'string' ? knock : undefined, account?.id);
           await this.sync(true);
           return json(credentials);
         } catch (error) {
@@ -496,7 +510,18 @@ export class PlungeRoom {
   }
 }
 
-export async function roomRequest(request: Request, namespace?: RoomsNamespace): Promise<Response> {
+interface Statement { bind(...values: unknown[]): Statement; first<T>(): Promise<T | null>; run(): Promise<unknown>; all<T>(): Promise<{ results: T[] }> }
+interface FamilyDatabase { prepare(query: string): Statement; batch(statements: Statement[]): Promise<unknown[]> }
+export interface SessionAccount { id: string; name: string; family: number; owner: number }
+const familyAccess = (account: SessionAccount | null | undefined): account is SessionAccount => !!account && (!!account.family || !!account.owner);
+const identityHeader = (account: SessionAccount) => JSON.stringify({ id: account.id, name: account.name });
+/** Remember a table a family member opened, so the home screen can list it. Idempotent. */
+const listTable = (db: FamilyDatabase, roomId: string, account: string) =>
+  db.prepare('INSERT OR IGNORE INTO listed_tables(room_id, account_id, created) VALUES (?, ?, ?)').bind(roomId, account, Date.now()).run();
+
+/** Browser room requests. A signed-in family member carries their identity in (the
+ * coordinator seats them under their account), and a table they open is listed. */
+export async function roomRequest(request: Request, namespace?: RoomsNamespace, db?: FamilyDatabase, account?: SessionAccount | null): Promise<Response> {
   if (!namespace) return json({ error: 'Family rooms are unavailable in this build.' }, 503);
   const url = new URL(request.url);
   if (url.pathname === '/api/rooms/status' && request.method === 'GET') return json({ experimental: true });
@@ -513,24 +538,48 @@ export async function roomRequest(request: Request, namespace?: RoomsNamespace):
   }
   const forwarded = new Request(url, request);
   forwarded.headers.delete(ACCOUNT_HEADER);
-  return namespace.get(namespace.idFromName(roomId)).fetch(forwarded);
+  const member = request.method === 'POST' && familyAccess(account);
+  if (member) forwarded.headers.set(ACCOUNT_HEADER, identityHeader(account));
+  const response = await namespace.get(namespace.idFromName(roomId)).fetch(forwarded);
+  if (member && db && response.ok && url.pathname.endsWith('/create')) await listTable(db, roomId, account.id);
+  return response;
 }
 
-interface FamilyDatabase { prepare(query: string): { bind(...values: unknown[]): { first<T>(): Promise<T | null>; run(): Promise<unknown> } } }
+/** The tables anyone can find: those a family member opened, newest first, with who is
+ * at them now. Rows expire on read; the coordinator answers 404 for a room that is gone. */
+export async function liveTablesRequest(request: Request, namespace: RoomsNamespace | undefined, db: FamilyDatabase | undefined): Promise<Response> {
+  if (request.method !== 'GET') return json({ error: 'Method not allowed.' }, 405);
+  if (!namespace || !db) return json({ tables: [] });
+  const url = new URL(request.url), now = Date.now();
+  const [listed] = await db.batch([
+    db.prepare('SELECT room_id FROM listed_tables ORDER BY created DESC LIMIT ?').bind(MAX_LISTED),
+    db.prepare('DELETE FROM listed_tables WHERE created < ?').bind(now - STANDING),
+  ]) as [{ results?: { room_id: string }[] } | undefined];
+  const peeked = await Promise.all((listed?.results ?? []).map(async ({ room_id }) => {
+    if (!ROOM_ID.test(room_id)) return null;
+    const response = await namespace.get(namespace.idFromName(room_id)).fetch(new Request(`${url.origin}/api/rooms/${room_id}/peek`));
+    if (response.status === 404) { await db.prepare('DELETE FROM listed_tables WHERE room_id = ?').bind(room_id).run(); return null; }
+    return response.ok ? await response.json() as ListedTable : null;
+  }));
+  const here = (table: ListedTable) => table.seats.filter(seat => seat?.connected).length;
+  const tables = peeked.filter((table): table is ListedTable => !!table && (table.standing || here(table) > 0 || table.updated > now - QUIET))
+    .sort((a, b) => Number(b.standing) - Number(a.standing) || here(b) - here(a) || b.updated - a.updated);
+  return json({ tables });
+}
 /** The family's standing table: one row in D1, one durable room, your own chair from any device. */
 export async function familyTableRequest(request: Request, namespace: RoomsNamespace | undefined, db: FamilyDatabase | undefined,
-  account: { id: string; name: string; family: number; owner: number } | null): Promise<Response> {
+  account: SessionAccount | null): Promise<Response> {
   const url = new URL(request.url);
-  const allowed = !!account && (!!account.family || !!account.owner);
-  // The home screen asks whether to offer the table at all; the answer costs one session lookup.
-  if (request.method === 'GET') return json({ family: allowed && !!namespace && !!db });
+  const allowed = familyAccess(account);
+  // The home screen asks whether to offer the table at all, and what name the person sits under.
+  if (request.method === 'GET') return json(allowed && namespace && db ? { family: true, name: account.name } : { family: false });
   if (request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
   const origin = request.headers.get('Origin');
   if (origin && origin !== url.origin) return json({ error: 'Wrong origin.' }, 403);
   if (!namespace || !db) return json({ error: 'The family table is unavailable in this build.' }, 503);
   if (!account) return json({ error: 'Sign in to find the family table.' }, 401);
   if (!allowed) return json({ error: 'Ask Jason to grant family access from your account.' }, 403);
-  const headers = { 'Content-Type': 'application/json', [ACCOUNT_HEADER]: JSON.stringify({ id: account.id, name: account.name }) };
+  const headers = { 'Content-Type': 'application/json', [ACCOUNT_HEADER]: identityHeader(account) };
   const call = (roomId: string, operation: 'create' | 'join', body: unknown) => namespace.get(namespace.idFromName(roomId))
     .fetch(new Request(`${url.origin}/api/rooms/${roomId}/${operation}`, { method: 'POST', headers, body: JSON.stringify(body) }));
   const current = async () => (await db.prepare('SELECT room_id FROM family_table WHERE id = ?').bind('family').first<{ room_id: string }>())?.room_id;
@@ -542,7 +591,7 @@ export async function familyTableRequest(request: Request, namespace: RoomsNames
       if (!created.ok) return json(await created.json(), created.status);
       await db.prepare('INSERT OR IGNORE INTO family_table(id, room_id, created) VALUES (?, ?, ?)').bind('family', fresh, Date.now()).run();
       roomId = await current();
-      if (roomId === fresh) return json({ ...(await created.json() as object), roomId });
+      if (roomId === fresh) { await listTable(db, fresh, account.id); return json({ ...(await created.json() as object), roomId }); }
       continue; // Someone else opened the table first; sit at theirs.
     }
     const joined = await call(roomId, 'join', { name: account.name });
@@ -551,6 +600,7 @@ export async function familyTableRequest(request: Request, namespace: RoomsNames
       await db.prepare('DELETE FROM family_table WHERE id = ? AND room_id = ?').bind('family', roomId).run();
       roomId = await current(); continue;
     }
+    if (joined.ok) await listTable(db, roomId, account.id); // A table opened before listing existed.
     return json({ ...(await joined.json() as object), roomId }, joined.status);
   }
   return json({ error: 'The family table is busy. Please try again.' }, 503);
