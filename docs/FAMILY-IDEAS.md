@@ -42,6 +42,15 @@ family replies arriving afterward automatically queue another pass. Repeated
 client writes, claim retries, and finish retries are idempotent. An expired
 builder cannot finish another builder's job.
 
+Each card and its conversation show **Working now** while the latest check-in is
+less than 75 seconds old, with its age below. After that the label becomes
+**No recent update**; browser connection failures show **Updates unavailable**.
+Waiting for a reply, queued work, preview checks, and completed builds have
+separate labels. This is coordinator liveness while making/testing a change, not
+a token-level model activity meter. The page polls every 15 seconds and ages its
+last observation locally, with reduced-motion support. It uses the existing lease
+and heartbeat; it adds no model calls or database migration.
+
 For each run the coordinator:
 
 1. Clones Plunge into its own checkout and continues that idea's open branch, or

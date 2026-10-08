@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { IdeaActivity } from './IdeaActivity';
 import { IdeaPreview, useIdeaPreview } from './IdeaPreview';
 import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
-import { IDEA_STATUS, LIVE_PLUNGE, type IdeaCard, type IdeaThread } from './model';
+import { LIVE_PLUNGE, type IdeaCard, type IdeaThread } from './model';
 import { cardFromHash, deviceContext, ideasApi, ideasLink, initialToken, InviteError, inviteToken, newId, readDraft, TOKEN_KEY } from './client';
 import '../ui/app.css';
 import '../ui/home.css';
@@ -11,6 +12,9 @@ export function Ideas() {
   const [name,setName] = useState(''), [error,setError] = useState(''), [busy,setBusy] = useState(false);
   const [cards,setCards] = useState<IdeaCard[]>([]), [loaded,setLoaded] = useState(false), [next,setNext] = useState<number|null>(null);
   const [selected,setSelected] = useState(cardFromHash), [thread,setThread] = useState<IdeaThread|null>(null);
+  const [now,setNow]=useState(Date.now),[connected,setConnected]=useState(navigator.onLine);
+  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),5000);const offline=()=>setConnected(false);
+    window.addEventListener('offline',offline);return()=>{clearInterval(timer);window.removeEventListener('offline',offline);};},[]);
   const [saved,setSaved] = useState(''), [owner,setOwner] = useState(false);
   const trial=useIdeaPreview();
   const generation = useRef(0), olderLoaded=useRef(false);
@@ -28,8 +32,8 @@ export function Ideas() {
         const board = await ideasApi<{cards:IdeaCard[];next:number|null}>(token);
         const current = selected ? await ideasApi<IdeaThread>(token,`/${selected}`) : null;
         if (epoch !== generation.current) return;
-        setName(me.name);setOwner(me.owner===true); setCards(old=>[...board.cards,...old.filter(c=>!board.cards.some(n=>n.id===c.id))]); if(!olderLoaded.current)setNext(board.next); setLoaded(true);setThread(current);setError('');
-      } catch(e) { if(epoch===generation.current) {setError(e instanceof Error ? e.message : 'Please retry.'); if(e instanceof InviteError) {setName('');setOwner(false);}} }
+        setConnected(true);setNow(Date.now());setName(me.name);setOwner(me.owner===true); setCards(old=>[...board.cards,...old.filter(c=>!board.cards.some(n=>n.id===c.id))]); if(!olderLoaded.current)setNext(board.next); setLoaded(true);setThread(current);setError('');
+      } catch(e) { if(epoch===generation.current) {setConnected(false);setError(e instanceof Error ? e.message : 'Please retry.'); if(e instanceof InviteError) {setName('');setOwner(false);}} }
       finally {running=false;}
     };
     void refresh(); const timer=setInterval(() => void refresh(),15000);
@@ -74,11 +78,9 @@ export function Ideas() {
       <div class="ideas-welcome"><p>Hi, {name}.</p><button class="big-btn secondary" type="button" disabled={busy} onClick={()=>open(null)}>＋ Another idea</button></div>
       {selected ? <>
         <button class="text-btn" type="button" disabled={busy} onClick={()=>open(null)}>← All ideas</button>
-        {thread ? <section class="idea-paper"><div class="idea-meta"><span>{thread.card.name}’s idea</span><span class={`idea-status ${thread.card.status}`}>{IDEA_STATUS[thread.card.status]}</span></div>
+        {thread ? <section class="idea-paper"><div class="idea-meta"><span>{thread.card.name}’s idea</span><span>Idea {thread.card.number}</span></div>
           <h2>{thread.card.title}</h2>
-          {thread.card.status==='queued' && <p class="idea-help">Saved in the queue. Building starts automatically when Jason’s builder is available.</p>}
-          {thread.card.status==='checking' && <p class="idea-help">The change is made. Its tests and preview need to finish before you can try it.</p>}
-          {thread.card.status==='failed' && <p class="idea-help">The builder hit a problem. You can reply to try again; your conversation is saved.</p>}
+          <IdeaActivity card={thread.card} now={now} connected={connected} />
           {thread.card.status==='shipped' && <a class="big-btn" href={LIVE_PLUNGE}>Play the updated game</a>}
           {thread.card.status==='ready' && thread.card.preview && <button class="big-btn" type="button" disabled={busy} onClick={()=>trial.open(thread.card.id)}>Try your change →</button>}
           <ol class="idea-conversation">{thread.messages.map(message=><li key={message.id} class={message.role}><strong>{message.name}</strong><p>{message.body}</p></li>)}</ol>
@@ -99,7 +101,7 @@ export function Ideas() {
         <h2 class="ideas-board-title">Around the table</h2>
         {!loaded ? <p role="status">Opening the board…</p> : !cards.length ? <p>No ideas yet. Yours can be the first.</p> :
           <div class="ideas-grid">{cards.map(card=><button type="button" key={card.id} class="idea-paper idea-card" disabled={busy} onClick={()=>open(card.id)}>
-            <span class="idea-meta">{card.name} · Idea {card.number}</span><h3>{card.title}</h3><span class={`idea-status ${card.status}`}>{IDEA_STATUS[card.status]}</span><span class="idea-open">Open conversation →</span>
+            <span class="idea-meta">{card.name} · Idea {card.number}</span><h3>{card.title}</h3><IdeaActivity card={card} now={now} connected={connected} compact /><span class="idea-open">Open conversation →</span>
           </button>)}</div>}
         {next && <button class="big-btn secondary" type="button" onClick={()=>void more()}>Earlier ideas</button>}
       </>}
