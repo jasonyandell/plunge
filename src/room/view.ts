@@ -1,5 +1,5 @@
 import type { GameState, Seat } from '../engine';
-import type { RoomState } from './protocol';
+import type { ListedTable, RoomState } from './protocol';
 import { DEFAULT_SETTINGS, initialApp } from '../ui/store';
 export const relativeSeat = (absolute: Seat, viewer: Seat): Seat => ((absolute - viewer + 4) % 4) as Seat;
 /** Presentation only. Wire actions and recorder state always use canonical seats. */
@@ -24,4 +24,13 @@ export function roomHistory(room: RoomState, localSeat: Seat) {
     room: { mode: 'shared-room' as const, localSeat, revision: room.revision,
       humans: room.seats.flatMap((s, seat) => s ? [{ seat: seat as Seat, name: s.name }] : []) },
   };
+}
+
+/** How a listed table reads on the home screen: whose it is, who is here, and the door. */
+export const tableTitle = (table: ListedTable): string =>
+  table.standing ? 'Family table' : `${table.seats.find(seat => seat)?.name ?? 'Someone'}’s table`;
+export function tableNote(table: ListedTable): string {
+  const here = table.seats.flatMap(seat => seat?.connected ? [seat.name] : []);
+  const who = here.length === 0 ? 'Nobody here right now' : `${here.join(', ')} here`;
+  return `${who} · ${table.open ? 'Open, sit right down' : 'Closed, knock to come in'}`;
 }

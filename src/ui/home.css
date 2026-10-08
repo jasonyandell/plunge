@@ -73,6 +73,12 @@
 .home button:focus-visible { outline-color: var(--teal-ink); }
 /* Home stays one decision: Deal in or Resume. Everything else is behind More. */
 .home-family { display: inline-flex; align-items: center; gap: 2px; margin-top: 10px; min-height: 44px; }
+.home-tables { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.home-table { display: grid; grid-template-columns: 1fr auto; column-gap: 10px; align-items: center; width: 100%; min-height: 56px; padding: 10px 12px; border: 1px solid #8c6d3b40; border-radius: 12px; background: #286f6514; color: var(--brown-9); font: inherit; text-align: left; cursor: pointer; }
+.home-table strong { font-size: 15px; }
+.home-table span { grid-column: 1; font-size: 12px; color: #725a40; line-height: 1.4; overflow-wrap: anywhere; }
+.home-table em { grid-column: 2; grid-row: 1 / span 2; font-style: normal; font-weight: 650; color: var(--teal-ink); white-space: nowrap; }
+.home-table:disabled { opacity: .5; cursor: default; }
 .home-links { margin-top: 14px; padding-top: 4px; border-top: 1px solid #8c6d3b30; }
 .home-links .text-btn { min-height: 44px; }
 

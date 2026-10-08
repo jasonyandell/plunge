@@ -9,7 +9,7 @@ import { initialApp } from '../src/ui/store';
 import { recordHistory, listHistory, snapshotOf } from '../src/history/recorder';
 import { listHands } from '../src/history/legacy';
 import { roomCode, roomFromInput, roomFromHash, savedSeat, saveSeat } from '../src/room/client';
-import { roomHistory } from '../src/room/view';
+import { roomHistory, tableNote, tableTitle } from '../src/room/view';
 import { createRoom, joinRoom, roomSnapshot, commandRoom, settleRoom } from '../worker/rooms';
 
 describe('room presentation and recorder boundaries', () => {
@@ -117,5 +117,17 @@ describe('room presentation and recorder boundaries', () => {
     expect(roomFromInput(`https://plunge.test/?rooms=1#room=${credentials.roomId}`, 'https://plunge.test')).toBe(credentials.roomId);
     expect(roomFromInput(`https://other.test/?rooms=1#room=${credentials.roomId}`, 'https://plunge.test')).toBeNull();
     expect(roomFromInput('nonsense', 'https://plunge.test')).toBeNull();
+  });
+});
+
+describe('the home screen list of tables', () => {
+  it('names a table after its first chair and says who is here and whether to knock', () => {
+    const seats = [{ name: 'Mom', connected: true }, null, { name: 'Dad', connected: false }, { name: 'Mae', connected: true }];
+    const table = { roomId: 'a'.repeat(32), standing: false, open: false, started: true, updated: 0, seats };
+    expect(tableTitle(table)).toBe('Mom’s table');
+    expect(tableTitle({ ...table, standing: true })).toBe('Family table');
+    expect(tableTitle({ ...table, seats: [null, null, null, null] })).toBe('Someone’s table');
+    expect(tableNote(table)).toBe('Mom, Mae here · Closed, knock to come in');
+    expect(tableNote({ ...table, open: true, seats: [null, null, { name: 'Dad', connected: false }, null] })).toBe('Nobody here right now · Open, sit right down');
   });
 });

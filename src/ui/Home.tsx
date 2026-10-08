@@ -8,8 +8,9 @@ import { canRestart, canUndo, nelloAvailable, nelloPaused, type AppEvent, type A
 import { Domino } from './Domino';
 import './home.css';
 import { useEffect, useState } from 'preact/hooks';
-import { ClosedTableError, familyTable, lastRoom, ROOMS_ENABLED, roomUrl, saveSeat } from '../room/client';
-import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
+import { ClosedTableError, familyProbe, familyTable, lastRoom, liveTables, ROOMS_ENABLED, roomUrl, savedSeat, saveSeat } from '../room/client';
+import { tableNote, tableTitle } from '../room/view';
+import type { ListedTable } from '../room/protocol';
 
 interface HomeProps {
   app: AppState;
@@ -24,21 +25,29 @@ interface MoreProps extends HomeProps {
 const DIFFS: readonly Difficulty[] = ['native-partner', 'native-l1'];
 
 const openRooms = () => { const url = new URL(location.href); url.searchParams.set('rooms', '1'); location.assign(url.href); };
-/** Signed in with family access: the standing table is one tap away. Asked once per page. */
-let familyAccess: Promise<boolean> | undefined;
-const hasFamilyAccess = (): Promise<boolean> => familyAccess ??= (!ROOMS_ENABLED || QUESTIONS_LOCAL_ONLY || typeof fetch !== 'function'
-  ? Promise.resolve(false)
-  : fetch('/api/rooms/family', { credentials: 'same-origin', cache: 'no-store' }).then(r => r.json())
-    .then((data: { family?: boolean }) => data.family === true).catch(() => false));
+/** The home screen asks who is playing this often while it is on screen. */
+const LIST_EVERY = 30000;
 
-/** Family entry points: the standing table for signed-in family, the last table
- * this browser sat at, and invite rooms. Its own component so Home stays hook-free. */
+/** Family entry points: the tables anyone can find (sit down or knock), the standing
+ * table for signed-in family, the last table this browser sat at, and invite rooms.
+ * Its own component so Home stays hook-free. */
 function FamilyEntry() {
   const [family, setFamily] = useState(false);
+  const [tables, setTables] = useState<ListedTable[]>([]);
   const [familyError, setFamilyError] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
   const remembered = (() => { try { return lastRoom(localStorage); } catch { return null; } })();
-  useEffect(() => { let live = true; void hasFamilyAccess().then(value => { if (live) setFamily(value); }); return () => { live = false; }; }, []);
+  /** This browser already holds a chair there: no knocking, whatever the door says. */
+  const seated = (roomId: string) => { try { return savedSeat(roomId, localStorage) !== null; } catch { return false; } };
+  useEffect(() => { let live = true; void familyProbe().then(value => { if (live) setFamily(value.family); }); return () => { live = false; }; }, []);
+  useEffect(() => {
+    let live = true;
+    const refresh = () => { if (document.visibilityState !== 'hidden') void liveTables().then(list => { if (live) setTables(list); }).catch(() => { /* The list is a convenience. */ }); };
+    refresh();
+    const timer = setInterval(refresh, LIST_EVERY);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { live = false; clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
+  }, []);
   const openFamilyTable = async () => {
     if (opening) return;
     setOpening(true); setFamilyError(null);
@@ -51,14 +60,24 @@ function FamilyEntry() {
       setFamilyError(String(e instanceof Error ? e.message : e));
     } finally { setOpening(false); }
   };
+  // An empty standing table is only worth showing to the family who can sit at it.
+  const shown = tables.filter(table => !table.standing || family || table.seats.some(seat => seat?.connected));
+  const standingListed = shown.some(table => table.standing);
   return <>
-    {family && (
+    {shown.length > 0 && <div class="home-tables" role="list" aria-label="Tables">
+      {shown.map(table => <button key={table.roomId} type="button" role="listitem" class="home-table" disabled={opening}
+        onClick={() => table.standing && family ? void openFamilyTable() : location.assign(roomUrl(table.roomId))}>
+        <strong>{tableTitle(table)}</strong><span>{tableNote(table)}</span>
+        <em>{seated(table.roomId) ? 'Rejoin' : table.open || (table.standing && family) ? 'Sit down' : 'Knock'}</em>
+      </button>)}
+    </div>}
+    {family && !standingListed && (
       <button type="button" class="big-btn secondary" disabled={opening} onClick={() => void openFamilyTable()}>
         {opening ? 'Finding the family table…' : 'Family table'}
       </button>
     )}
     {familyError && <p class="setting-hint" role="alert">{familyError}</p>}
-    {!family && remembered && (
+    {!family && remembered && !shown.some(table => table.roomId === remembered) && (
       <button type="button" class="text-btn home-family" onClick={() => location.assign(roomUrl(remembered))}>
         Back to your family table
       </button>
