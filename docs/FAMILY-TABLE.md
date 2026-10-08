@@ -50,7 +50,8 @@ absent people never block; the target of a kick does not vote on it.
 
 | Kind | Mode | Window | Needs |
 |---|---|---|---|
-| start, restart, next hand, undo, open, close | veto | 5 s | nobody says no |
+| start, restart, undo, open, close | veto | 5 s | nobody says no |
+| next hand | allow | 90 s | a second person (alone with Walt, just you) |
 | kick | allow | 10 s | most of the table |
 | admit a knock | allow | 60 s | one yes |
 
@@ -58,7 +59,10 @@ absent people never block; the target of a kick does not vote on it.
   when everyone present has said yes. Alone with Walt, the proposer's own yes
   settles it at once, so solo play never waits.
 - **Allow** proposals fail at the deadline unless enough yes votes arrive, and
-  fail early on any no.
+  fail early on any no. The next hand is one of these on purpose: one person
+  shaking must not take the result card away from people still reading it, so
+  tapping **Shake the next hand** after someone else did counts as the second
+  yes, and the ask quietly expires if nobody joins it.
 - Votes and knocks are keyed to the proposal id rather than the table revision.
   The revision guard protects game moves against stale state; a vote's
   precondition is the proposal's identity, and two votes cast at the same
@@ -90,11 +94,33 @@ one expired, and seats the account. A standing table lives thirty days past its
 last activity. Seats there are keyed to the account, so the same person on a
 second device gets the same chair and key back; a browser cannot claim a chair
 by naming an account, because the entry worker sets the identity header only
-after checking the session and strips any copy a client sent. A closed family
-table still asks: the home screen sends the signed-in person to the room, where
-they knock like anyone else. The home screen asks `GET /api/rooms/family`
-whether to show **Family table**, and otherwise remembers the last table this
-browser sat at.
+after checking the session and strips any copy a client sent. A family member
+always has a chair at the standing table, open or closed. The home screen asks
+`GET /api/rooms/family` whether the person is family and what name they sit
+under; signed-in family skip the name prompt everywhere and sit under their
+account name.
+
+**The list.** Anyone opening the app sees the tables that are live, and can sit
+down at an open one or knock at a closed one, account or not: 42 is a social
+game and a knock costs nothing. Which tables appear is the privacy rule. A table
+is listed only when a signed-in family member opened it: the standing table, and
+any invite room a member creates while signed in. A room opened without signing
+in is private to its link, as before, so no stranger's game is shown to the
+family and no family game is shown unless a member chose to open it. Because a
+listed table is findable by anyone, it starts **closed**; the table votes it open
+when it wants walk-ins (`open`, a five-second veto). The existing standing table
+keeps whatever door state it had.
+
+The index is a D1 row per listed table (`listed_tables`: room id, who opened it,
+when), written by the entry worker on create. `GET /api/rooms/live` reads the
+newest dozen rows and asks each room's coordinator for a `peek` (names, who is
+connected, open, started, last activity), a request only the worker can make.
+Rows expire on read, with no background job: a room the coordinator no longer
+has answers 404 and its row is deleted in the same request, and one `DELETE` in
+the same batch sweeps rows older than the longest room lifetime. The list shows
+the standing table always (the home screen hides it from non-family while it is
+empty), and other tables while someone is connected or for an hour after the
+last activity. The home screen refreshes it every thirty seconds while visible.
 
 ## Not yet
 

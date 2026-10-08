@@ -1,9 +1,11 @@
+import { Composer } from './Composer';
+import { Screenshot } from './IdeaScreenshots';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { IdeaActivity } from './IdeaActivity';
 import { IdeaPreview, useIdeaPreview } from './IdeaPreview';
 import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
 import { LIVE_PLUNGE, type IdeaCard, type IdeaThread } from './model';
-import { cardFromHash, deviceContext, ideasApi, ideasLink, initialToken, InviteError, inviteToken, newId, readDraft, TOKEN_KEY } from './client';
+import { cardFromHash, ideasApi, ideasLink, initialToken, InviteError, inviteToken, TOKEN_KEY } from './client';
 import '../ui/app.css';
 import '../ui/home.css';
 import './ideas.css';
@@ -84,7 +86,7 @@ export function Ideas() {
           {thread.card.status==='shipped' && <a class="big-btn" href={LIVE_PLUNGE}>Play the updated game</a>}
           {thread.card.status==='ready' && thread.card.preview && <button class="big-btn" type="button" disabled={busy} onClick={()=>trial.open(thread.card.id)}>Try your change →</button>}
           <p class="idea-help">You can ask a question or clarify your idea below. {thread.card.status==='building' ? 'Replies will be picked up when this pass finishes.' : 'You can say “let’s talk it through first” before asking for changes.'}</p>
-          <ol class="idea-conversation" aria-label="Conversation">{thread.messages.map(message=><li key={message.id} class={message.role}><strong>{message.name}</strong><p>{message.body}</p></li>)}</ol>
+          <ol class="idea-conversation" aria-label="Conversation">{thread.messages.map(message=><li key={message.id} class={message.role}><strong>{message.name}</strong><p>{message.body}</p><div class="screenshot-drafts">{message.screenshots?.map(image=><Screenshot key={image.id} image={image} token={token}/>)}</div></li>)}</ol>
           {owner && <section class="idea-approval" aria-label="Builder access"><h3>Builder access</h3>
             {thread.permissions?.scope==='repository' ? <p>Full project access is approved for this request.</p> : <>
               <p>Allow the builder to change any project file for the conversation above. New family replies need a fresh approval.</p>
@@ -109,26 +111,6 @@ export function Ideas() {
       <p class="idea-help">Your family can read and reply to these cards. Changes are reviewed before they join everyone’s game.</p>
     </>}
     {saved && <p role="status" class="idea-notice">{saved}</p>}
-    {error && <p role="alert" class="idea-error">{error} Your unsent words stay in the box.</p>}
+    {error && <p role="alert" class="idea-error">{error} Your unsent reply stays here.</p>}
   </main>;
-}
-
-function Composer({token,selected,onBusy,onSent,onError}: {
-  token:string;selected:string|null;onBusy:(busy:boolean)=>void;onSent:(thread:IdeaThread)=>void;onError:(error:string)=>void;
-}) {
-  const key=`plunge:idea-draft:${selected ?? 'new'}`;
-  const [draft,setDraft]=useState(()=>readDraft(key)),[busy,setBusy]=useState(false);
-  const edit=(body:string)=>{const next={...draft,body};setDraft(next);try{localStorage.setItem(key,JSON.stringify(next));}catch{/* Still in the text box. */}};
-  const send=async(event:Event)=>{
-    event.preventDefault();if(busy||!draft.body.trim())return;setBusy(true);onBusy(true);onError('');
-    try {
-      const result=await ideasApi<IdeaThread>(token,`/${selected ?? draft.id}${selected ? '/messages' : ''}`,{id:draft.id,body:draft.body,context:deviceContext()});
-      try{localStorage.removeItem(key);}catch{/* Already saved on server. */}
-      setDraft({id:newId(),body:''});onSent(result);
-    }catch(e){onError(e instanceof Error?e.message:'Could not save. Please retry.');}
-    finally{setBusy(false);onBusy(false);}
-  };
-  return <form onSubmit={send}><label>{selected?'Keep the conversation going':'Your idea'}
-    <textarea disabled={busy} value={draft.body} maxLength={3000} placeholder={selected?'That helps! Could the letters be bigger?':'I can’t see my bid.'} onInput={e=>edit(e.currentTarget.value)} />
-    </label><button class="big-btn" disabled={busy||!draft.body.trim()}>{busy?'Saving…':selected?'Send reply':'Make an idea card'}</button></form>;
 }

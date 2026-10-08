@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { Seat } from '../engine';
-import type { Proposal, Vote, VoteResult } from './protocol';
+import type { Proposal, RoomSeat, Vote, VoteResult } from './protocol';
+import { neededYes } from '../../worker/room-votes';
 
 export function describeProposal(p: Proposal): string {
   switch (p.kind) {
     case 'start': return `${p.byName} wants to start the game`;
     case 'restart': return `${p.byName} wants to start over`;
-    case 'next-hand': return `${p.byName} is shaking the next hand`;
+    case 'next-hand': return `${p.byName} is ready for the next hand`;
     case 'undo': return `${p.byName} wants to take back the last move`;
     case 'open': return `${p.byName} wants to open the table`;
     case 'close': return `${p.byName} wants to close the table`;
@@ -35,22 +36,28 @@ function useCountdown(deadline: number): number {
 }
 /** One open question to the people present. Low stakes pass unless someone objects. */
 export function VoteBar({ proposal, seat, seats, vote, pending }: {
-  proposal: Proposal; seat: Seat | null; seats: ({ name: string } | null)[]; vote: (vote: Vote) => void; pending: boolean;
+  proposal: Proposal; seat: Seat | null; seats: (RoomSeat | null)[]; vote: (vote: Vote) => void; pending: boolean;
 }) {
   const left = useCountdown(proposal.deadline), seconds = Math.ceil(left / 1000);
   const mine = seat === null ? undefined : proposal.votes[seat];
   const canVote = seat !== null && proposal.target !== seat && !pending;
   const text = proposal.kind === 'kick' && proposal.target !== undefined
     ? `${proposal.byName} asks ${seats[proposal.target]?.name ?? 'that chair'} to step out` : describeProposal(proposal);
-  const tally = Object.values(proposal.votes).filter(v => v === 'yes').length;
+  // The same arithmetic as the coordinator, over the seats it would count.
+  const present = seats.filter((s, i) => s && s.connected && !s.away && i !== proposal.target).length;
+  const yes = Object.values(proposal.votes).filter(v => v === 'yes').length;
+  const more = Math.max(0, neededYes(proposal.needs, present) - yes);
+  const nextHand = proposal.kind === 'next-hand';
+  const note = proposal.mode === 'veto' ? `Goes ahead in ${seconds}s unless someone says no`
+    : nextHand ? `Shakes when ${more === 1 ? 'one more person is' : `${more} more people are`} ready · ${seconds}s`
+    : `Needs ${more === 1 ? 'a yes' : `${more} more yes`} within ${seconds}s`;
   return <div class={`vote-bar vote-${proposal.mode}`} role="status" data-proposal={proposal.id} data-kind={proposal.kind}>
-    <div class="vote-text"><strong>{text}</strong>
-      <span>{proposal.mode === 'veto' ? `Goes ahead in ${seconds}s unless someone says no` : `Needs a yes within ${seconds}s`}{tally > 1 ? ` · ${tally} yes` : ''}</span></div>
+    <div class="vote-text"><strong>{text}</strong><span>{note}{yes > 1 ? ` · ${yes} yes` : ''}</span></div>
     {seat === null ? null : proposal.target === seat ? <span class="vote-you">The table decides</span>
-      : mine ? <span class="vote-you">You said {mine}</span>
+      : mine ? <span class="vote-you">{nextHand && mine === 'yes' ? 'You are ready' : `You said ${mine}`}</span>
       : <div class="vote-buttons">
-        <button class="vote-yes" disabled={!canVote} onClick={() => vote('yes')}>{proposal.kind === 'admit' ? 'Let them in' : proposal.mode === 'veto' ? 'Fine' : 'Yes'}</button>
-        <button class="vote-no" disabled={!canVote} onClick={() => vote('no')}>{proposal.mode === 'veto' ? 'Wait, no' : 'No'}</button>
+        <button class="vote-yes" disabled={!canVote} onClick={() => vote('yes')}>{proposal.kind === 'admit' ? 'Let them in' : nextHand ? 'Ready' : proposal.mode === 'veto' ? 'Fine' : 'Yes'}</button>
+        <button class="vote-no" disabled={!canVote} onClick={() => vote('no')}>{proposal.mode === 'veto' ? 'Wait, no' : nextHand ? 'Not yet' : 'No'}</button>
       </div>}
   </div>;
 }

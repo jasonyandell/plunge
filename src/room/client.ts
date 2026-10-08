@@ -1,5 +1,6 @@
-import type { RoomCommand, RoomCredentials, RoomMessage, RoomState } from './protocol';
+import type { ListedTable, RoomCommand, RoomCredentials, RoomMessage, RoomState } from './protocol';
 import { CLOSE_EXPIRED, CLOSE_OTHER_TAB, CLOSE_SEAT_GONE } from './protocol';
+import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
 
 export const ROOMS_ENABLED = typeof __ROOMS_ENABLED__ !== 'undefined' && __ROOMS_ENABLED__;
 const KEY = 'plunge:room:';
@@ -46,6 +47,22 @@ export async function familyTable(): Promise<RoomCredentials> {
   return body;
 }
 export const roomUrl = (roomId: string): string => `${location.pathname}?rooms=1#room=${roomId}`;
+/** Signed in with family access, and the name that person sits under. Asked once per page. */
+export interface FamilyProbe { family: boolean; name?: string }
+let probe: Promise<FamilyProbe> | undefined;
+export const familyProbe = (): Promise<FamilyProbe> => probe ??= (!ROOMS_ENABLED || QUESTIONS_LOCAL_ONLY || typeof fetch !== 'function'
+  ? Promise.resolve({ family: false })
+  : fetch('/api/rooms/family', { credentials: 'same-origin', cache: 'no-store' }).then(r => r.json())
+    .then((data: { family?: unknown; name?: unknown }) => ({ family: data.family === true, ...(typeof data.name === 'string' ? { name: data.name } : {}) }))
+    .catch(() => ({ family: false })));
+/** The tables anyone can find from the home screen: who is there and whether to knock. */
+export async function liveTables(): Promise<ListedTable[]> {
+  if (!ROOMS_ENABLED || QUESTIONS_LOCAL_ONLY || typeof fetch !== 'function') return [];
+  const response = await fetch('/api/rooms/live', { cache: 'no-store' });
+  if (!response.ok) throw new Error('The table list is unavailable right now.');
+  const body = await response.json() as { tables?: unknown };
+  return Array.isArray(body.tables) ? body.tables as ListedTable[] : [];
+}
 export async function enterRoom(name: string, roomId?: string, knock?: string): Promise<RoomCredentials> {
   const response = await fetch(roomId ? `/api/rooms/${roomId}/join` : '/api/rooms', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, ...(knock ? { knock } : {}) }),

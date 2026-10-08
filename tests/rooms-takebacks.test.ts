@@ -21,6 +21,11 @@ const playing = (room: SavedRoom) => room.state.game?.phase === 'playing';
 /** Anyone may ask; the table has five seconds to object, then the clock settles it. */
 function decide(room: SavedRoom, kind: 'undo' | 'next-hand', id: string, now: number) {
   const status = commandRoom(room, 0, { type: 'propose', id, revision: room.state.revision, kind }, connected(room), now);
+  // The next hand wants a second person; the next one seated agrees.
+  if (kind === 'next-hand' && room.state.proposal?.id === id) {
+    const other = [...connected(room)].find(s => s !== 0);
+    if (other !== undefined) commandRoom(room, other, { type: 'vote', id: `${id}-yes`, proposal: id, vote: 'yes' }, connected(room), now + 1);
+  }
   settleRoom(room, connected(room), now + 5001);
   return status;
 }

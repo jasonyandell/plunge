@@ -13,6 +13,8 @@ export interface RoomHand {
 }
 /** Bound the room's saved snapshots and reconnect payload. */
 export const ROOM_HISTORY_LIMIT = 20;
+/** A table on the home screen's list: who is here now, and whether the door is open. */
+export interface ListedTable { roomId: string; standing: boolean; open: boolean; started: boolean; updated: number; seats: ({ name: string; connected: boolean } | null)[] }
 
 /** Everything the table decides together goes through one proposal at a time. */
 export type ProposalKind = 'start' | 'restart' | 'next-hand' | 'undo' | 'open' | 'close' | 'kick' | 'admit';
@@ -20,7 +22,7 @@ export type Vote = 'yes' | 'no';
 /** veto: passes at the deadline unless someone says no. allow: fails at the deadline unless enough say yes. */
 export type ProposalMode = 'veto' | 'allow';
 export interface Proposal {
-  id: string; kind: ProposalKind; mode: ProposalMode; needs: 'all' | 'one' | 'majority';
+  id: string; kind: ProposalKind; mode: ProposalMode; needs: 'all' | 'one' | 'two' | 'majority';
   /** The seated proposer, or null when a visitor knocks. */
   by: Seat | null; byName: string;
   /** Seat a kick would empty. */

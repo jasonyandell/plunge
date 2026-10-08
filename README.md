@@ -20,14 +20,20 @@ twenty seconds, then Walt covers it until they return. Refresh rejoins your seat
 Anything done to the table is a quick vote: starting, shaking the next hand,
 undoing the last human move, starting over, opening or closing the table, and
 asking someone to step out. Low-stakes votes go ahead after five seconds unless
-anyone says no; alone with Walt they go ahead at once. A closed table lets
+anyone says no; alone with Walt they go ahead at once. Shaking the next hand
+waits for a second person to tap it, so nobody loses the result card while
+they are still reading it. A closed table lets
 newcomers knock, and one yes from anyone present lets them in. Asking someone to
 step out needs most of the table. Earlier attempts stay in history. For Nel-O,
 win a bid of one mark or more and choose Nel-O; your partner sits out. Your solo
-game stays saved. Signed-in family (see **Your account**) get a **Family table**
-button on the home screen that always leads to the same standing table, with
-their own chair waiting from any device. [The family table](docs/FAMILY-TABLE.md)
-describes the design.
+game stays saved. The home screen lists the tables that are live: who is at
+each, and whether to sit right down or knock. Anyone can knock, account or not.
+A table opened by a signed-in family member is listed; one opened without
+signing in stays private to its link. Listed tables start closed, and the table
+votes itself open when it wants walk-ins. Signed-in family (see **Your
+account**) sit under their account name, skip the name prompt, and always have
+their own chair at the standing **Family table** from any device.
+[The family table](docs/FAMILY-TABLE.md) describes the design.
 
 The live table plays **straight 42** with regular bidding: 30–41, then marks.
 Each player bids once or passes, starting left of the shaker; the winner calls
