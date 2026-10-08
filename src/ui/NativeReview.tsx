@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { type GameState } from '../engine';
 import { NATIVE_TABLE, api, nativeSeed, requestKey, requestTile, type NativeReceipt, type FlagRecord, type Comparison } from '../ai/native';
 import { reviewPosition } from '../ai/native-analysis';
-import { encodeHand, shareUrl } from './share';
+import { encodeHand } from './share';
+import { ShareHandButton } from './ShareHand';
 import { saveQuestion } from '../questions/client';
 import { observationUrl } from './observation-link';
 import { TrickHistory } from './TrickHistory';
@@ -193,7 +194,7 @@ export function NativeReview({ g, onBack, sessionId, questionGameId = sessionId,
       {error && <p role="alert" class="native-warning">{error}</p>}
     </div>
     <div class="review-footer">
-      <button type="button" class="text-btn" onClick={() => void copy(shareUrl(g))}>{copied ? 'Link copied!' : 'Share this hand'}</button>
+      <ShareHandButton g={g} />
       <button type="button" class="big-btn" onClick={onBack}>Back to the result</button>
     </div>
   </div></div>;
