@@ -1,3 +1,4 @@
+import { accountSession } from './accounts';
 import { IDEA_ID, IDEA_TOKEN, previewFor, type IdeaCard } from '../src/ideas/model';
 interface Statement {
   bind(...values: unknown[]): Statement;
@@ -40,15 +41,17 @@ export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Res
   const db = env.QUESTIONS, url = new URL(request.url), path = url.pathname.slice('/api/ideas'.length);
   if (request.method !== 'GET' && request.headers.has('Origin') && request.headers.get('Origin') !== url.origin) return json({ error: 'Please open your Plunge invite.' }, 403);
   const token = request.headers.get('Authorization')?.replace(/^Bearer /, '') ?? '';
-  if (!IDEA_TOKEN.test(token)) return json({ error: 'Open your family invite to join.' }, 401);
   try {
     const admin = path.startsWith('/admin/');
     if (admin) {
-      if (await hash(token) !== await hash(env.IDEAS_ADMIN_TOKEN)) return json({ error: 'Builder access required.' }, 403);
+      if (!IDEA_TOKEN.test(token) || await hash(token) !== await hash(env.IDEAS_ADMIN_TOKEN)) return json({ error: 'Builder access required.' }, 403);
       return await adminRequest(request, path, db);
     }
-    const member = await db.prepare('SELECT id,name FROM idea_members WHERE token_hash=? AND revoked=0').bind(await hash(token)).first<Member>();
-    if (!member) return json({ error: 'This invite no longer works. Ask Jason for a new one.' }, 401);
+    const session = await accountSession(request,env);
+    if(session && request.method!=='GET' && request.headers.get('Origin')!==url.origin) return json({error:'Please use your Plunge app.'},403);
+    const member = session ? (session.family && session.member_id ? {id:session.member_id,name:session.name} : null)
+      : IDEA_TOKEN.test(token) ? await db.prepare('SELECT id,name FROM idea_members WHERE token_hash=? AND revoked=0').bind(await hash(token)).first<Member>() : null;
+    if (!member) return json({ error: session ? 'Ask Jason to grant family access from your account.' : 'Sign in or open your family invite to join.' }, session ? 403 : 401);
     if (path === '/me' && request.method === 'GET') return json(member);
     if (path === '' && request.method === 'GET') {
       const before = Number(url.searchParams.get('before') ?? Number.MAX_SAFE_INTEGER);

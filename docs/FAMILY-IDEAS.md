@@ -1,6 +1,8 @@
 # Family ideas
 
-Mom and Dad each open a personal invite once. **Ideas for Plunge** then opens
+Mom and Dad can use optional Apple/Google accounts with family access granted by
+Jason, or keep using a personal invite. [Account setup](OPTIONAL-ACCOUNTS.md) covers
+provider configuration, owner setup, and grants. **Ideas for Plunge** opens
 large, simple cards inside the existing app. They can create another idea at any
 time, reply on either person's card, and try an individual change. No GitHub
 account is needed. **Try your change** opens the preview inside the existing app,
@@ -13,7 +15,8 @@ Temporary previews do not offer installation or register an offline app.
 
 Conversations live in new tables in the existing production D1 database, separate
 from game questions and temporary preview Workers. Closing a PR does not delete
-an idea. Everyone with a valid family invite can read and reply to the board.
+an idea. Everyone with a valid family invite or a signed-in account granted family access
+can read and reply to the board.
 Invite keys are random, hashed in D1, sent in Authorization headers, and removable
 individually. Invite links carry their key in a fragment, which is removed from
 the address bar immediately. Browser storage remembers that invite and unsent

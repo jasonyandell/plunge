@@ -23,6 +23,7 @@
     "deploy:dry-run": "wrangler deploy --dry-run"
   },
   "dependencies": {
+    "jose": "^6.2.12",
     "onnxruntime-web": "^1.26.0",
     "preact": "^10.25.4"
   },

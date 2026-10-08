@@ -1,11 +1,12 @@
 import { MAX_QUESTION_BYTES, OWNER_TOKEN, QUESTION_ID, publicQuestion, validQuestion, validUpdate,
   type Question, type RemoteQuestion } from '../src/questions/model';
 import { ideasRequest, type IdeasDatabase } from './ideas';
+import { accountsRequest, type AccountEnv } from './accounts';
 import { roomRequest, type RoomsNamespace } from './rooms';
 export { PlungeRoom } from './rooms';
 
 // PR previews deploy without QUESTIONS; their app keeps questions on the device.
-interface Env { QUESTIONS?: IdeasDatabase; IDEAS_ADMIN_TOKEN?: string; ROOMS?: RoomsNamespace; ASSETS: { fetch(request:Request):Promise<Response> } }
+interface Env extends AccountEnv { QUESTIONS?: IdeasDatabase; IDEAS_ADMIN_TOKEN?: string; ROOMS?: RoomsNamespace; ASSETS: { fetch(request:Request):Promise<Response> } }
 interface Row { id:string; owner_hash:string; revision:number; payload:string; answer:string|null; answered_at:string|null }
 const json = (value: unknown, status=200) => Response.json(value,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const remote = (r:Row):RemoteQuestion => ({question:JSON.parse(r.payload) as Question,revision:r.revision,
@@ -32,6 +33,7 @@ export default {
   async fetch(request:Request,env:Env):Promise<Response> {
     const url=new URL(request.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
+    if (url.pathname === '/api/account' || url.pathname.startsWith('/api/account/')) return accountsRequest(request,env);
     if (url.pathname === '/api/rooms' || url.pathname.startsWith('/api/rooms/')) return roomRequest(request, env.ROOMS);
     if (url.pathname === '/api/ideas' || url.pathname.startsWith('/api/ideas/')) return ideasRequest(request, env);
     const match=/^\/api\/questions(?:\/([a-f0-9]{32}))?$/.exec(url.pathname);

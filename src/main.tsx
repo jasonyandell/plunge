@@ -1,3 +1,4 @@
+import { AccountPage } from './account/Account';
 import { render } from 'preact';
 import { Ideas } from './ideas/Ideas';
 import { IdeasDemo } from './ideas/IdeasDemo';
@@ -12,7 +13,7 @@ if (!root) throw new Error('missing #app root');
 const params = new URLSearchParams(location.search);
 const previewIdea = params.get('idea');
 const game = ROOMS_ENABLED && params.has('rooms') ? <Rooms /> : <App />;
-render(params.has('ideas') ? (params.get('demo') === 'bidding' ? <IdeasDemo /> : <Ideas />) : previewIdea && IDEA_ID.test(previewIdea) ? (
+render(params.has('account') ? <AccountPage /> : params.has('ideas') ? (params.get('demo') === 'bidding' ? <IdeasDemo /> : <Ideas />) : previewIdea && IDEA_ID.test(previewIdea) ? (
   <div class="idea-preview-shell">
     <aside class="idea-preview-bar"><span>Preview</span><a href={ideasLink(previewIdea)}>Tell us what you think →</a></aside>
     <div class="idea-preview-game">{game}</div>

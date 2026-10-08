@@ -24,10 +24,10 @@ export function deviceContext(): string { return `${navigator.userAgent.slice(0,
 export class InviteError extends Error {}
 export async function ideasApi<T>(token: string, path = '', data?: unknown, method = 'PUT'): Promise<T> {
   const response = await fetch(`/api/ideas${path}`, { method: data === undefined ? 'GET' : method,
-    headers: { Authorization: `Bearer ${token}`, ...(data === undefined ? {} : {'Content-Type':'application/json'}) },
+    credentials:'same-origin', headers: { ...(token ? {Authorization: `Bearer ${token}`} : {}), ...(data === undefined ? {} : {'Content-Type':'application/json'}) },
     ...(data === undefined ? {} : {body:JSON.stringify(data)}), cache:'no-store', signal:AbortSignal.timeout(20000) });
   const result = await response.json() as T & {error?:string};
-  if (response.status === 401) throw new InviteError(result.error);
+  if (response.status === 401 || response.status === 403) throw new InviteError(result.error);
   if (!response.ok) throw new Error(result.error ?? 'Could not connect. Please try again.');
   return result;
 }
