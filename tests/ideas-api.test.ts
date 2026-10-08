@@ -112,6 +112,20 @@ describe('family idea conversations and automatic builds',()=>{
     expect((await call('/admin/retry','POST',{id:idea},admin)).status).toBe(200);
     expect((await call('/admin/retry','POST',{id:id(999)},admin)).status).toBe(409);
   });
+  it('excludes locally active ideas even after lease expiry while other cards can progress',async()=>{
+    const idea=id(70),other=id(71);
+    for(const n of [70,71])await call(`/${id(n)}`,'PUT',{body:'Concurrent idea',context:'Phone'});
+    await call('/admin/claim','POST',{runId:id(170),ideaId:idea},admin);
+    await env.QUESTIONS!.prepare('UPDATE ideas SET lease_until=0 WHERE id=?').bind(idea).run();
+    const skipped=await (await call('/admin/claim','POST',{runId:id(171),ideaId:idea,excludeIdeaIds:[idea]},admin)).json();
+    expect(skipped).toBeNull();
+    const picked=await (await call('/admin/claim','POST',{runId:id(172),ideaId:other,excludeIdeaIds:[idea]},admin)).json() as {card:{id:string}};
+    expect(picked.card.id).toBe(other);
+    const previous=await env.QUESTIONS!.prepare('SELECT run_id FROM ideas WHERE id=?').bind(idea).first<{run_id:string}>();
+    expect(previous!.run_id).toBe(id(170));
+    for(const excludeIdeaIds of [['invalid'],[idea,idea,idea,idea,idea],idea])
+      expect((await call('/admin/claim','POST',{runId:id(173),excludeIdeaIds},admin)).status).toBe(400);
+  });
   it('bounds inputs, supports invite revocation, and keeps previews isolated',async()=>{
     expect((await call(`/${id(4)}`,'PUT',{body:'x'.repeat(16001)})).status).toBe(400);
     expect((await call('/admin/revoke','POST',{id:dad.id},admin)).status).toBe(200);
