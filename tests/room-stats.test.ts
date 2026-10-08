@@ -11,7 +11,7 @@ import { createRoom, joinRoom, roomHandEntry } from '../worker/rooms';
 import { grantFamily, hashToken } from '../worker/accounts';
 import type { RoomCredentials, RoomMessage, RoomState } from '../src/room/protocol';
 
-const origin = 'https://plunge.texas42.workers.dev', token = 'e'.repeat(64), mom = 'c'.repeat(32);
+const origin = 'https://plunge.texas42.workers.dev', token = 'e'.repeat(64), dadToken = 'f'.repeat(64), mom = 'c'.repeat(32), dad = 'd'.repeat(32);
 let mf: Miniflare, directory: string, db: Awaited<ReturnType<Miniflare['getD1Database']>>;
 beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), 'plunge-room-stats-'));
@@ -22,16 +22,16 @@ beforeAll(async () => {
   db = await mf.getD1Database('QUESTIONS');
   const ideas = await readFile(new URL('../migrations/0002_family_ideas.sql', import.meta.url), 'utf8');
   const [tables, trigger] = ideas.split('CREATE TRIGGER'); for (const statement of tables!.split(';').filter(s => s.trim())) await db.prepare(statement).run(); await db.prepare(`CREATE TRIGGER${trigger}`).run();
-  for (const file of ['0003_accounts.sql', '0004_family_table.sql', '0004_idea_authorizations.sql', '0005_idea_screenshots.sql', '0006_hands.sql'])
+  for (const file of ['0003_accounts.sql', '0004_family_table.sql', '0004_idea_authorizations.sql', '0005_idea_screenshots.sql', '0005_listed_tables.sql', '0006_hands.sql'])
     for (const statement of (await readFile(new URL(`../migrations/${file}`, import.meta.url), 'utf8')).split(';').filter(s => s.trim())) await db.prepare(statement).run();
-  await db.prepare('INSERT INTO accounts(id,name,created) VALUES(?,?,?)').bind(mom, 'Mom', Date.now()).run();
-  await db.prepare('INSERT INTO account_sessions(hash,account_id,expires) VALUES(?,?,?)').bind(await hashToken(token), mom, Date.now() + 86400000).run();
-  await grantFamily(db, mom, true);
+  for (const [id, name, t] of [[mom, 'Mom', token], [dad, 'Dad', dadToken]] as const) {
+    await db.prepare('INSERT INTO accounts(id,name,created) VALUES(?,?,?)').bind(id, name, Date.now()).run();
+    await db.prepare('INSERT INTO account_sessions(hash,account_id,expires) VALUES(?,?,?)').bind(await hashToken(t), id, Date.now() + 86400000).run();
+    await grantFamily(db, id, true);
+  }
 }, 30000);
 afterAll(async () => { await mf?.dispose(); await rm(directory, { recursive: true, force: true }); });
-const cookie = `__Host-plunge-session=${token}`;
-const post = (path: string, body: unknown, headers: Record<string, string> = {}) => mf.dispatchFetch(`${origin}/api/rooms${path}`, {
-  method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json', Origin: origin, ...headers } });
+const cookie = `__Host-plunge-session=${token}`, dadCookie = `__Host-plunge-session=${dadToken}`;
 async function connect(credentials: RoomCredentials) {
   const response = await mf.dispatchFetch(`${origin}/api/rooms/${credentials.roomId}/socket?token=${credentials.token}`, { headers: { Upgrade: 'websocket', Origin: origin } });
   expect(response.status).toBe(101);
@@ -84,11 +84,12 @@ async function handsSettle(count: number): Promise<string[]> {
 }
 
 it('records a finished family-table hand with every human seat, the branch a takeback leaves, and nothing twice', async () => {
-  // Mom sits at the family table through her account; Dad joins the same room by invite, name only.
+  // Mom and Dad sit at the family's standing table through their accounts.
   const table = await mf.dispatchFetch(`${origin}/api/rooms/family`, { method: 'POST', headers: { Origin: origin, Cookie: cookie } });
   expect(table.status).toBe(200);
   const momSeat = await table.json() as RoomCredentials; expect(momSeat.seat).toBe(0);
-  const dadSeat = await (await post(`/${momSeat.roomId}/join`, { name: 'Dad' })).json() as RoomCredentials; expect(dadSeat.seat).toBe(2);
+  const dadSeat = await (await mf.dispatchFetch(`${origin}/api/rooms/family`, { method: 'POST', headers: { Origin: origin, Cookie: dadCookie } })).json() as RoomCredentials;
+  expect(dadSeat.roomId).toBe(momSeat.roomId); expect(dadSeat.seat).toBe(2);
   const a = await connect(momSeat), b = await connect(dadSeat);
   const lobby = await b.until(m => m.seats[0]?.connected === true && m.seats[2]?.connected === true);
   let state = await agree(a, b, 'start', lobby.revision);
@@ -101,7 +102,7 @@ it('records a finished family-table hand with every human seat, the branch a tak
   expect(String(hand!.deal)).toHaveLength(57);
   expect(JSON.parse(String(hand!.payload))).toMatchObject({ schema: 'plunge-hand-v1', gameId: state.sessionId, handNumber: 1, player: 'room', marksAfter: state.game!.marks });
   expect(await rows('SELECT seat,account_id,device_id,name FROM hand_players WHERE hand_id=? ORDER BY seat', handId)).toEqual([
-    { seat: 0, account_id: mom, device_id: null, name: 'Mom' }, { seat: 2, account_id: null, device_id: null, name: 'Dad' }]);
+    { seat: 0, account_id: mom, device_id: null, name: 'Mom' }, { seat: 2, account_id: dad, device_id: null, name: 'Dad' }]);
   // Mom's account counts the room hand as its own.
   const mine = await mf.dispatchFetch(`${origin}/api/stats/hands`, { method: 'PUT', headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ device: '3'.repeat(32), hands: [] }) });
   expect(await mine.json()).toMatchObject({ account: mom, total: 1 });
@@ -120,7 +121,9 @@ it('records a finished family-table hand with every human seat, the branch a tak
 }, 60000);
 
 it('records each attempt once: a finished hand, a branch left part-way, a retry under its own id', () => {
-  const room = createRoom('1'.repeat(32), 'Host', undefined, Date.now(), { account: mom });
+  // An invite room: open to anyone by name. A seat may carry an account or not.
+  const room = createRoom('1'.repeat(32), 'Host');
+  room.players[0]!.account = mom;
   joinRoom(room, 'Dad');
   const game: GameState = finishedHand('room-unit');
   room.state = { ...room.state, sessionId: 'abcd', game };

@@ -14,7 +14,7 @@ import { exportHistory, recordHistory, retryHistory } from '../history/recorder'
 import { setSeatNames, type AppEvent, type AppState } from '../ui/store';
 import type { ProposalKind, RoomCommand, RoomCredentials, RoomState, Vote } from './protocol';
 import { CLOSE_EXPIRED, CLOSE_OTHER_TAB, CLOSE_SEAT_GONE } from './protocol';
-import { ClosedTableError, enterRoom, forgetSeat, newVisitorId, RoomConnection, roomCode, roomFromHash, roomFromInput,
+import { ClosedTableError, enterRoom, familyProbe, forgetSeat, newVisitorId, RoomConnection, roomCode, roomFromHash, roomFromInput,
   ROOMS_ENABLED, savedSeat, saveSeat, type RoomIdentity } from './client';
 import { relativeSeat, roomHistory } from './view';
 import { describeResult, VoteBar } from './VoteBar';
@@ -62,6 +62,9 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
   const [knock, setKnock] = useState<{ visitor: string; name: string; roomId: string; sent: boolean; answer: string | null } | null>(null);
   const [visitorRoom, setVisitorRoom] = useState<RoomState | null>(null);
   const [name, setName] = useState('');
+  /** Signed in with family access: the coordinator seats this person under their account name. */
+  const [member, setMember] = useState<string | null | undefined>(undefined); // undefined: not asked yet
+  useEffect(() => { let live = true; void familyProbe().then(value => { if (live) setMember(value.name ?? null); }); return () => { live = false; }; }, []);
   const [joinInput, setJoinInput] = useState('');
   const [opening, setOpening] = useState(false);
   const [online, setOnline] = useState(false);
@@ -190,7 +193,7 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
   const open = async (joining2 = false) => {
     if (opening) return;
     setOpening(true); setError(null); setNotice(null);
-    const who = name.trim() || 'Player';
+    const who = member || (name.trim() || 'Player');
     const target = joining2 ? roomFromInput(joinInput, location.origin) : roomId;
     try {
       if (joining2 && !target) throw new Error('Paste the room code or an invite link from this Plunge app.');
@@ -271,9 +274,10 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
   const screen = !identity ? <div class="home"><div class="home-card"><p class="eyebrow">Plunge · Experimental</p><h1 class="title">Play with family</h1>
       <p class="room-intro">{roomId ? 'Pull up a chair at this family table. Come and go as you like; Walt covers an empty chair.' : 'Invite your family. Walt fills the empty chairs.'}</p>
       {notice && <p class="room-notice" role="status">{notice}</p>}
-      <form onSubmit={e => { e.preventDefault(); void open(); }}><label class="room-label">Your name<input maxLength={20} value={name} onInput={e => setName(e.currentTarget.value)} autoComplete="nickname" placeholder="Name at the table" /></label>
-        <button class="big-btn" disabled={opening}>{opening ? 'Opening…' : roomId ? 'Join the table' : 'Open a family table'}</button></form>
-      <p class="setting-hint">No account needed. Share the invite only with your group.</p>
+      <form onSubmit={e => { e.preventDefault(); void open(); }}>{member === null && <label class="room-label">Your name<input maxLength={20} value={name} onInput={e => setName(e.currentTarget.value)} autoComplete="nickname" placeholder="Name at the table" /></label>}
+        <button class="big-btn" disabled={opening || member === undefined}>{opening ? 'Opening…' : `${roomId ? 'Join the table' : 'Open a family table'}${member ? ` as ${member}` : ''}`}</button></form>
+      <p class="setting-hint">{member ? 'A table you open is listed on the home screen for anyone to find. It starts closed, so newcomers knock until the table votes it open.'
+        : 'No account needed. Share the invite only with your group.'}</p>
       {!roomId && <form class="room-join" onSubmit={e => { e.preventDefault(); void open(true); }}>
         <label class="room-label">Room code or invite link<input value={joinInput} onInput={e => setJoinInput(e.currentTarget.value)} autoCapitalize="none" autoCorrect="off" spellcheck={false} placeholder="Paste from your family" /></label>
         <button class="big-btn secondary" disabled={opening || !joinInput.trim()}>Join a family table</button>
