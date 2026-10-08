@@ -1,22 +1,21 @@
-import { createRemoteJWKSet, importPKCS8, jwtVerify, SignJWT, type JWTPayload } from 'jose';
+import { generateRegistrationOptions, verifyRegistrationResponse, generateAuthenticationOptions, verifyAuthenticationResponse,
+  type RegistrationResponseJSON, type AuthenticationResponseJSON } from '@simplewebauthn/server';
 import type { IdeasDatabase } from './ideas';
-export interface AccountEnv {
-  QUESTIONS?: IdeasDatabase; IDEAS_ADMIN_TOKEN?: string;
-  GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string;
-  APPLE_CLIENT_ID?: string; APPLE_TEAM_ID?: string; APPLE_KEY_ID?: string; APPLE_PRIVATE_KEY?: string;
-}
-export interface Account {id:string;name:string;provider:string;email:string|null;owner:number;requested:number;member_id:string|null;family:number}
-interface Login {hash:string;browser_hash:string;provider:'apple'|'google';nonce:string;verifier:string;expires:number}
-const ORIGIN='https://plunge.texas42.workers.dev';
-const SESSION='__Host-plunge-session', LOGIN='__Host-plunge-login';
+export interface AccountEnv { QUESTIONS?: IdeasDatabase; IDEAS_ADMIN_TOKEN?: string }
+export interface Account {id:string;name:string;owner:number;requested:number;member_id:string|null;family:number}
+interface Ceremony {kind:'register'|'login'|'add'|'recover';challenge:string;account_id:string|null;name:string|null;recovery_hash:string|null}
+interface Passkey {id:string;account_id:string;public_key:string;counter:number}
+const ORIGIN='https://plunge.texas42.workers.dev', RP_ID='plunge.texas42.workers.dev';
+const SESSION='__Host-plunge-session', CEREMONY='__Host-plunge-passkey';
 const HEX=/^[a-f0-9]{64}$/;
 export const hashToken=async(value:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),b=>b.toString(16).padStart(2,'0')).join('');
 const random=()=>Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
-const cookie=(name:string,value:string,seconds:number,sameSite='Lax')=>`${name}=${value}; Path=/; HttpOnly; Secure; SameSite=${sameSite}; Max-Age=${seconds}`;
+const encode=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
+const decode=(value:string)=>Uint8Array.from(atob(value.replaceAll('-','+').replaceAll('_','/')),c=>c.charCodeAt(0));
+const cookie=(name:string,value:string,seconds:number)=>`${name}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${seconds}`;
 function readCookie(request:Request,name:string):string {return request.headers.get('Cookie')?.split(';').map(s=>s.trim()).find(s=>s.startsWith(`${name}=`))?.slice(name.length+1)??'';}
 const json=(value:unknown,status=200)=>Response.json(value,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
-const redirect=(path:string,cookies:string[]=[])=>{const headers=new Headers({'Location':path,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});for(const c of cookies)headers.append('Set-Cookie',c);return new Response(null,{status:303,headers});};
-const columns=`SELECT a.id,a.name,a.provider,a.email,a.owner,a.requested,a.member_id,CASE WHEN m.revoked=0 THEN 1 ELSE 0 END family
+const columns=`SELECT a.id,a.name,a.owner,a.requested,a.member_id,CASE WHEN m.revoked=0 THEN 1 ELSE 0 END family
   FROM accounts a LEFT JOIN idea_members m ON m.id=a.member_id`;
 export async function accountSession(request:Request,env:AccountEnv):Promise<Account|null> {
   const token=readCookie(request,SESSION);
@@ -24,20 +23,23 @@ export async function accountSession(request:Request,env:AccountEnv):Promise<Acc
   return env.QUESTIONS.prepare(`${columns} JOIN account_sessions s ON s.account_id=a.id WHERE s.hash=? AND s.expires>?`)
     .bind(await hashToken(token),Date.now()).first<Account>();
 }
-const googleKeys=createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
-const appleKeys=createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys'));
-export async function verifyIdentity(token:string,provider:'google'|'apple',audience:string,nonce:string):Promise<JWTPayload> {
-  const {payload}=await jwtVerify(token,provider==='google'?googleKeys:appleKeys,{algorithms:['RS256'],audience,
-    issuer:provider==='google'?['https://accounts.google.com','accounts.google.com']:'https://appleid.apple.com',requiredClaims:['sub','iat','exp','nonce'],maxTokenAge:'10m',clockTolerance:5});
-  if(payload.nonce!==nonce || typeof payload.sub!=='string' || !payload.sub || payload.sub.length>255 || (payload.azp!==undefined && payload.azp!==audience) || (Array.isArray(payload.aud)&&payload.aud.length>1&&payload.azp!==audience))throw new Error('Invalid identity.');
-  return payload;
+async function body(request:Request):Promise<Record<string,unknown>> {
+  const reader=request.body?.getReader();const decoder=new TextDecoder();let result='',size=0;
+  if(reader)while(true){const part=await reader.read();if(part.done)break;size+=part.value.length;if(size>32000){await reader.cancel();throw new SyntaxError('Too large.');}result+=decoder.decode(part.value,{stream:true});}
+  const data:unknown=JSON.parse(result+decoder.decode()||'{}');
+  if(!data||typeof data!=='object'||Array.isArray(data))throw new SyntaxError('Invalid request.');
+  return data as Record<string,unknown>;
 }
-function providers(env:AccountEnv) {return {google:!!(env.GOOGLE_CLIENT_ID&&env.GOOGLE_CLIENT_SECRET),apple:!!(env.APPLE_CLIENT_ID&&env.APPLE_TEAM_ID&&env.APPLE_KEY_ID&&env.APPLE_PRIVATE_KEY)};}
-async function limitedText(request:Request):Promise<string> {
-  const reader=request.body?.getReader();if(!reader)return '';
-  const decoder=new TextDecoder();let result='',size=0;
-  while(true){const part=await reader.read();if(part.done)break;size+=part.value.length;if(size>16000){await reader.cancel();throw new Error('Too large.');}result+=decoder.decode(part.value,{stream:true});}
-  return result+decoder.decode();
+function jsonWithCookie(value:unknown,valueCookie:string){const response=json(value);response.headers.append('Set-Cookie',valueCookie);return response;}
+async function signedIn(request:Request,db:IdeasDatabase,id:string,keyId:string) {
+  const session=random();
+  await db.batch([
+    db.prepare('INSERT INTO account_sessions(hash,account_id,expires) SELECT ?,account_id,? FROM account_passkeys WHERE id=? AND account_id=?').bind(await hashToken(session),Date.now()+30*86400000,keyId,id),
+    db.prepare('DELETE FROM account_sessions WHERE hash=? OR expires<?').bind(await hashToken(readCookie(request,SESSION)),Date.now()),
+  ]);
+  if(!await db.prepare('SELECT hash FROM account_sessions WHERE hash=?').bind(await hashToken(session)).first())throw new Error('Passkey was removed.');
+  const response=jsonWithCookie({ok:true},cookie(SESSION,session,30*86400));
+  response.headers.append('Set-Cookie',cookie(CEREMONY,'',0));return response;
 }
 export async function grantFamily(db:IdeasDatabase,id:string,enabled:boolean) {
   // The deterministic member key preserves authorship across revoke/regrant.
@@ -51,73 +53,94 @@ export async function grantFamily(db:IdeasDatabase,id:string,enabled:boolean) {
 }
 export async function accountsRequest(request:Request,env:AccountEnv):Promise<Response> {
   const url=new URL(request.url),path=url.pathname.slice('/api/account'.length),db=env.QUESTIONS;
-  // Auth cookies and callbacks belong only to the stable install. Preview workers lack D1.
-  if(!db || url.origin!==ORIGIN)return path===''?json({account:null,providers:{apple:false,google:false},available:false}):json({error:'Open the main Plunge app to sign in.'},503);
+  // RP identity is fixed to the stable install. PR workers never bind account storage.
+  if(!db || url.origin!==ORIGIN)return path===''?json({account:null,available:false}):json({error:'Open the main Plunge app to sign in.'},503);
   try {
-    if(path===''&&request.method==='GET')return json({account:await accountSession(request,env),providers:providers(env),available:true});
-    const callback=/^\/callback\/(apple|google)$/.exec(path);
-    if(callback) {
-      const provider=callback[1] as 'apple'|'google';
-      if(request.method!==(provider==='apple'?'POST':'GET'))return json({error:'Invalid sign-in response.'},405);
-      const params=provider==='apple'?new URLSearchParams(await limitedText(request)):url.searchParams;
-      const state=params.get('state')??'',browser=readCookie(request,LOGIN);
-      if(!HEX.test(state)||!HEX.test(browser))return redirect('/?account=1&login=retry');
-      // Atomic consume makes callback replay and parallel exchanges fail closed.
-      const login=await db.prepare('DELETE FROM account_logins WHERE hash=? AND browser_hash=? AND provider=? AND expires>? RETURNING *')
-        .bind(await hashToken(state),await hashToken(browser),provider,Date.now()).first<Login>();
-      if(!login)return redirect('/?account=1&login=retry');
-      const clear=cookie(LOGIN,'',0,'None');
-      if(params.has('error'))return redirect('/?account=1&login=cancelled',[clear]);
-      const code=params.get('code');
-      if(!code||code.length>4096||!providers(env)[provider])return redirect('/?account=1&login=retry',[clear]);
-      try {
-        const client=provider==='google'?env.GOOGLE_CLIENT_ID!:env.APPLE_CLIENT_ID!;
-        const secret=provider==='google'?env.GOOGLE_CLIENT_SECRET!:await new SignJWT({})
-          .setProtectedHeader({alg:'ES256',kid:env.APPLE_KEY_ID!}).setIssuer(env.APPLE_TEAM_ID!).setSubject(client)
-          .setAudience('https://appleid.apple.com').setIssuedAt().setExpirationTime('5m').sign(await importPKCS8(env.APPLE_PRIVATE_KEY!,'ES256'));
-        const form=new URLSearchParams({grant_type:'authorization_code',code,client_id:client,client_secret:secret,redirect_uri:`${ORIGIN}/api/account/callback/${provider}`});
-        if(provider==='google')form.set('code_verifier',login.verifier);
-        const result=await fetch(provider==='google'?'https://oauth2.googleapis.com/token':'https://appleid.apple.com/auth/token',{
-          method:'POST',body:form,signal:AbortSignal.timeout(15000),redirect:'error'});
-        if(!result.ok)throw new Error('Exchange failed.');
-        const tokens=await result.json() as {id_token?:string};if(!tokens.id_token)throw new Error('Missing identity.');
-        const identity=await verifyIdentity(tokens.id_token,provider,client,login.nonce);
-        const email=(identity.email_verified===true||identity.email_verified==='true')&&typeof identity.email==='string'?identity.email.slice(0,320):null;
-        const name=typeof identity.name==='string'?identity.name.trim().slice(0,40)||'Player':'Player';
-        // Never merge accounts by email (including Apple relay addresses).
-        await db.prepare('INSERT OR IGNORE INTO accounts(id,name,provider,subject,email,created) VALUES(?,?,?,?,?,?)')
-          .bind(random().slice(0,32),name,provider,identity.sub,email,Date.now()).run();
-        const account=await db.prepare('SELECT id FROM accounts WHERE provider=? AND subject=?').bind(provider,identity.sub).first<{id:string}>();
-        if(!account)throw new Error('Missing account.');
-        const session=random(),old=readCookie(request,SESSION);
-        await db.batch([
-          db.prepare('INSERT INTO account_sessions(hash,account_id,expires) VALUES(?,?,?)').bind(await hashToken(session),account.id,Date.now()+30*86400000),
-          db.prepare('DELETE FROM account_sessions WHERE hash=? OR expires<?').bind(await hashToken(old),Date.now()),
-        ]);
-        return redirect('/?account=1',[clear,cookie(SESSION,session,30*86400)]);
-      }catch{return redirect('/?account=1&login=retry',[clear]);}
-    }
-    // Every browser mutation, including starting a login, is same-origin POST.
-    // CLI bootstrap uses the existing private builder credential, never a browser field.
+    const account=await accountSession(request,env);
+    if(path===''&&request.method==='GET')return json({account,available:true});
     const bearer=request.headers.get('Authorization')?.replace(/^Bearer /,'')??'';
     const admin=!!env.IDEAS_ADMIN_TOKEN&&HEX.test(bearer)&&await hashToken(bearer)===await hashToken(env.IDEAS_ADMIN_TOKEN);
     if(request.method==='POST'&&!admin&&request.headers.get('Origin')!==ORIGIN)return json({error:'Please use the main Plunge app.'},403);
-    const start=/^\/start\/(apple|google)$/.exec(path);
-    if(start&&request.method==='POST') {
-      const provider=start[1] as 'apple'|'google';if(!providers(env)[provider])return redirect('/?account=1&login=unavailable');
-      const state=random(),browser=random(),nonce=random(),verifier=random();
+    const data=request.method==='POST'?await body(request):{};
+    const options=/^\/passkey\/(register|login|add|recover)\/options$/.exec(path);
+    if(options&&request.method==='POST') {
+      const kind=options[1] as Ceremony['kind'];
+      if(kind==='add'&&!account)return json({error:'Sign in before adding another passkey.'},401);
+      if(kind==='register'&&account)return json({error:'You already have an account. Add a passkey instead.'},409);
+      let accountId=kind==='register'?random().slice(0,32):account?.id??null;
+      let name=account?.name??'',recoveryHash:string|null=null;
+      if(kind==='register') {
+        if(typeof data.name!=='string'||!data.name.trim()||data.name.length>40)return json({error:'Choose a name of 1 to 40 characters.'},400);
+        name=data.name.trim();
+      }
+      if(kind==='recover') {
+        if(typeof data.token!=='string'||!HEX.test(data.token))return json({error:'Ask Jason for a new recovery link.'},401);
+        recoveryHash=await hashToken(data.token);
+        const recover=await db.prepare('SELECT a.id,a.name FROM accounts a JOIN account_recoveries r ON r.account_id=a.id WHERE r.hash=? AND r.expires>?')
+          .bind(recoveryHash,Date.now()).first<{id:string;name:string}>();
+        if(!recover)return json({error:'That recovery link has expired or was used. Ask Jason for a new one.'},401);
+        accountId=recover.id;name=recover.name;
+      }
+      const credentials=kind==='add'?(await db.prepare('SELECT id FROM account_passkeys WHERE account_id=?').bind(accountId).all<{id:string}>()).results:[];
+      if(credentials.length>=10)return json({error:'You already have ten passkeys. Ask Jason for help before adding more.'},409);
+      const result=kind==='login'?await generateAuthenticationOptions({rpID:RP_ID,userVerification:'required'}):await generateRegistrationOptions({
+        rpName:'Plunge',rpID:RP_ID,userID:new TextEncoder().encode(accountId!),userName:name,userDisplayName:name,
+        attestationType:'none',authenticatorSelection:{residentKey:'required',userVerification:'required'},
+        supportedAlgorithmIDs:[-7,-257],excludeCredentials:credentials,
+      });
+      const token=random();
       await db.batch([
-        db.prepare('DELETE FROM account_logins WHERE expires<? OR browser_hash=?').bind(Date.now(),await hashToken(readCookie(request,LOGIN))),
-        db.prepare('INSERT INTO account_logins(hash,browser_hash,provider,nonce,verifier,expires) VALUES(?,?,?,?,?,?)')
-          .bind(await hashToken(state),await hashToken(browser),provider,nonce,verifier,Date.now()+600000),
+        db.prepare('DELETE FROM account_ceremonies WHERE expires<? OR hash=?').bind(Date.now(),await hashToken(readCookie(request,CEREMONY))),
+        db.prepare('INSERT INTO account_ceremonies(hash,kind,challenge,account_id,name,recovery_hash,expires) VALUES(?,?,?,?,?,?,?)')
+          .bind(await hashToken(token),kind,result.challenge,accountId,name,recoveryHash,Date.now()+300000),
       ]);
-      const target=new URL(provider==='google'?'https://accounts.google.com/o/oauth2/v2/auth':'https://appleid.apple.com/auth/authorize');
-      for(const [k,v]of Object.entries({client_id:provider==='google'?env.GOOGLE_CLIENT_ID!:env.APPLE_CLIENT_ID!,redirect_uri:`${ORIGIN}/api/account/callback/${provider}`,response_type:'code',scope:provider==='google'?'openid email profile':'email',state,nonce}))target.searchParams.set(k,v);
-      if(provider==='apple')target.searchParams.set('response_mode','form_post');
-      else {target.searchParams.set('code_challenge_method','S256');const bytes=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier)));target.searchParams.set('code_challenge',btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,''));}
-      return redirect(target.href,[cookie(LOGIN,browser,600,'None')]);
+      return jsonWithCookie(result,cookie(CEREMONY,token,300));
     }
-    const account=await accountSession(request,env);
+    const finish=/^\/passkey\/(register|login|add|recover)\/finish$/.exec(path);
+    if(finish&&request.method==='POST') {
+      const token=readCookie(request,CEREMONY);
+      if(!HEX.test(token))return json({error:'Please start sign-in again.'},401);
+      const pending=await db.prepare('DELETE FROM account_ceremonies WHERE hash=? AND kind=? AND expires>? RETURNING *')
+        .bind(await hashToken(token),finish[1],Date.now()).first<Ceremony>();
+      if(!pending)return json({error:'This sign-in expired. Please try again.'},401);
+      try {
+        if(pending.kind==='login') {
+          const response=data.response as AuthenticationResponseJSON;
+          if(!response||typeof response.id!=='string')throw new Error('Missing credential.');
+          const key=await db.prepare('SELECT * FROM account_passkeys WHERE id=?').bind(response.id).first<Passkey>();
+          if(!key || response.response.userHandle!==encode(new TextEncoder().encode(key.account_id)))throw new Error('Unknown account.');
+          const result=await verifyAuthenticationResponse({response,expectedChallenge:pending.challenge,expectedOrigin:ORIGIN,expectedRPID:RP_ID,
+            credential:{id:key.id,publicKey:decode(key.public_key),counter:key.counter},requireUserVerification:true});
+          if(!result.verified)throw new Error('Not verified.');
+          const updated=await db.prepare('UPDATE account_passkeys SET counter=? WHERE id=? AND counter=? RETURNING id')
+            .bind(result.authenticationInfo.newCounter,key.id,key.counter).first();
+          if(!updated)throw new Error('Credential changed.');
+          return await signedIn(request,db,key.account_id,key.id);
+        }
+        if(pending.kind==='add'&&(!account||account.id!==pending.account_id))throw new Error('Account changed.');
+        const result=await verifyRegistrationResponse({response:data.response as RegistrationResponseJSON,expectedChallenge:pending.challenge,
+          expectedOrigin:ORIGIN,expectedRPID:RP_ID,requireUserVerification:true,supportedAlgorithmIDs:[-7,-257]});
+        if(!result.verified)throw new Error('Not verified.');
+        const key=result.registrationInfo.credential;
+        const changes=[];
+        if(pending.kind==='register')changes.push(db.prepare('INSERT INTO accounts(id,name,created) VALUES(?,?,?)').bind(pending.account_id,pending.name,Date.now()));
+        if(pending.kind==='recover') {
+          // Consume only after the new passkey verifies. Only one concurrent recovery can win.
+          const recovered=await db.prepare('DELETE FROM account_recoveries WHERE hash=? AND account_id=? AND expires>? RETURNING account_id')
+            .bind(pending.recovery_hash,pending.account_id,Date.now()).first();
+          if(!recovered)throw new Error('Recovery expired or already used.');
+          changes.push(db.prepare('DELETE FROM account_passkeys WHERE account_id=?').bind(pending.account_id),
+            db.prepare('DELETE FROM account_sessions WHERE account_id=?').bind(pending.account_id));
+        }
+        changes.push(pending.kind==='add'
+          ? db.prepare('INSERT INTO account_passkeys(id,account_id,public_key,counter,created) SELECT ?,account_id,?,?,? FROM account_sessions WHERE hash=? AND account_id=? AND expires>?')
+            .bind(key.id,encode(key.publicKey),key.counter,Date.now(),await hashToken(readCookie(request,SESSION)),pending.account_id,Date.now())
+          : db.prepare('INSERT INTO account_passkeys(id,account_id,public_key,counter,created) VALUES(?,?,?,?,?)')
+            .bind(key.id,pending.account_id,encode(key.publicKey),key.counter,Date.now()));
+        await db.batch(changes);
+        return await signedIn(request,db,pending.account_id!,key.id);
+      } catch {return json({error:'The passkey could not be verified. Please try again, or ask Jason for help.'},401);}
+    }
     if(path==='/members'&&request.method==='GET') {
       if(!admin&&!account?.owner)return json({error:'Only Jason can manage family access.'},403);
       return json({members:(await db.prepare(`${columns} WHERE a.requested=1 OR a.member_id IS NOT NULL OR ?=1 ORDER BY a.created DESC LIMIT 200`).bind(admin?1:0).all()).results});
@@ -128,7 +151,6 @@ export async function accountsRequest(request:Request,env:AccountEnv):Promise<Re
       return jsonWithCookie({ok:true},cookie(SESSION,'',0));
     }
     if(!account&&!admin)return json({error:'Please sign in first.'},401);
-    const data=JSON.parse(await limitedText(request)||'{}') as Record<string,unknown>;
     if(path==='/profile'&&account) {
       if(typeof data.name!=='string'||!data.name.trim()||data.name.length>40)return json({error:'Use a name of 1 to 40 characters.'},400);
       await db.batch([db.prepare('UPDATE accounts SET name=? WHERE id=?').bind(data.name.trim(),account.id),db.prepare('UPDATE idea_members SET name=? WHERE id=?').bind(data.name.trim(),account.member_id)]);
@@ -145,7 +167,17 @@ export async function accountsRequest(request:Request,env:AccountEnv):Promise<Re
       if(!await db.prepare('SELECT id FROM accounts WHERE id=?').bind(data.id).first())return json({error:'Account not found.'},404);
       await db.prepare('UPDATE accounts SET owner=1 WHERE id=?').bind(data.id).run();await grantFamily(db,data.id,true);return json({ok:true});
     }
+    if(path==='/recovery'&&(admin||account?.owner)) {
+      if(typeof data.id!=='string'||!/^[a-f0-9]{32}$/.test(data.id))return json({error:'Choose an account.'},400);
+      const target=await db.prepare('SELECT owner FROM accounts WHERE id=?').bind(data.id).first<{owner:number}>();
+      if(!target)return json({error:'Account not found.'},404);
+      // Recovering the owner requires the private admin helper, not a browser session.
+      if(target.owner&&!admin)return json({error:'Use the private account helper to recover an owner.'},403);
+      const token=random();
+      await db.prepare('INSERT INTO account_recoveries(hash,account_id,expires) VALUES(?,?,?) ON CONFLICT(account_id) DO UPDATE SET hash=excluded.hash,expires=excluded.expires')
+        .bind(await hashToken(token),data.id,Date.now()+900000).run();
+      return json({url:`${ORIGIN}/?account=1#recover=${token}`});
+    }
     return json({error:'Not allowed.'},403);
-  }catch{return json({error:'Accounts are temporarily unavailable. You can still play.'},503);}
+  }catch(error){return error instanceof SyntaxError?json({error:'Invalid account request.'},400):json({error:'Accounts are temporarily unavailable. You can still play.'},503);}
 }
-function jsonWithCookie(value:unknown,valueCookie:string){const response=json(value);response.headers.append('Set-Cookie',valueCookie);return response;}

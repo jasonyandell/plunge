@@ -45,7 +45,7 @@ test('preview deploys never touch D1 and always build and check a local-only pre
   assert.equal(grep("// export const PREVIEW_PROTOCOL = 'local-only-v1';\n"), 1);
   // Production keeps its database.
   assert.match(readFileSync(new URL('../.github/workflows/deploy.yml', import.meta.url), 'utf8'),
-    /wrangler d1 migrations apply QUESTIONS --remote\n\s+node scripts\/ideas\/install-secret\.mjs\n\s+node scripts\/install-login-config\.mjs\n\s+npx wrangler deploy\n/);
+    /wrangler d1 migrations apply QUESTIONS --remote\n\s+node scripts\/ideas\/install-secret\.mjs\n\s+npx wrangler deploy\n/);
   assert.doesNotMatch(readFileSync(new URL('../.github/workflows/deploy.yml', import.meta.url), 'utf8'), /PLUNGE_QUESTIONS/);
 });
 test('invalid identities cannot select production or perform API calls', async () => {

@@ -1,8 +1,8 @@
 # Family ideas
 
-Mom and Dad can use optional Apple/Google accounts with family access granted by
+Mom and Dad can use optional passkey accounts with family access granted by
 Jason, or keep using a personal invite. [Account setup](OPTIONAL-ACCOUNTS.md) covers
-provider configuration, owner setup, and grants. **Ideas for Plunge** opens
+passkey enrollment, owner setup, recovery, and grants. **Ideas for Plunge** opens
 large, simple cards inside the existing app. They can create another idea at any
 time, reply on either person's card, and try an individual change. No GitHub
 account is needed. **Try your change** opens the preview inside the existing app,
