@@ -56,6 +56,7 @@ describe('family idea conversations and automatic builds',()=>{
     const thread=await (await call(`/${job.card.id}`)).json() as IdeaThread;
     expect(thread.card.status).toBe('queued');expect(thread.card.revision).toBe(2);expect(thread.messages).toHaveLength(3);
     expect(thread.messages[1]!.name).toBe('Dad');
+    expect(thread.messages[2]!.result).toEqual({revision:1,requestId:job.card.id});
     const next=(await claim(103))!;expect(next.card.id).toBe(job.card.id);expect(next.messages.some(m=>m.body.includes('bigger'))).toBe(true);
   });
   it('rejects stale builders after expiry and gives a replacement the conversation',async()=>{
@@ -70,6 +71,8 @@ describe('family idea conversations and automatic builds',()=>{
   it('waits for the exact live PR build and ignores stale deployment reports',async()=>{
     const job=(await claim(103))!;
     await finish(103,{status:'checking',message:'Larger bid ready for checks.',pr:99,sha:'c'.repeat(40)});
+    const checking=await (await call(`/${job.card.id}`)).json() as IdeaThread;
+    expect(checking.messages.at(-1)!.result).toEqual({revision:2,requestId:id(20)});
     const publish=()=>call('/admin/publish','POST',{id:job.card.id,sha:'c'.repeat(40),status:'ready'},admin);
     const fetch=vi.spyOn(globalThis,'fetch');
     fetch.mockResolvedValueOnce(Response.json({build:'b'.repeat(40),preview_pr:99}));expect((await publish()).status).toBe(409);
@@ -77,6 +80,9 @@ describe('family idea conversations and automatic builds',()=>{
     fetch.mockRestore();
     let thread=await (await call(`/${job.card.id}`)).json() as IdeaThread;
     expect(thread.card.status).toBe('ready');expect(thread.card.preview).toBe('https://plunge-pr-99.texas42.workers.dev');
+    // Publication updates the same reply's preview state without another run,
+    // duplicate message or a family refresh changing the request association.
+    expect(thread.messages).toEqual(checking.messages);
     await call(`/${job.card.id}/messages`,'PUT',{id:id(30),body:'One more adjustment'});
     expect((await call('/admin/publish','POST',{id:job.card.id,sha:'b'.repeat(40),status:'shipped'},admin)).status).toBe(409);
     await call('/admin/publish','POST',{id:job.card.id,sha:'c'.repeat(40),status:'shipped'},admin);

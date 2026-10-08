@@ -17,6 +17,9 @@
 .idea-open {font-size:14px;color:#27705b;}.ideas-board-title {margin:34px 0 18px;font-weight:500;}
 .idea-conversation {list-style:none;padding:0;margin:24px 0;}.idea-conversation li {padding:16px;border-radius:12px;background:#eee5d2;margin-bottom:14px;}.idea-conversation .builder {background:#e0ece4;}
 .idea-conversation p {white-space:pre-wrap;margin:8px 0 0;}.idea-notice,.idea-error {padding:16px;border-radius:12px;background:#e2efe5;color:#204e3d;}.idea-error {background:#f7dfcf;color:#682b18;}
+.idea-result {margin-top:16px;padding-top:12px;border-top:1px solid #8ba794;}
+.idea-result-request {font-size:14px;color:#465d4c;}
+.idea-result .big-btn {margin-top:12px;}
 .ideas-page button:focus-visible,.ideas-page a:focus-visible {outline:3px solid #e9b355;outline-offset:4px;}.ideas-page button:disabled {opacity:.6;}
 .idea-preview-bar {padding:10px 16px;background:#fff1c8;color:#3c2b0e;display:flex;gap:14px;justify-content:center;align-items:center;flex-wrap:wrap;font-size:15px;}.idea-preview-bar a {color:#205e49;font-weight:bold;min-height:32px;display:flex;align-items:center;}
 @media(max-width:400px) {.ideas-page {padding:16px 12px 50px;}.idea-paper {padding:18px;}.ideas-top {margin-bottom:24px;}.ideas-top span {display:none;}}

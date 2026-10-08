@@ -6,7 +6,11 @@ export interface IdeaCard {
   pr: number | null; sha: string | null; preview: string | null;
   activity?: {lastSeenAt:number|null;observedAt:number};
 }
-export interface IdeaMessage { id: string; role: 'family' | 'builder'; name: string; body: string; created: string; screenshots?:ScreenshotInfo[] }
+export interface IdeaMessage {
+  id: string; role: 'family' | 'builder'; name: string; body: string; created: string; screenshots?:ScreenshotInfo[];
+  /** Server-derived association with the frozen request answered by a completed run. */
+  result?: { revision: number; requestId: string };
+}
 export interface IdeaThread { card: IdeaCard; messages: IdeaMessage[]; permissions?: {scope:'limited'|'repository';accountId:string|null;source:'default'|'owner'|'approval'} }
 export const IDEA_ID = /^[a-f0-9]{32}$/;
 export const IDEA_TOKEN = /^[a-f0-9]{64}$/;

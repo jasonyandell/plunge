@@ -2,6 +2,7 @@ import { Composer } from './Composer';
 import { Screenshot } from './IdeaScreenshots';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { IdeaActivity } from './IdeaActivity';
+import { IdeaResult } from './IdeaResult';
 import { IdeaPreview, useIdeaPreview } from './IdeaPreview';
 import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
 import { LIVE_PLUNGE, type IdeaCard, type IdeaThread } from './model';
@@ -86,7 +87,9 @@ export function Ideas() {
           {thread.card.status==='shipped' && <a class="big-btn" href={LIVE_PLUNGE}>Play the updated game</a>}
           {thread.card.status==='ready' && thread.card.preview && <button class="big-btn" type="button" disabled={busy} onClick={()=>trial.open(thread.card.id)}>Try your change →</button>}
           <p class="idea-help">You can ask a question or clarify your idea below. {thread.card.status==='building' ? 'Replies will be picked up when this pass finishes.' : 'You can say “let’s talk it through first” before asking for changes.'}</p>
-          <ol class="idea-conversation" aria-label="Conversation">{thread.messages.map(message=><li key={message.id} class={message.role}><strong>{message.name}</strong><p>{message.body}</p><div class="screenshot-drafts">{message.screenshots?.map(image=><Screenshot key={image.id} image={image} token={token}/>)}</div></li>)}</ol>
+          <ol class="idea-conversation" aria-label="Conversation">{thread.messages.map(message=><li key={message.id} class={message.role}><strong>{message.name}</strong><p>{message.body}</p><div class="screenshot-drafts">{message.screenshots?.map(image=><Screenshot key={image.id} image={image} token={token}/>)}</div>
+            <IdeaResult thread={thread} message={message} busy={busy} onTry={()=>trial.open(thread.card.id)} />
+          </li>)}</ol>
           {owner && <section class="idea-approval" aria-label="Builder access"><h3>Builder access</h3>
             {thread.permissions?.scope==='repository' ? <p>Full project access is approved for this request.</p> : <>
               <p>Allow the builder to change any project file for the conversation above. New family replies need a fresh approval.</p>

@@ -52,10 +52,14 @@ async function thread(db: IdeasDatabase, idea: string, through = Number.MAX_SAFE
   const card = await db.prepare(`${cards} WHERE i.id=?`).bind(idea).first<CardRow>();
   if (!card) return null;
   const { results: messages } = await db.prepare(`SELECT x.id,x.role,COALESCE(m.name,'Plunge builder') name,x.body,x.created,
+    r.revision result_revision,(SELECT id FROM idea_messages WHERE idea_id=x.idea_id AND role='family' AND seq<=r.through_seq ORDER BY seq DESC LIMIT 1) request_id,
     (SELECT json_group_array(json_object('id',json_extract(value,'$.id'),'width',json_extract(value,'$.width'),'height',json_extract(value,'$.height')))
       FROM json_each(x.screenshots)) screenshots
-    FROM idea_messages x LEFT JOIN idea_members m ON m.id=x.member_id WHERE x.idea_id=? AND x.seq<=? ORDER BY x.seq`).bind(idea, through).all<{id:string;role:string;name:string;body:string;created:string;screenshots:string}>();
-  return { card:activityCard(card), messages:messages.map(({screenshots,...message})=>({...message,screenshots:JSON.parse(screenshots)})), permissions:await authorization(db,idea,card.revision,through) };
+    FROM idea_messages x LEFT JOIN idea_members m ON m.id=x.member_id
+    LEFT JOIN idea_runs r ON r.id=x.id AND r.idea_id=x.idea_id AND r.state='done' AND x.role='builder'
+    WHERE x.idea_id=? AND x.seq<=? ORDER BY x.seq`).bind(idea, through).all<{id:string;role:string;name:string;body:string;created:string;screenshots:string;result_revision:number|null;request_id:string|null}>();
+  return { card:activityCard(card), messages:messages.map(({screenshots,result_revision,request_id,...message})=>({...message,screenshots:JSON.parse(screenshots),
+    ...(result_revision!==null && request_id ? {result:{revision:result_revision,requestId:request_id}} : {})})), permissions:await authorization(db,idea,card.revision,through) };
 }
 export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Response> {
   if (!env.QUESTIONS || !env.IDEAS_ADMIN_TOKEN) return json({ error: 'Ideas are not available here yet.' }, 503);
