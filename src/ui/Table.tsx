@@ -15,6 +15,7 @@ import type { CompletedTrick, GameState, PlayRecord, Seat } from '../engine';
 import { legalDominoes } from '../engine';
 import { Domino } from './Domino';
 import { Tally } from './Tally';
+import { YourBid } from './YourBid';
 import type { AppEvent, AppState } from './store';
 import {
   HUMAN_SEAT, SEAT_NAMES, nelloAvailable, TRICK_HOLD_MS, bidLabel, contractLabel, declLabel, ledChip, trumpChip,
@@ -171,7 +172,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion 
         <div class="hand-area">
           <div class="hand-heading">
             <p class={`hand-caption${humanTurn && !showingLast ? ' your-turn' : ''}`} role="status">
-              <strong class="you-label">You</strong>
+              <span class="hand-identity"><strong class="you-label">You</strong><YourBid g={g} seat={HUMAN_SEAT} /></span>
               <span>{humanTurn && !showingLast
                 ? g.currentTrick.length === 0 ? 'Your turn to lead' : 'Your turn to play'
                 : 'Your hand'}</span>

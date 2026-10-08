@@ -3,6 +3,7 @@ import { legalDominoes, teamOf, type Action, type Seat } from '../engine';
 import type { RoomState } from './protocol';
 import { Domino } from '../ui/Domino';
 import { Tally } from '../ui/Tally';
+import { YourBid } from '../ui/YourBid';
 import { BidSheet, DeclareSheet } from '../ui/sheets';
 import { bidLabel, contractLabel, declLabel, ledChip } from '../ui/store';
 import { rotateGame, relativeSeat } from './view';
@@ -53,7 +54,7 @@ export function RoomTable({ room, seat, enabled, holding, thinking, act, start, 
       </div>)}</div>
       <div class="trick-note" role="status">{holding ? `${name(last!.winner)} took the trick` : thinking !== null ? `${name(thinking)} is thinking…` : g.turn !== null ? ownTurn ? 'Your turn' : `Waiting for ${name(g.turn)}` : 'Hand over'}</div>
     </div>{opponent(3)}</div>
-      <div class={`hand-area${sittingOut ? ' hand-sitting-out' : ''}`}><p class={`hand-caption${ownTurn ? ' your-turn' : ''}`}><strong class="you-label">You</strong><span>{room.seats[seat]?.name} · {sittingOut ? 'Sitting out — your partner called Nel-O' : ownTurn && g.phase === 'playing' ? 'Your turn to play' : 'Your hand'}</span></p>
+      <div class={`hand-area${sittingOut ? ' hand-sitting-out' : ''}`}><p class={`hand-caption${ownTurn ? ' your-turn' : ''}`}><span class="hand-identity"><strong class="you-label">You</strong><YourBid g={g} seat={seat} /></span><span>{room.seats[seat]?.name} · {sittingOut ? 'Sitting out — your partner called Nel-O' : ownTurn && g.phase === 'playing' ? 'Your turn to play' : 'Your hand'}</span></p>
         <div class="hand" aria-label="Your hand">{g.hands[seat]!.map(id => <Domino key={id} id={id} state={legal.has(id) && !pending ? 'legal' : 'idle'} onTap={() => { if (!pending && legal.has(id)) act({ type: 'play', domino: id }); }} />)}</div>
       </div>
     </div>

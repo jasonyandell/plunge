@@ -467,14 +467,17 @@
   margin: 0 0 10px;
   min-height: 28px;
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 10px;
+  gap: 4px 10px;
   color: #e1cbae;
   font-size: 13px;
   text-align: center;
 }
 .hand-caption.your-turn { color: var(--teal-bright); font-weight: 650; }
+.hand-identity { display: inline-flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; }
+.your-bid { padding: 4px 9px; font-size: 13px; font-weight: 650; line-height: 1.3; }
 .status-tallies { padding: 8px; border-radius: 10px; background: #ffffff06; }
 .status-sub { margin-top: 3px; }
 .seat-tag { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
