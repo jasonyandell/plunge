@@ -182,13 +182,15 @@ const avg = (list) => {
 };
 
 // ---------------------------------------------------------------- main
-const models = {
+const allModels = {
   'knn-1': (tr) => knnModel(tr, 1),
   'knn-5': (tr) => knnModel(tr, 5),
   'knn-10': (tr) => knnModel(tr, 10),
   'knn-25': (tr) => knnModel(tr, 25),
   'ridge-1': (tr) => ridgeModel(tr, 1),
 };
+const pick = arg('models', null);
+const models = pick ? Object.fromEntries(pick.split(',').map((k) => [k, allModels[k]])) : allModels;
 
 if (import.meta.url.endsWith(process.argv[1].split('/').pop())) {
   const mode = arg('train', 'cv');
