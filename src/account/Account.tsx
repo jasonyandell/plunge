@@ -237,9 +237,9 @@ export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBacke
     </section> : <>
       <section class="idea-paper"><h2>Hi, {state.account.name}.</h2><p>You’re signed in with your passkey.</p>
         <form onSubmit={event=>{event.preventDefault();void act('/profile',{name},'Your name is saved.');}}><label>What should we call you?<input value={name} maxLength={40} onInput={e=>setName(e.currentTarget.value)}/></label><button class="big-btn secondary" disabled={busy||!name.trim()}>Save name</button></form>
-        {state.account.family ? <a class="big-btn account-ideas" href="/?ideas=1">Open family ideas →</a> : <div class="account-access"><h3>Family ideas</h3>
-          <p>{state.account.requested?'Your request is waiting for Jason. You can keep playing while he adds you.':'Jason decides who can read the family’s cards and ask for changes.'}</p>
-          <button class="big-btn" disabled={busy||!!state.account.requested} onClick={()=>void act('/request',{},'Jason can now see your request.')}>{state.account.requested?'Access requested':'Ask for family access'}</button>
+        {state.account.family ? <a class="big-btn account-ideas" href="/?ideas=1">Open family ideas →</a> : <div class="account-access"><h3>Join the family</h3>
+          <p>{state.account.requested?'Your request is waiting for Jason. Keep playing; it opens up as soon as he lets you in.':'Family see each other’s tables right on the home screen, sit at the family table, and share ideas for the app. Jason lets people in.'}</p>
+          <button class="big-btn" disabled={busy||!!state.account.requested} onClick={()=>void act('/request',{},'Jason can now see your request.')}>{state.account.requested?'Asked · waiting for Jason':'Ask to join the family'}</button>
           {!!state.account.requested&&<button class="text-btn" disabled={busy} onClick={()=>void run(refresh)}>Check access</button>}
         </div>}
         {(!!state.account.family||!!state.account.owner)&&<InviteFamily me={state.account.name} backend={backend}/>}

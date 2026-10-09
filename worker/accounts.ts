@@ -177,7 +177,7 @@ export async function accountsRequest(request:Request,env:AccountEnv):Promise<Re
       return json({members:(await db.prepare(`SELECT a.id,a.name,a.owner,a.requested,CASE WHEN m.revoked=0 THEN 1 ELSE 0 END family,
           ${passkeyCount}>0 joined,i.name invited_by,a.created,a.via_link
         FROM accounts a LEFT JOIN idea_members m ON m.id=a.member_id LEFT JOIN accounts i ON i.id=a.invited_by
-        WHERE a.requested=1 OR a.member_id IS NOT NULL OR ?=1 ORDER BY a.created DESC LIMIT 200`).bind(admin?1:0).all()).results});
+        ORDER BY a.created DESC LIMIT 200`).all()).results});
     }
     if(path==='/family-link'&&request.method==='GET') {
       if(!account?.owner)return json({error:'Only Jason can manage the family link.'},403);

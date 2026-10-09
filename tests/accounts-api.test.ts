@@ -106,8 +106,11 @@ it('verifies real passkey signatures, handles and counters when signing in',asyn
 it('keeps family grants explicit and prevents privilege escalation or cross-site writes',async()=>{
   expect((await call('/owner','POST',{id:mom.id},mom.cookie)).status).toBe(403);
   expect((await call('/grant','POST',{id:dad.id,enabled:true},mom.cookie)).status).toBe(403);
-  await call('/request','POST',{},dad.cookie);expect((await call('/members','GET',undefined,dad.cookie)).status).toBe(403);
   expect((await call('/owner','POST',{id:mom.id},'',{Authorization:`Bearer ${admin}`})).status).toBe(200);
+  // Someone who signed up the ordinary way and never asked still shows up for the owner to let in.
+  const {members}=await (await call('/members','GET',undefined,mom.cookie)).json() as {members:{id:string;requested:number;family:number}[]};
+  expect(members.find(m=>m.id===dad.id)).toMatchObject({requested:0,family:0});
+  await call('/request','POST',{},dad.cookie);expect((await call('/members','GET',undefined,dad.cookie)).status).toBe(403);
   expect((await call('/grant','POST',{id:dad.id,enabled:true},mom.cookie,{Origin:'https://evil.test'})).status).toBe(403);
   expect((await call('/grant','POST',{id:dad.id,enabled:true},mom.cookie)).status).toBe(200);
   expect(await (await idea(dad.cookie)).json()).toMatchObject({id:dad.id,name:'Dad'});
