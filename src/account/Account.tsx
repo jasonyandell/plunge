@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
+import type { ComponentChildren } from 'preact';
 import { startRegistration, startAuthentication, browserSupportsWebAuthn,
   type PublicKeyCredentialCreationOptionsJSON, type PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser';
 import { TOKEN_KEY } from '../ideas/client';
@@ -16,7 +17,7 @@ interface State {account:Person|null;available:boolean}
 interface Invite {id:string;name:string;joined:number}
 /** What an invite link is for, read before anyone uses it. */
 interface Seat {name:string;invitedBy:string|null;joined:boolean;you:boolean}
-async function api<T>(path='',body?:unknown):Promise<T> {
+async function liveApi<T>(path='',body?:unknown):Promise<T> {
   const response=await fetch(`/api/account${path}`,{method:body===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',
     ...(body===undefined?{}:{headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})});
   const data=await response.json();if(!response.ok)throw new Error(data.error??'Please try again.');return data as T;
@@ -34,20 +35,43 @@ function inviteFromInput(value:string):string {
 }
 /** On iPhone a link opens in Safari, which keeps its own storage apart from the home-screen app. */
 const standalone=()=>matchMedia?.('(display-mode: standalone)').matches||(navigator as Navigator&{standalone?:boolean}).standalone===true;
-async function shareInvite(from:string,to:string,url:string):Promise<'shared'|'copied'|'shown'> {
+type Shared='shared'|'copied'|'shown';
+async function shareInvite(from:string,to:string,url:string):Promise<Shared> {
   const text=`${to}, ${from} saved you a seat at our Plunge table. Tap to join:`;
   if(navigator.share){try{await navigator.share({title:'Plunge',text,url});return 'shared';}catch(e){if(e instanceof Error&&e.name==='AbortError')return 'shown';}}
   try{await navigator.clipboard.writeText(`${text} ${url}`);return 'copied';}catch{return 'shown';}
 }
+/** Everything the account page asks of the outside world. The live backend is the account
+ * service and this device; the sample walkthrough swaps in an in-memory one. */
+export interface AccountBackend {
+  api<T>(path?:string,body?:unknown):Promise<T>;
+  register(options:PublicKeyCredentialCreationOptionsJSON):Promise<unknown>;
+  authenticate(options:PublicKeyCredentialRequestOptionsJSON):Promise<unknown>;
+  supported:boolean; localOnly:boolean;
+  stats(account?:string):Promise<StatsStatus>;
+  share(from:string,to:string,url:string):Promise<Shared>;
+  sitDown():Promise<void>;
+}
+export const liveBackend:AccountBackend={
+  api:liveApi,
+  register:options=>startRegistration({optionsJSON:options}),
+  authenticate:options=>startAuthentication({optionsJSON:options}),
+  get supported(){return browserSupportsWebAuthn();},
+  localOnly:QUESTIONS_LOCAL_ONLY,
+  stats:syncStats,
+  share:shareInvite,
+  sitDown:async()=>{const seat=await familyTable();try{saveSeat(seat,localStorage);}catch{/* The room page opens the seat it was given. */}location.assign(roomUrl(seat.roomId));},
+};
 /** Save a seat for someone: they get a link that works once, for a week. */
-function InviteFamily({me}:{me:string}) {
+function InviteFamily({me,backend}:{me:string;backend:AccountBackend}) {
+  const api=backend.api;
   const [invites,setInvites]=useState<Invite[]>([]),[name,setName]=useState(''),[sent,setSent]=useState<{name:string;url:string;how:string}|null>(null);
   const [busy,setBusy]=useState(false),[error,setError]=useState('');
   const load=()=>api<{invites:Invite[]}>('/invites').then(r=>setInvites(r.invites)).catch(()=>{/* The list is a convenience. */});
   useEffect(()=>{void load();},[]);
   const send=(body:{name:string}|{id:string},to:string)=>{setBusy(true);setError('');void (async()=>{try{
     const {url}=await api<{url:string}>('/invite',body);
-    const how=await shareInvite(me,to,url);
+    const how=await backend.share(me,to,url);
     setSent({name:to,url,how:how==='shared'?`Sent. The link works once, for a week.`:how==='copied'?`Copied. Paste it in a message to ${to}. It works once, for a week.`:`Send this link to ${to}. It works once, for a week.`});
     setName('');await load();
   }catch(e){setError(e instanceof Error?e.message:'Please try again.');}finally{setBusy(false);}})();};
@@ -65,8 +89,8 @@ function InviteFamily({me}:{me:string}) {
 }
 const plural=(n:number,word:string)=>`${n} ${word}${n===1?'':'s'}`;
 /** What this device has, what the account holds, and anything that could not connect. Never claims an upload that did not happen. */
-function statsLines(s:StatsStatus):string[] {
-  if(QUESTIONS_LOCAL_ONLY)return ['This preview keeps stats on the device only.'];
+function statsLines(s:StatsStatus,localOnly:boolean):string[] {
+  if(localOnly)return ['This preview keeps stats on the device only.'];
   const here=[`${plural(s.device,'hand')} on this device`];
   if(s.account){here.push(`${s.connected} connected to your account`);if(s.waiting)here.push(`${s.waiting} waiting to connect`);if(s.rejected)here.push(`${s.rejected} could not be connected and stay here`);}
   const lines=[`${here.join(' · ')}.`];
@@ -74,7 +98,8 @@ function statsLines(s:StatsStatus):string[] {
   if(s.error)lines.push(`${s.error} Your device keeps its hands and retries on its own.`);
   return lines;
 }
-export function AccountPage() {
+export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBackend;heading?:ComponentChildren}={}) {
+  const api=backend.api;
   const [state,setState]=useState<State|null>(null),[members,setMembers]=useState<Person[]>([]),[name,setName]=useState(tableName);
   const [error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
   const [recover,setRecover]=useState(()=>secretFromLink('recover')),[recoveryLink,setRecoveryLink]=useState<{name:string;url:string;kind:'Recovery'|'Invite'}|null>(null);
@@ -83,9 +108,9 @@ export function AccountPage() {
   const [welcomed,setWelcomed]=useState(false),[opening,setOpening]=useState(false);
   const [stats,setStats]=useState<StatsStatus|null>(null),[connecting,setConnecting]=useState(false);
   // Signing in connects this device's hands; signed out, the page only counts them (the one request comes back 401).
-  const connectStats=async(id?:string)=>{setConnecting(true);try{setStats(await syncStats(id));}catch{/* The device log is unaffected; the next visit retries. */}finally{setConnecting(false);}};
+  const connectStats=async(id?:string)=>{setConnecting(true);try{setStats(await backend.stats(id));}catch{/* The device log is unaffected; the next visit retries. */}finally{setConnecting(false);}};
   useEffect(()=>{if(state)void connectStats(state.account?.id);},[!state,state?.account?.id]);
-  const supported=browserSupportsWebAuthn();
+  const supported=backend.supported;
   const refresh=async()=>{const next=await api<State>();setState(next);if(next.account)setName(next.account.name);
     if(next.available)rememberMe(next.account&&{name:next.account.name});
     if(next.account?.owner)setMembers((await api<{members:Person[]}>('/members')).members);else {setMembers([]);setRecoveryLink(null);}};
@@ -104,17 +129,17 @@ export function AccountPage() {
     const path=`/passkey/${kind}`;
     // An invite is claimed exactly like a recovery of an account that never had a passkey.
     const options=await api<PublicKeyCredentialCreationOptionsJSON & PublicKeyCredentialRequestOptionsJSON>(`${path}/options`,{name,token:join||recover});
-    const response=kind==='login'?await startAuthentication({optionsJSON:options}):await startRegistration({optionsJSON:options});
+    const response=kind==='login'?await backend.authenticate(options):await backend.register(options);
     await api(`${path}/finish`,{response});
     if(join){setJoin('');setSeat(null);setWelcomed(true);}
     setRecover('');await refresh();if(!join)setNotice(kind==='add'?'Another passkey is ready.':'You’re signed in.');
   });
-  const available=!!state?.available&&!QUESTIONS_LOCAL_ONLY;
-  const sitDown=async()=>{setOpening(true);setError('');try{const seat=await familyTable();try{saveSeat(seat,localStorage);}catch{/* The room page opens the seat it was given. */}location.assign(roomUrl(seat.roomId));}
+  const available=!!state?.available&&!backend.localOnly;
+  const sitDown=async()=>{setOpening(true);setError('');try{await backend.sitDown();}
     catch(e){setError(e instanceof Error?e.message:'The family table could not be found.');}finally{setOpening(false);}};
   /** The hands already on this device, which come along when someone signs in. */
   const waiting=stats&&stats.device>0?` Your ${plural(stats.device,'hand')} from this ${standalone()?'phone':'browser'} ${stats.device===1?'comes':'come'} with you.`:'';
-  return <main class="ideas-page account-page"><header class="ideas-top"><a href="/">← Back to Plunge</a><span>Always welcome at the table</span></header>
+  return <main class="ideas-page account-page">{heading}<header class="ideas-top"><a href="/">← Back to Plunge</a><span>Always welcome at the table</span></header>
     <div class="ideas-heading">{join||welcomed?<><h1>Welcome to Plunge</h1><p>Texas 42 with the family, free for everyone.</p></>
       :<><h1>Your Plunge account</h1><p>Sign in if you’d like. Playing is always open to everyone.</p></>}</div>
     {!state ? <p role="status">{error?'Account details could not load.':'Opening your account…'}</p> : join ? <section class="idea-paper">
@@ -151,7 +176,7 @@ export function AccountPage() {
         <label>What should we call you?<input value={name} maxLength={40} autoComplete="nickname" onInput={e=>setName(e.currentTarget.value)}/></label>
         <button class="big-btn secondary" disabled={busy||!available||!supported||!name.trim()}>Create an account</button>
       </form>
-      {!available&&<p class="idea-help">Sign-in lives in the main Plunge app. <a href={`${LIVE_PLUNGE}/?account=1`}>Open your account there</a>.</p>}
+      {!available&&<p class="idea-help">Sign-in lives in the main Plunge app. <a href={`${LIVE_PLUNGE}/?account=1`}>Open your account there</a>, or <a href="?account=1&demo=invite">try the sample walkthrough</a>.</p>}
       {!supported&&<p class="idea-help">This browser can’t use passkeys. Try a current browser on your phone, or keep playing without an account.</p>}
       <p class="idea-help">Signing in connects the hands played here to your account, together with your other devices and family games.{waiting}</p>
       <details class="account-help"><summary>Lost access?</summary><p>Try signing in on another device first. If that doesn’t work, ask Jason for a recovery link. Please don’t create a second account to replace a lost one.</p></details>
@@ -164,13 +189,13 @@ export function AccountPage() {
           <button class="big-btn" disabled={busy||!!state.account.requested} onClick={()=>void act('/request',{},'Jason can now see your request.')}>{state.account.requested?'Access requested':'Ask for family access'}</button>
           {!!state.account.requested&&<button class="text-btn" disabled={busy} onClick={()=>void run(refresh)}>Check access</button>}
         </div>}
-        {(!!state.account.family||!!state.account.owner)&&<InviteFamily me={state.account.name}/>}
+        {(!!state.account.family||!!state.account.owner)&&<InviteFamily me={state.account.name} backend={backend}/>}
         <details class="account-help"><summary>Account and sign-in help</summary>
           <p>Your account number is <code>{state.account.id}</code>. Share it with Jason so he can confirm the right account before granting access or helping you recover it.</p>
           <button class="big-btn secondary" disabled={busy||!supported} onClick={()=>void passkey('add')}>Add another passkey</button>
         </details>
         <div class="account-stats"><h3>Your hands</h3>
-          {stats?statsLines(stats).map(line=><p key={line}>{line}</p>):<p role="status">Counting the hands on this device…</p>}
+          {stats?statsLines(stats,backend.localOnly).map(line=><p key={line}>{line}</p>):<p role="status">Counting the hands on this device…</p>}
           <button class="big-btn secondary" disabled={busy||connecting} onClick={()=>void connectStats(state.account?.id)}>{connecting?'Connecting…':'Connect now'}</button>
         </div>
         <p class="idea-help">Hands played on this device connect to your account while you’re signed in, and merge with your other devices and family games. Full game history and Walt results stay on this device; export a backup from More.</p>

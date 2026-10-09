@@ -4,6 +4,9 @@ import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
  * (or without) the network. Signed out is the ordinary case: nothing is stored. */
 export interface Me { name: string }
 const ME = 'plunge:me';
+/** The sample walkthrough's signed-in name, for this tab only. Shown only where accounts don't exist. */
+export const DEMO_ME = 'plunge:account-demo:me';
+export function demoMe(): string | null { try { return sessionStorage.getItem(DEMO_ME); } catch { return null; } }
 /** The name someone last typed at a table, offered again when they make an account. */
 const NAME = 'plunge:name';
 
