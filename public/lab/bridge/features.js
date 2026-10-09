@@ -22,6 +22,11 @@ export const FEATURE_NAMES = [
   'isTrump', 'followsLed', 'isDiscard', 'isLead', 'wouldWinNow', 'higherUnseen',
   'higherPartnerKnown', 'higherOppKnown', 'isMaster', 'higherOwn', 'suitLenOwn', 'rankFrac',
   'isRuleCard', 'isLowestOfSuit', 'isHighestOfSuit', 'isRuff', 'ledByPartner', 'trickIdx',
+  // v2: bridge structure, still lawful (visible hands + public record only)
+  'sideWinnersSuit', 'quickWinnersTotal', 'winnersVsNeed', 'oppTrumpsPossible',
+  'sideTrumpsSeen', 'tenaceOverUnseen', 'entriesPartner', 'cheapestWinner',
+  'handPos2', 'handPos3', 'handPos4', 'oppVoidInSuit', 'partnerVoidInSuit',
+  'suitEstablished', 'honorsOwnSuit', 'underPartnerWinner',
 ];
 
 /** Features for one candidate card at a position.
@@ -66,6 +71,81 @@ export function featurize(pub, seat, agent, hSeat, visHands, nCands, c, ruleC) {
   const isMaster = higherUnseen === 0 && higherOppKnown === 0 ? 1 : 0;
   const opp1 = (seat + 1) & 3, opp2 = (seat + 3) & 3;
   const oppVoidsShown = popcount(pub.voids[opp1]) + popcount(pub.voids[opp2]);
+
+  // --- v2: bridge structure, all from visible hands + public record ---
+  const FULL13 = 0x1fff;
+  const sideVis = [0, 0, 0, 0], oppVis = [0, 0, 0, 0], visAll = [0, 0, 0, 0];
+  let partnerVis = null;
+  for (let s = 0; s < 4; s++) {
+    if (!visHands[s]) continue;
+    const sameSide = pub.isDeclSide(s) === declSide;
+    for (let uu = 0; uu < 4; uu++) {
+      visAll[uu] |= visHands[s][uu];
+      if (sameSide) sideVis[uu] |= visHands[s][uu]; else oppVis[uu] |= visHands[s][uu];
+    }
+    if (sameSide && s !== seat) partnerVis = visHands[s];
+  }
+  const unseen = [0, 0, 0, 0];
+  for (let uu = 0; uu < 4; uu++) unseen[uu] = FULL13 & ~pub.played[uu] & ~visAll[uu];
+  // consecutive top winners a suit's own side holds (quick winners)
+  const winnersIn = (uu) => {
+    let w = 0;
+    for (let rr = 12; rr >= 0; rr--) {
+      const bit = 1 << rr;
+      if (pub.played[uu] & bit) continue;
+      if (sideVis[uu] & bit) w++; else break;
+    }
+    return w;
+  };
+  const sideWinnersSuit = winnersIn(u);
+  let quickWinnersTotal = 0;
+  for (let uu = 0; uu < 4; uu++) quickWinnersTotal += winnersIn(uu);
+  const winnersVsNeed = quickWinnersTotal - (declSide ? need : defNeed);
+  const oppTrumpsPossible = pub.strain < 4 ? popcount(unseen[pub.strain]) + popcount(oppVis[pub.strain]) : 0;
+  const sideTrumpsSeen = pub.strain < 4 ? popcount(sideVis[pub.strain]) : 0;
+  // unseen cards in the candidate's suit sandwiched between two side cards
+  // (finesse / tenace potential over an unseen honor)
+  let tenaceOverUnseen = 0;
+  {
+    let m = unseen[u];
+    while (m) {
+      const rr = lowRank(m); m &= m - 1;
+      const above = sideVis[u] & ~((2 << rr) - 1), below = sideVis[u] & ((1 << rr) - 1);
+      if (above && below) tenaceOverUnseen++;
+    }
+    if (tenaceOverUnseen > 3) tenaceOverUnseen = 3;
+  }
+  // suits where the visible partner hand holds the top unplayed card (entries)
+  let entriesPartner = 0;
+  if (partnerVis) {
+    for (let uu = 0; uu < 4; uu++) {
+      const rem = FULL13 & ~pub.played[uu];
+      if (rem && (partnerVis[uu] & (1 << highRank(rem)))) entriesPartner++;
+    }
+  }
+  // is the candidate the cheapest card in hand that wins the trick as it stands?
+  let cheapestWinner = 0;
+  if (wouldWinNow && tl > 0) {
+    cheapestWinner = 1;
+    let m = hSeat[u] & ((1 << r) - 1);
+    while (m && cheapestWinner) {
+      const rr = lowRank(m); m &= m - 1;
+      const tc2 = pub.tc.slice(); tc2[tl] = u * 13 + rr;
+      if (trickWinnerPos(tc2, tl + 1, pub.strain) === tl) cheapestWinner = 0;
+    }
+  }
+  const oppVoidInSuit = ((pub.voids[opp1] | pub.voids[opp2]) >> u) & 1;
+  const partnerVoidInSuit = (pub.voids[(seat + 2) & 3] >> u) & 1;
+  // every remaining card of the suit outside the side's visible hands is lower
+  // than the side's lowest remaining card
+  let suitEstablished = 0;
+  {
+    const others = unseen[u] | oppVis[u];
+    if (sideVis[u] && (!others || highRank(others) < lowRank(sideVis[u]))) suitEstablished = 1;
+  }
+  const honorsOwnSuit = popcount(hSeat[u] & 0x1f00); // A K Q J T
+  const underPartnerWinner = partnerWinning && !wouldWinNow ? 1 : 0;
+
   return [
     pub.strain === 4 ? 1 : 0, pub.level, need, defNeed, remTricks,
     remTricks > 0 ? need / remTricks : 0, tl, declSide ? 1 : 0,
@@ -82,6 +162,10 @@ export function featurize(pub, seat, agent, hSeat, visHands, nCands, c, ruleC) {
     tl > 0 && u === pub.strain && led !== pub.strain && hSeat[led] === 0 ? 1 : 0,
     tl > 0 && pub.leader === ((seat + 2) & 3) ? 1 : 0,
     pub.n >> 2,
+    sideWinnersSuit, quickWinnersTotal, winnersVsNeed, oppTrumpsPossible,
+    sideTrumpsSeen, tenaceOverUnseen, entriesPartner, cheapestWinner,
+    tl === 1 ? 1 : 0, tl === 2 ? 1 : 0, tl === 3 ? 1 : 0, oppVoidInSuit, partnerVoidInSuit,
+    suitEstablished, honorsOwnSuit, underPartnerWinner,
   ];
 }
 

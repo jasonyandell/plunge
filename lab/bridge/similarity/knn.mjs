@@ -18,12 +18,14 @@ const here = (p) => new URL(p, import.meta.url).pathname;
 const testDeals = loadDeals(here('../deals-test.json'));
 const selfplay = buildDataset(loadCorpus(here('../results/pmake/selfplay.jsonl')), testDeals, 'test-s1');
 
-export function loadTuneCorpus() {
+export function loadTuneCorpus(seeds = null) {
+  // seeds: e.g. ['s1','s2'] pins the corpus for reproducibility; null = all
   const tuneDeals = loadDeals(here('../deals-tune.json'));
   const dir = here('../results/pmake');
   const recs = [];
   for (const f of readdirSync(dir).filter((f) => /^tune-s\d+-[a-z]\.jsonl$/.test(f)).sort()) {
     const seed = f.match(/^tune-(s\d+)/)[1];
+    if (seeds && !seeds.includes(seed)) continue;
     recs.push(...buildDataset(loadCorpus(`${dir}/${f}`), tuneDeals, `tune-${seed}`));
   }
   return recs;
@@ -210,7 +212,8 @@ if (import.meta.url.endsWith(process.argv[1].split('/').pop())) {
       console.log(`  ${name}: ${v.map((x) => x.toFixed(4)).join(' ')}  (min ${Math.min(...v).toFixed(4)} max ${Math.max(...v).toFixed(4)})`);
     }
   } else if (mode === 'tune') {
-    let train = loadTuneCorpus();
+    const seeds = arg('seeds', null);
+    let train = loadTuneCorpus(seeds ? seeds.split(',') : null);
     const frac = Number(arg('frac', 1)), reps = Number(arg('reps', 1));
     const groups = [...new Set(train.map((r) => r.group))];
     const per = [];

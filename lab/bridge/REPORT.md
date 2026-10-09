@@ -462,3 +462,49 @@ the endgame search tail; the levers that didn't: root worlds n, rollout draws, v
 transpositions. The pmake-vector corpus (`results/pmake/`) is the base for the next
 step: estimates keyed by stochastic similarity between positions, refined iteratively
 rather than recomputed from scratch.
+
+## Rerun: a learned level-0 inner mind (negative result)
+
+EXPLORATORY tier. Motivated by a texas-42 finding (a ~6k-parameter lawful-feature
+scorer that is mediocre as a player but strong as the search's modeled inner mind),
+this arm trains the same recipe on the bridge pmake corpus and mounts it as the
+level-0 mind (`l0:'scorer'` in `tape.js`): belief-free — no sampled worlds, no
+rollouts — argmax of a tiny net's P(make) logit over the mind's candidates, pure and
+cached under the same key as every other mind, information rule checked (the net
+reads only the mind's visible hands and the public record; `tapecheck.mjs`).
+
+- **Recipe:** per-candidate lawful features → 64→64→1 (tanh, ~6.5–7.5k params),
+  soft-BCE against the full-depth Walt teacher's pmake rates, selection by held-out
+  argmax-policy regret. Trainer: `lab/bridge/scorer/train.mjs`; featurizer shared
+  verbatim with the search in `public/lab/bridge/features.js`. Corpus: 553
+  board-plays of vector-mode self-play on deals-tune boards 0–119 (6 seeds, 74,325
+  candidate labels; `results/pmake/tune-*.jsonl`). The 60-board test set was never
+  trained on, and per a pre-committed rule it was not played: the arm failed its
+  validation gates first.
+- **v1 (34 features):** val regret .0536 vs rule bot .0497, random .0711, teacher 0 —
+  retained .25 of random→teacher (the 42 scorer retained .77). As the inner mind,
+  h2h vs the flat-mind champion on 24 held-out tuning boards: −0.083 [−0.285, +0.118]
+  (2/18/4), ~30% faster per move.
+- **v2 (+16 bridge-structure features: quick winners, winners-vs-need, trump
+  control, tenace-over-unseen, partner entries, cheapest-winner, shown-void ruff
+  risk, established suits; D=50):** val regret .0540–.0551 across 3 seeds — identical
+  to v1 within noise, retained .24.
+
+**Verdict: the 42 transfer did not happen, and the reason is localized.** Three
+independent measurements agree the ceiling is the feature class, not capacity, data,
+or the training objective: the similarity study's within-position deltas were already
+unpredictable from these features (R² .01–.05 vs a noise ceiling ~.75); adding
+bridge structure moved nothing; and the "bad player, good inner mind" split that 42
+observed needs a net that at least carries the teacher's ranking signal, which this
+one does not. In 42, hand-rolled lawful features explain most of the teacher; in
+bridge they explain about a quarter. "Representation > capacity" survives as the
+general fact — bridge simply demands a representation this feature class cannot
+supply. The flat level-0 mind (myopic best response to random over sampled worlds)
+remains the best cheap inner mind measured for bridge, and the full-depth verdict
+above stands unchanged.
+
+Reproduce: `node lab/bridge/scorer/train.mjs --seeds 11,22,33 --epochs 30,60`; smoke:
+`node lab/bridge/h2h.mjs --deals lab/bridge/deals-tune.json --a walt --b walt2
+--walt '{"tape":true,"n":64,"n0":32,"horizon":52,"margin":false,"selfs":"mind","l0":"scorer","l0Tail":28,"k":2,"field":true}'
+--walt2 '{...same with "l0":"flat"}' --tables AB,BA --seed 1 --from 96 --to 120
+--out lab/bridge/results/tape-tune/scorer-vs-flat-val.jsonl`.

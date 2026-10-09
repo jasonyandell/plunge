@@ -86,11 +86,13 @@ Reading the table:
   deltas picks near-arbitrarily among close candidates.
 - The failure is structural, not a model-class issue: regressing the
   **within-decision delta** (y − own-decision mean) directly gives test MSE
-  0.0096 against var(delta) 0.0097 — **R² ≈ 1%** (ridge; kNN similar). With
-  features this cheap, the candidate-vs-candidate part of the touch does not
-  transfer across boards at all. Note the ceiling: ~25% of var(delta) is
-  n=64 sampling noise, so even a perfect delta predictor could reach at best
-  MSE ≈ 0.0024 here; 1% is nowhere near that excuse.
+  0.0096 against var(delta) 0.0097 — **R² ≈ 1%** (ridge; kNN similar). A tiny
+  MLP (33→32→16→1 tanh, Adam, 3-seed average per fold; `mlp.mjs`) reaches
+  **R² = 0.053** — nonlinearity buys five points, not fifty. With features
+  this cheap, the candidate-vs-candidate part of the touch does not transfer
+  across boards. Note the ceiling: ~25% of var(delta) is n=64 sampling
+  noise, so a perfect predictor could reach R² ≈ 0.75 here; 1−5% is nowhere
+  near that excuse.
 - Transfer across deal sets is real: training on the tune-deal corpus
   (disjoint 120 deals) and testing on all 60 test-deal boards gives the same
   picture (see Q3 table) — slightly better MSE than within-set CV, since the
