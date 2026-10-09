@@ -248,6 +248,34 @@ for (const tau of [0.01, 0.02, 0.04]) {
     return { cost: cv.nodes + d.nodesFull * (Math.min(2, d.cands.length) / d.cands.length), pickVal: restrictBest(d, S) };
   }));
 }
+// sampling gate: a tiny pass decides whether to think further (the natural
+// competitor to the learned gate — it reads the actual position)
+for (const eps of [0.05, 0.1, 0.2]) {
+  results.push(evalPolicy(`n8 gate(spread<${eps}) -> full`, (d) => {
+    const cv = d.cheap8; if (!cv) return { cost: d.nodesFull, pickVal: d.best };
+    const est = cv.v.map(([a, m, n]) => m / n);
+    const spread = Math.max(...est) - Math.min(...est);
+    if (spread < eps) {
+      const ord = cheapOrder(d, cv);
+      return { cost: cv.nodes, pickVal: d.y[d.cands.indexOf(ord[0])] };
+    }
+    return { cost: cv.nodes + d.nodesFull, pickVal: d.best };
+  }));
+}
+for (const eps of [0.1, 0.2]) {
+  results.push(evalPolicy(`n8 gate(spread<${eps}) -> n16+refine top-2`, (d) => {
+    const cv = d.cheap8; if (!cv) return { cost: d.nodesFull, pickVal: d.best };
+    const est = cv.v.map(([a, m, n]) => m / n);
+    const spread = Math.max(...est) - Math.min(...est);
+    if (spread < eps) {
+      const ord = cheapOrder(d, cv);
+      return { cost: cv.nodes, pickVal: d.y[d.cands.indexOf(ord[0])] };
+    }
+    const c16 = d.cheap16; if (!c16) return { cost: cv.nodes + d.nodesFull, pickVal: d.best };
+    const S = new Set(cheapOrder(d, c16).slice(0, 2));
+    return { cost: cv.nodes + c16.nodes + d.nodesFull * (Math.min(2, d.cands.length) / d.cands.length), pickVal: restrictBest(d, S) };
+  }));
+}
 results.push(evalPolicy('full Walt', (d) => ({ cost: d.nodesFull, pickVal: d.best })));
 
 console.log('\n| policy | cost (x full) | mean regret | best-value pick % |');

@@ -202,6 +202,11 @@ if (import.meta.url.endsWith(process.argv[1].split('/').pop())) {
       console.error(`fold ${f}: train ${train.length} test ${test.length}`);
     }
     printTable(`5-fold CV by board over selfplay.jsonl (${selfplay.length} candidates, 60 boards)`, avg(per));
+    console.log('\nper-fold MSE spread:');
+    for (const name of Object.keys(per[0])) {
+      const v = per.map((p) => p[name].mse);
+      console.log(`  ${name}: ${v.map((x) => x.toFixed(4)).join(' ')}  (min ${Math.min(...v).toFixed(4)} max ${Math.max(...v).toFixed(4)})`);
+    }
   } else if (mode === 'tune') {
     let train = loadTuneCorpus();
     const frac = Number(arg('frac', 1)), reps = Number(arg('reps', 1));
