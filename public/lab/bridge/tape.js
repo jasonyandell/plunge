@@ -128,7 +128,7 @@ function decided(ctx) {
 const RO = {
   played: new Uint16Array(4), tc: new Uint8Array(4), hands: new Uint16Array(16), h: new Uint16Array(4),
 };
-function tapeRollout(ctx, d) {
+function tapeRollout(ctx, d, salt = 0) {
   const pub = ctx.pub, strain = pub.strain;
   const hands = RO.hands, h = RO.h, played = RO.played, tc = RO.tc;
   for (let u = 0; u < 4; u++) played[u] = pub.played[u];
@@ -150,7 +150,7 @@ function tapeRollout(ctx, d) {
     if (n === 1) {
       for (let u = lo; u <= hi3; u++) if (h[u]) { c = u * 13 + (31 - Math.clz32(h[u] & -h[u])); break; }
     } else {
-      let kA = mix(zp, leader | (declT << 2) | (defT << 7) | (tl << 12));
+      let kA = mix(zp ^ salt, leader | (declT << 2) | (defT << 7) | (tl << 12));
       for (let i = 0; i < tl; i++) kA = mix(kA, tc[i] + 1);
       let k = (mix(d.whA, kA) >>> 0) % n;
       for (let u = lo; u <= hi3; u++) {
@@ -174,9 +174,66 @@ function tapeRollout(ctx, d) {
 function apply(ctx, c) { ctx.pub.apply(c); ctx.zp = (ctx.zp ^ ZA[c]) | 0; ctx.zq = (ctx.zq ^ ZB[c]) | 0; }
 function undo(ctx, c) { ctx.pub.undo(); ctx.zp = (ctx.zp ^ ZA[c]) | 0; ctx.zq = (ctx.zq ^ ZB[c]) | 0; }
 
-/** Live decision, taped. Same contract as walt.js's waltDecide. */
+/** Live decision, taped. Same contract as walt.js's waltDecide.
+ *
+ *  cfg.vector: evaluate every root candidate exactly (no root cutoffs), so the
+ *  returned values are an honest pmake vector, not fail-soft bounds. The chosen
+ *  card is unchanged (pruning never changed the argmax; this just refuses to
+ *  stop early or return bounds for the also-rans).
+ *  cfg.refine {n?, n0?, draws?, l0Tail?, eps?, m?}: a second, finer pass over
+ *  the finalists — every candidate whose blunt make-rate is within eps (default
+ *  0.1) of the blunt best, capped at m (default 4) — on a FRESH root sample
+ *  with the overridden settings. The blunt pass is the vaguely-correct
+ *  estimate; the refine pass spends the budget only where the answer is close.
+ *  cfg.field: a Map passed in by the caller to persist the mind cache across
+ *  decisions (an overlapping computation field: the next real position was
+ *  usually already explored as a subtree of the last search; purity makes the
+ *  reuse sound). Only lawful at full depth with kFrom 0 — guarded below.
+ */
 export function tapeDecide(pub, agent, known, c) {
   if (agentOf(pub, pub.toMove()) !== agent) throw new Error("not this agent's turn");
+  if (c.n * 2 >= MBIG || c.n0 * 2 >= MBIG) throw new Error('n too large for the margin tie-break');
+  const ctx = makeCtx(pub, agent, c);
+  const values = [];
+  const rootRng = new Rng(mix(c.seed, ROOT_SEED));
+  let card = decideIn(ctx, agent, known, c.level, c.n, rootRng, values);
+  const top = ctx.margin ? MBIG : 1;
+  let out = values.map(([a, v, nn]) => [a, Math.floor(Math.max(0, v) / top), nn]);
+  const stats = ctx.stats;
+  if (c.refine && values.length > 1) {
+    const maxi = pub.isDeclSide(pub.toMove());
+    // Finalists: within eps of the blunt best by make-rate, capped at m, the
+    // blunt winner always included. With a pruned (non-vector) blunt pass the
+    // also-rans carry fail-soft bounds, which under-rate them on the declarer
+    // side — near-ties can be missed; vector:true in the base config removes
+    // that at extra cost. Harmless over-inclusion on defence.
+    const eps = c.refine.eps ?? 0.1, m = c.refine.m ?? 4;
+    const rate = (e) => e[1] / e[2];
+    const bestE = out.find((e) => e[0] === card);
+    let fins = out
+      .filter((e) => e[0] === card || (maxi ? rate(bestE) - rate(e) : rate(e) - rate(bestE)) <= eps)
+      .sort((x, y) => (x[0] === card ? -1 : y[0] === card ? 1 : maxi ? rate(y) - rate(x) : rate(x) - rate(y)))
+      .slice(0, m)
+      .map((e) => e[0]);
+    if (fins.length > 1) {
+      const c2 = { ...c, ...c.refine, refine: null, fieldMap: c.refine.fieldMap, seed: mix(c.seed, 0x5ef17e3) };
+      const ctx2 = makeCtx(pub, agent, c2);
+      const rng2 = new Rng(mix(c2.seed, ROOT_SEED));
+      const deals2 = sampleDeals(pub, visibleSeats(agent, pub), known, c2.n, rng2);
+      for (const d of deals2) worldHash(d);
+      const vals2 = [];
+      card = evalCands(ctx2, agent, c2.level, fins, deals2, vals2, true);
+      const top2 = ctx2.margin ? MBIG : 1;
+      const refined = new Map(vals2.map(([a, v, nn]) => [a, [a, Math.floor(Math.max(0, v) / top2), nn]]));
+      out = out.map((e) => refined.get(e[0]) ?? e);
+      for (const k2 of Object.keys(ctx2.stats)) stats[k2] += ctx2.stats[k2];
+      stats.refined = fins.length;
+    }
+  }
+  return { card, forced: values.length === 0, values: out, stats };
+}
+
+function makeCtx(pub, agent, c) {
   const ctx = {
     pub, hEnd: pub.n + Math.max(1, c.horizon), n0: c.n0, margin: c.margin,
     hi: pub.target + (c.margin ? 1 : 0), lo: pub.target - (c.margin ? 1 : 0),
@@ -198,25 +255,23 @@ export function tapeDecide(pub, agent, known, c) {
     // l0Tail: within the last T plies a 'flat' level-0 mind switches to the
     // recursive search (endgames want precision and their trees are tiny).
     selfs: c.selfs || 'branch', l0: c.l0 || 'search', l0Tail: c.l0Tail || 0,
+    draws: c.draws || 1,
     minds: new Map(), zp: 0, zq: 0,
     tt: c.tt === true ? new Map() : null, // exact-value transpositions: sound under the tape, but
     // measured a net loss at k=2 (few identical (group, record) recurrences; hashing every node
     // costs more than the rare hit saves), so opt-in only
-    stats: { minds: 0, rollouts: 0, mindHits: 0, nodes: 0, ttHits: 0, flat: 0 },
+    stats: { minds: 0, rollouts: 0, mindHits: 0, nodes: 0, ttHits: 0, flat: 0, refined: 0 },
+    vector: c.vector === true,
   };
   ctx.rootAgent = agent;
+  // Persistent mind field across decisions (same Map handed back each move).
+  // Sound only when the mind function is ply-invariant: full depth (hEnd never
+  // binds) and no kFrom window. Purity does the rest: same key, same action,
+  // whenever it was computed.
+  if (c.fieldMap instanceof Map && c.horizon >= 52 && !(c.kFrom > 0)) ctx.minds = c.fieldMap;
   // Rebuild the played-set zobrist for the record so far.
   for (let i = 0; i < pub.n; i++) { ctx.zp = (ctx.zp ^ ZA[pub.plays[i]]) | 0; ctx.zq = (ctx.zq ^ ZB[pub.plays[i]]) | 0; }
-  if (c.n * 2 >= MBIG || c.n0 * 2 >= MBIG) throw new Error('n too large for the margin tie-break');
-  const values = [];
-  const rootRng = new Rng(mix(c.seed, ROOT_SEED));
-  const card = decideIn(ctx, agent, known, c.level, c.n, rootRng, values);
-  const top = ctx.margin ? MBIG : 1;
-  return {
-    card, forced: values.length === 0,
-    values: values.map(([a, v, n]) => [a, Math.floor(Math.max(0, v) / top), n]),
-    stats: ctx.stats,
-  };
+  return ctx;
 }
 
 /** One decision: sample deals from this chair, pick the argmax/argmin card.
@@ -240,19 +295,27 @@ function decideIn(ctx, agent, known, level, n, rng, values) {
   }
   const deals = sampleDeals(pub, visibleSeats(agent, pub), known, n, rng);
   for (const d of deals) worldHash(d);
-  const maxi = pub.isDeclSide(seat);
+  // vector mode applies at the live root only (values !== null)
+  return evalCands(ctx, agent, level, opts, deals, values, values !== null && ctx.vector);
+}
+
+/** Evaluate candidate cards over a fixed set of sampled deals. In vector mode
+ *  every candidate gets an exact value (no cutoffs, no early exit); otherwise
+ *  fail-soft windows keep only the argmax and first-wins-ties exact. */
+function evalCands(ctx, agent, level, opts, deals, values, vector) {
+  const pub = ctx.pub, maxi = pub.isDeclSide(pub.toMove());
   const full = deals.length * ctx.top;
   let best = opts[0], bestV = maxi ? -1 : full + 1;
   for (const a of opts) {
     apply(ctx, a);
     // window: only values strictly better than bestV matter
-    const v = !ctx.prune ? value(ctx, agent, deals, level, -1, full + 1)
+    const v = (vector || !ctx.prune) ? value(ctx, agent, deals, level, -1, full + 1)
       : maxi ? value(ctx, agent, deals, level, bestV, full + 1)
              : value(ctx, agent, deals, level, -1, bestV);
     undo(ctx, a);
     if (values) values.push([a, v, deals.length]);
     if (maxi ? v > bestV : v < bestV) { bestV = v; best = a; }
-    if (maxi ? bestV >= full : bestV <= 0) break;
+    if (!vector && (maxi ? bestV >= full : bestV <= 0)) break;
   }
   return best;
 }
@@ -419,14 +482,16 @@ function decideM1(ctx, agent, known, n, rng) {
   }
   const deals = sampleDeals(pub, visibleSeats(agent, pub), known, n, rng);
   for (const d of deals) worldHash(d);
-  const maxi = pub.isDeclSide(seat), full = deals.length * ctx.top;
+  // draws: rollouts per world per candidate (dice keyed on (world, record,
+  // draw index)); more draws reduce playout noise only, as the card says.
+  const R = ctx.draws, maxi = pub.isDeclSide(seat), full = deals.length * R * ctx.top;
   let best = opts[0], bestV = maxi ? -1 : full + 1;
   for (const a of opts) {
     apply(ctx, a);
     let v = 0;
     const o = decided(ctx);
-    if (o >= 0) v = o * deals.length;
-    else for (let i = 0; i < deals.length; i++) v += tapeRollout(ctx, deals[i]);
+    if (o >= 0) v = o * deals.length * R;
+    else for (let i = 0; i < deals.length; i++) for (let r = 0; r < R; r++) v += tapeRollout(ctx, deals[i], Math.imul(r, 0x9e3779b9));
     undo(ctx, a);
     if (maxi ? v > bestV : v < bestV) { bestV = v; best = a; }
     if (maxi ? bestV >= full : bestV <= 0) break;

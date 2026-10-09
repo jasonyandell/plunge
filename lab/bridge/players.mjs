@@ -9,8 +9,25 @@ import { waltDecide } from '../../public/lab/bridge/walt.js';
 const handOf = (d, seat, pub) => { const h = new Uint16Array(4); for (let u = 0; u < 4; u++) h[u] = d[seat * 4 + u] & ~pub.played[u]; return h; };
 
 export function waltPlayer(cfg) {
-  return { name: `walt(L${cfg.level ?? 1},n${cfg.n},n0${cfg.n0},h${cfg.horizon}${cfg.margin === false ? ',nomargin' : ''}${cfg.rollout ? ',dice' : ''}${cfg.tape ? ',tape' : ''}${cfg.k ? ',k' + cfg.k : ''}${cfg.kFrom ? ',kf' + cfg.kFrom : ''}${cfg.selfs === 'mind' ? ',selfmind' : ''}${cfg.l0 === 'flat' ? ',flat' : ''}${cfg.l0Tail ? ',tail' + cfg.l0Tail : ''}${cfg.ruleOrder === false ? ',noruleorder' : ''})`, kind: 'walt',
-    choose(pub, agent, known, seed) { return waltDecide(pub, agent, known, { ...cfg, seed }).card; } };
+  const tag = (c) => `n${c.n},n0${c.n0}${c.l0Tail ? ',tail' + c.l0Tail : ''}${c.draws > 1 ? ',d' + c.draws : ''}`;
+  const name = `walt(L${cfg.level ?? 1},n${cfg.n},n0${cfg.n0},h${cfg.horizon}${cfg.margin === false ? ',nomargin' : ''}${cfg.rollout ? ',dice' : ''}${cfg.tape ? ',tape' : ''}${cfg.k ? ',k' + cfg.k : ''}${cfg.kFrom ? ',kf' + cfg.kFrom : ''}${cfg.selfs === 'mind' ? ',selfmind' : ''}${cfg.l0 === 'flat' ? ',flat' : ''}${cfg.l0Tail ? ',tail' + cfg.l0Tail : ''}${cfg.draws > 1 ? ',d' + cfg.draws : ''}${cfg.vector ? ',vec' : ''}${cfg.refine ? ',ref(' + tag({ ...cfg, ...cfg.refine }) + ')' : ''}${cfg.field ? ',field' : ''}${cfg.ruleOrder === false ? ',noruleorder' : ''})`;
+  // field: persistent mind cache across this player's decisions (cleared when
+  // the record restarts, i.e. a new table). Separate map for the refine pass,
+  // whose settings make it a different pure function.
+  const f1 = cfg.field ? new Map() : null;
+  const f2 = cfg.field && cfg.refine ? new Map() : null;
+  let lastN = Infinity;
+  return { name, kind: 'walt', last: null,
+    choose(pub, agent, known, seed) {
+      if (f1 && pub.n <= lastN) { f1.clear(); if (f2) f2.clear(); }
+      lastN = pub.n;
+      const c = { ...cfg, seed };
+      if (f1) c.fieldMap = f1;
+      if (f2) c.refine = { ...cfg.refine, fieldMap: f2 };
+      const r = waltDecide(pub, agent, known, c);
+      this.last = r;
+      return r.card;
+    } };
 }
 
 export function rulePlayer() {

@@ -42,25 +42,35 @@ function parsePBN(pbn) {
   return d;
 }
 
+const wantPmake = process.argv.includes('--pmake');
+
 async function playTable(deal, ct, declP, defP, base) {
   const pub = new Pub(ct.decl, ct.strain, ct.level);
   const times = { decl: [], def: [] };
   const record = [];
+  const pmake = wantPmake ? [] : null;
   while (pub.outcome() < 0) {
     const seat = pub.toMove(), agent = agentOf(pub, seat);
     const vis = visibleSeats(agent, pub);
     const known = new Uint16Array(16);
     for (let s = 0; s < 4; s++) if (vis & (1 << s)) for (let u = 0; u < 4; u++) known[s * 4 + u] = deal[s * 4 + u];
     const p = pub.isDeclSide(seat) ? declP : defP;
+    if (p.last) p.last = null;
     const t0 = performance.now();
     const c = await p.choose(pub, agent, known, mix(base, pub.n));
     const dt = performance.now() - t0;
     (pub.isDeclSide(seat) ? times.decl : times.def).push(Math.round(dt));
+    // pmake vectors: one entry per non-forced Walt decision — the per-candidate
+    // [card, makes, deals] estimates, the base-case data for everything built
+    // on "these situations have those outcomes sometimes".
+    if (pmake && p.last && !p.last.forced) pmake.push({ ply: pub.n, seat, v: p.last.values });
     if (!(deal[seat * 4 + ((c / 13) | 0)] & (1 << (c % 13))) || pub.played[(c / 13) | 0] & (1 << (c % 13))) throw new Error('illegal card ' + c);
     record.push(cardText(c));
     pub.apply(c);
   }
-  return { made: pub.outcome(), decl: pub.declTricks, def: pub.defTricks, plays: record.join(' '), times };
+  const out = { made: pub.outcome(), decl: pub.declTricks, def: pub.defTricks, plays: record.join(' '), times };
+  if (pmake && pmake.length) out.pmake = pmake;
+  return out;
 }
 
 // --tables: which pairings to play per board, e.g. "AB,BA" (the duplicate pair; default),
