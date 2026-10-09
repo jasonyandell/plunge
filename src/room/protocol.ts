@@ -8,19 +8,16 @@ export interface RoomSeat { name: string; connected: boolean; away: boolean }
 /** A table on the home screen's list: who is here now, and whether the door is open. */
 export interface ListedTable { roomId: string; standing: boolean; open: boolean; started: boolean; updated: number; seats: ({ name: string; connected: boolean } | null)[] }
 
-/** Everything the table decides together goes through one proposal at a time. */
-export type ProposalKind = 'start' | 'restart' | 'next-hand' | 'undo' | 'open' | 'close' | 'kick' | 'admit';
+/** Everything the table decides together goes through one proposal at a time. A knock is not one of them. */
+export type ProposalKind = 'start' | 'restart' | 'next-hand' | 'undo' | 'open' | 'close' | 'kick';
 export type Vote = 'yes' | 'no';
 /** veto: passes at the deadline unless someone says no. allow: fails at the deadline unless enough say yes. */
 export type ProposalMode = 'veto' | 'allow';
 export interface Proposal {
-  id: string; kind: ProposalKind; mode: ProposalMode; needs: 'all' | 'one' | 'two' | 'majority';
-  /** The seated proposer, or null when a visitor knocks. */
-  by: Seat | null; byName: string;
+  id: string; kind: ProposalKind; mode: ProposalMode; needs: 'all' | 'two' | 'majority';
+  by: Seat; byName: string;
   /** Seat a kick would empty. */
   target?: Seat;
-  /** Visitor id behind an `admit` proposal. */
-  knock?: string;
   at: number; deadline: number;
   votes: Partial<Record<Seat, Vote>>;
 }
@@ -28,8 +25,11 @@ export type ProposalOutcome = 'passed' | 'failed' | 'moot';
 export interface VoteResult {
   revision: number; kind: ProposalKind; byName: string; outcome: ProposalOutcome;
   /** Who said no, when that decided it. */
-  noFrom?: string; targetName?: string; knock?: string;
+  noFrom?: string; targetName?: string;
 }
+/** Someone at the door of a closed table. Not a vote: the first person at the table to
+ * answer decides, whatever else the table is doing. Gone when they stop waiting. */
+export interface Knock { visitor: string; name: string; at: number; answer?: { by: string; yes: boolean; at: number } }
 
 /** Trusted family prototype: all four hands are shared with room members. */
 export interface RoomState {
@@ -40,6 +40,8 @@ export interface RoomState {
   /** Open tables seat anyone with the link; closed tables ask the people present. */
   open: boolean; visitors: number;
   proposal: Proposal | null; lastVote: VoteResult | null;
+  /** Optional on snapshots from an older coordinator. */
+  knocks?: Knock[];
   started: boolean; holdUntil: number; thinkingSeat: Seat | null;
   nativeReceipts: Record<string, string>; auctionSurveys: Record<string, AuctionEvidence>;
   /** Optional on snapshots from an older coordinator. */
@@ -53,7 +55,8 @@ export type RoomCommand =
   | { type: 'propose'; id: string; revision: number; kind: ProposalKind; target?: Seat }
   | { type: 'vote'; id: string; proposal: string; vote: Vote }
   | { type: 'leave'; id: string }
-  | { type: 'knock'; id: string; name: string };
+  | { type: 'knock'; id: string; name: string }
+  | { type: 'door'; id: string; visitor: string; yes: boolean };
 export interface RoomError { type: 'error'; id?: string; message: string }
 export interface RoomAck { type: 'ack'; id: string; revision: number }
 export type RoomMessage = RoomState | RoomError | RoomAck;
