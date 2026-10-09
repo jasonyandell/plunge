@@ -34,6 +34,10 @@ beforeAll(async()=>{
  }
  await migrate('0004_idea_authorizations.sql');
  await migrate('0005_idea_screenshots.sql');
+ // Its trigger body runs whole; everything before it splits on `;`.
+ const [laneSql,laneTrigger]=(await readFile(new URL('../migrations/0008_idea_hand_lane.sql',import.meta.url),'utf8')).split('CREATE TRIGGER');
+ for(const statement of laneSql!.split(';').filter(s=>s.replace(/--.*$/gm,'').trim()))await db.prepare(statement).run();
+ await db.prepare(`CREATE TRIGGER${laneTrigger}`).run();
 },20000);
 afterAll(async()=>{await mf?.dispose();});
 it('preserves verified legacy authorship without trusting matching invitation names',async()=>{

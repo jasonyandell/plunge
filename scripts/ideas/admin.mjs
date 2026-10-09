@@ -32,6 +32,20 @@ if(command==='init') {
   console.log('Private scope saved for this idea. Use retry after the coordinator is updated.');
 } else if(command==='retry') {
   await service(await loadConfig(),'retry',{id:args[0]});console.log('Idea queued again; its conversation is unchanged.');
+} else if(command==='adopt') {
+  // The hand-built lane: link a PR made by hand to a family idea card, new or existing.
+  // `adopt PR [IDEA_ID] [--title TEXT] [--body TEXT] [--note TEXT]`
+  const options={},rest=[];
+  for(let i=0;i<args.length;i++){const flag=/^--(title|body|note)$/.exec(args[i]);if(flag)options[flag[1]]=args[++i];else rest.push(args[i]);}
+  const [pr,idea]=rest;
+  if(!/^[1-9][0-9]*$/.test(pr??'') || (idea!==undefined && !/^[a-f0-9]{32}$/.test(idea)))throw new Error('Use adopt PR [IDEA_ID] [--title TEXT] [--body TEXT] [--note TEXT].');
+  const config=await loadConfig();
+  const found=JSON.parse(await run('gh',['pr','view',pr,'--repo','jasonyandell/plunge','--json','state,headRefOid,title']));
+  if(found.state!=='OPEN')throw new Error(`PR #${pr} is ${found.state.toLowerCase()}; only an open PR has a preview.`);
+  const result=await service(config,'adopt',{pr:Number(pr),sha:found.headRefOid,...(options.note?{message:options.note}:{}),
+    ...(idea?{id:idea}:{newId:randomBytes(16).toString('hex'),title:options.title??found.title,body:options.body??options.title??found.title})});
+  console.log(`Linked PR #${pr} to ${config.origin}/?ideas=1#idea=${result.id}`);
+  console.log(`Once its preview passes, Try your change opens it at ${config.origin}/?ideas=1#idea=${result.id}&try=1`);
 } else if(command==='revoke') {
   await service(await loadConfig(),'revoke',{id:args[0]});console.log('Invite revoked.');
-} else throw new Error('Use init, install-secret, invite NAME, revoke MEMBER_ID, scope IDEA_ID FILE..., or retry IDEA_ID.');
+} else throw new Error('Use init, install-secret, invite NAME, revoke MEMBER_ID, scope IDEA_ID FILE..., retry IDEA_ID, or adopt PR [IDEA_ID].');

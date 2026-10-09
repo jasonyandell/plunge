@@ -22,6 +22,10 @@ beforeAll(async()=>{
   await db.prepare(`CREATE TRIGGER${trigger}`).run();
   for(const file of ['0003_accounts.sql','0004_idea_authorizations.sql','0005_idea_screenshots.sql'])
     for(const statement of (await readFile(new URL(`../migrations/${file}`,import.meta.url),'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
+  // Its trigger body runs whole; everything before it splits on `;`.
+  const [laneSql,laneTrigger]=(await readFile(new URL('../migrations/0008_idea_hand_lane.sql',import.meta.url),'utf8')).split('CREATE TRIGGER');
+  for(const statement of laneSql!.split(';').filter(s=>s.replace(/--.*$/gm,'').trim()))await db.prepare(statement).run();
+  await db.prepare(`CREATE TRIGGER${laneTrigger}`).run();
   env={QUESTIONS:db,IDEAS_ADMIN_TOKEN:admin,ASSETS:{fetch:async()=>new Response('app')}};
   mom=await (await call('/admin/members','POST',{name:'Mom'},admin)).json() as typeof mom;
   dad=await (await call('/admin/members','POST',{name:'Dad'},admin)).json() as typeof dad;

@@ -4,6 +4,8 @@ export interface IdeaCard {
   number: number; id: string; name: string; title: string; context: string;
   created: string; updated: string; revision: number; status: IdeaStatus;
   pr: number | null; sha: string | null; preview: string | null;
+  /** `hand`: made by hand and linked to its PR; replies are conversation, never a build. */
+  lane?: 'builder' | 'hand';
   activity?: {lastSeenAt:number|null;observedAt:number};
 }
 export interface IdeaMessage { id: string; role: 'family' | 'builder'; name: string; body: string; created: string; screenshots?:ScreenshotInfo[] }

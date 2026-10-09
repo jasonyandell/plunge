@@ -13,7 +13,7 @@ interface Member { id: string; name: string }
 interface Run { id: string; idea_id: string; revision: number; through_seq: number; state: string }
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 const BUILD_LEASE_MS=180000;
-const cards = `SELECT i.number,i.id,m.name,i.title,i.context,i.created,i.updated,i.revision,i.status,i.pr,i.sha,i.preview,CASE WHEN i.status='building' AND i.run_id IS NOT NULL THEN i.lease_until-${BUILD_LEASE_MS} ELSE NULL END heartbeat_at FROM ideas i JOIN idea_members m ON m.id=i.member_id`;
+const cards = `SELECT i.number,i.id,m.name,i.title,i.context,i.created,i.updated,i.revision,i.status,i.pr,i.sha,i.preview,i.lane,CASE WHEN i.status='building' AND i.run_id IS NOT NULL THEN i.lease_until-${BUILD_LEASE_MS} ELSE NULL END heartbeat_at FROM ideas i JOIN idea_members m ON m.id=i.member_id`;
 type CardRow=IdeaCard & {heartbeat_at:number|null};
 function activityCard(row:CardRow):IdeaCard {
   const {heartbeat_at,...card}=row;
@@ -95,10 +95,10 @@ export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Res
       // Both statements run atomically. A racing reply or build makes the approval fail closed.
       await db.batch([
         db.prepare(`INSERT OR IGNORE INTO idea_approvals(idea_id,revision,account_id,created)
-          SELECT id,revision,?,? FROM ideas WHERE id=? AND revision=? AND status IN ('queued','question','failed')
+          SELECT id,revision,?,? FROM ideas WHERE id=? AND revision=? AND lane='builder' AND status IN ('queued','question','failed')
           AND EXISTS(SELECT 1 FROM accounts a JOIN idea_members m ON m.id=a.member_id WHERE a.id=? AND a.owner=1 AND m.revoked=0)`)
           .bind(session.id,new Date().toISOString(),idea,approval.revision,session.id),
-        db.prepare(`UPDATE ideas SET status='queued',updated=? WHERE id=? AND revision=? AND status IN ('queued','question','failed')
+        db.prepare(`UPDATE ideas SET status='queued',updated=? WHERE id=? AND revision=? AND lane='builder' AND status IN ('queued','question','failed')
           AND EXISTS(SELECT 1 FROM idea_approvals WHERE idea_id=? AND revision=? AND account_id=?)`)
           .bind(new Date().toISOString(),idea,approval.revision,idea,approval.revision,session.id),
       ]);
@@ -157,12 +157,13 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
   const imageMatch=/^\/admin\/runs\/([a-f0-9]{32})\/attachments\/([a-f0-9]{32})$/.exec(path);
   if(imageMatch && request.method==='GET')return await screenshotResponse(db,imageMatch[2]!,imageMatch[1]!);
   if (path === '/admin/tracked' && request.method === 'GET') {
-    return json((await db.prepare(`${cards} WHERE i.pr IS NOT NULL AND i.status IN ('checking','ready') ORDER BY i.number`).all<CardRow>()).results.map(activityCard));
+    // A hand-built PR that failed its checks is still watched: the next push brings it back to checking.
+    return json((await db.prepare(`${cards} WHERE i.pr IS NOT NULL AND (i.status IN ('checking','ready') OR (i.lane='hand' AND i.status='failed')) ORDER BY i.number`).all<CardRow>()).results.map(activityCard));
   }
   if (request.method !== 'POST') return json({error:'Method not allowed.'},405);
   const data = await body(request), now = new Date().toISOString();
   if (path === '/admin/retry') {
-    const retried = await db.prepare("UPDATE ideas SET status='queued',updated=? WHERE id=? AND status IN ('question','failed','queued') RETURNING id")
+    const retried = await db.prepare("UPDATE ideas SET status='queued',updated=? WHERE id=? AND lane='builder' AND status IN ('question','failed','queued') RETURNING id")
       .bind(now,id(data.id)).first();
     return json(retried ? {ok:true} : {error:'Only a waiting or stopped idea can be retried.'},retried ? 200 : 409);
   }
@@ -183,7 +184,7 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
       // The conditional UPDATE serializes competing builders. A run id makes lost HTTP responses retryable.
       await db.batch([
         db.prepare(`UPDATE ideas SET run_id=?,lease_until=?,status='building' WHERE id=(SELECT id FROM ideas
-          WHERE (status='queued' OR (status='building' AND lease_until<?)) AND (? IS NULL OR id=?)
+          WHERE lane='builder' AND (status='queued' OR (status='building' AND lease_until<?)) AND (? IS NULL OR id=?)
           AND id NOT IN (SELECT value FROM json_each(?))
           AND (? OR NOT EXISTS(SELECT 1 FROM idea_messages m WHERE m.idea_id=ideas.id AND m.screenshots!='[]'))
           ORDER BY updated,number LIMIT 1)
@@ -234,10 +235,40 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
     ]);
     return json({ok:true});
   }
+  // The hand-built lane: link a PR someone made by hand to a card, new or existing. The card then
+  // follows the same preview checks as a builder card; the automatic builder never claims it.
+  if (path === '/admin/adopt') {
+    const pr = data.pr, sha = data.sha;
+    if (!Number.isSafeInteger(pr) || Number(pr) < 1 || typeof sha !== 'string' || !/^[a-f0-9]{40}$/.test(sha)) return json({error:'Missing build identity.'},400);
+    const note = field(data.message ?? `This change was made by hand in pull request #${pr}. It will be ready to try once its preview passes its checks.`, 3000);
+    // Hand-built changes come from the owner, so the card and its notes speak as them.
+    const owner = await db.prepare('SELECT a.member_id FROM accounts a JOIN idea_members m ON m.id=a.member_id WHERE a.owner=1 AND m.revoked=0 ORDER BY a.created LIMIT 1').first<{member_id:string}>();
+    if (!owner) return json({error:'No owner account with family access.'},409);
+    let idea: string;
+    if (data.id !== undefined) {
+      idea = id(data.id);
+      const card = await db.prepare('SELECT status FROM ideas WHERE id=?').bind(idea).first<{status:string}>();
+      if (!card) return json({error:'Idea not found.'},404);
+      if (card.status === 'building') return json({error:'The builder is working on this idea. Try again when it finishes.'},409);
+    } else {
+      idea = id(data.newId);
+      const body = field(data.body, 3000), named = field(data.title ?? body, 3000), title = named.length > 100 ? named.slice(0, 97) + '…' : named;
+      await db.batch([
+        db.prepare("INSERT INTO ideas(id,member_id,title,context,created,updated,lane) VALUES(?,?,?,?,?,?,'hand')").bind(idea, owner.member_id, title, 'Built by hand', now, now),
+        db.prepare("INSERT INTO idea_messages(id,idea_id,member_id,role,body,created) VALUES(?,?,?,'family',?,?)").bind(idea, idea, owner.member_id, body, now),
+      ]);
+    }
+    const adopted = await db.prepare(`UPDATE ideas SET lane='hand',status='checking',pr=?,sha=?,preview=NULL,run_id=NULL,lease_until=NULL,updated=?
+      WHERE id=? AND status!='building' RETURNING id`).bind(pr, sha, now, idea).first();
+    if (!adopted) return json({error:'The builder is working on this idea. Try again when it finishes.'},409);
+    await db.prepare("INSERT OR IGNORE INTO idea_messages(id,idea_id,member_id,role,body,created) VALUES(?,?,?,'builder',?,?)")
+      .bind((await hash(`${idea}:adopt:${pr}:${sha}`)).slice(0,32), idea, owner.member_id, note, now).run();
+    return json({id:idea});
+  }
   if (path === '/admin/refresh') {
     const idea=id(data.id);
     if(typeof data.nextSha!=='string'||!/^[a-f0-9]{40}$/.test(data.nextSha))return json({error:'Invalid build.'},400);
-    await db.prepare("UPDATE ideas SET status='checking',sha=?,preview=NULL,updated=? WHERE id=? AND sha=? AND status IN ('checking','ready')")
+    await db.prepare("UPDATE ideas SET status='checking',sha=?,preview=NULL,updated=? WHERE id=? AND sha=? AND (status IN ('checking','ready') OR (lane='hand' AND status='failed'))")
       .bind(data.nextSha,now,idea,data.sha).run();
     return json({ok:true});
   }
@@ -252,7 +283,7 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
       const version = await response.json() as {build?:string;preview_pr?:number};
       if (!response.ok || version.build!==card.sha || version.preview_pr!==card.pr) return json({error:'Preview is not ready.'},409);
     }
-    await db.prepare(`UPDATE ideas SET status=?,preview=?,updated=? WHERE id=? AND sha=? AND status IN ('checking','ready')`)
+    await db.prepare(`UPDATE ideas SET status=?,preview=?,updated=? WHERE id=? AND sha=? AND (status IN ('checking','ready') OR (lane='hand' AND status='failed'))`)
       .bind(status,status==='ready'?previewFor(card.pr):null,now,idea,card.sha).run();
     return json({ok:true});
   }
