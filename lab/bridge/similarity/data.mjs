@@ -12,6 +12,10 @@ import {
   Pub, SUIT, RANK, legalReduced, trickWinnerPos, visibleSeats, ruleCard, canon,
 } from '../../../public/lab/bridge/engine.js';
 import { agentOf } from '../../../public/lab/bridge/walt.js';
+// The featurizer moved to public/lab/bridge/features.js (shared verbatim with
+// the in-search scorer mind, so training and inference cannot drift).
+import { featurize, FEATURE_NAMES } from '../../../public/lab/bridge/features.js';
+export { FEATURE_NAMES };
 
 const RANK_CHARS = '23456789TJQKA', SUIT_LETTERS = 'CDHS';
 
@@ -31,86 +35,6 @@ export function loadDeals(path) {
 
 export function loadCorpus(path) {
   return readFileSync(path, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
-}
-
-const popcount = (x) => { let n = 0; while (x) { x &= x - 1; n++; } return n; };
-const lowRank = (m) => 31 - Math.clz32(m & -m);
-const highRank = (m) => 31 - Math.clz32(m);
-
-export const FEATURE_NAMES = [
-  // position-level
-  'isNT', 'level', 'need', 'defNeed', 'remTricks', 'needRatio', 'tl', 'isDeclSide',
-  'isDummyTurn', 'pliesLeft', 'nCands', 'ownTrumpLen', 'ledLenOwn', 'partnerWinning',
-  'oppWinning', 'oppVoidsShown',
-  // candidate-level
-  'isTrump', 'followsLed', 'isDiscard', 'isLead', 'wouldWinNow', 'higherUnseen',
-  'higherPartnerKnown', 'higherOppKnown', 'isMaster', 'higherOwn', 'suitLenOwn', 'rankFrac',
-  'isRuleCard', 'isLowestOfSuit', 'isHighestOfSuit', 'isRuff', 'ledByPartner', 'trickIdx',
-];
-
-/** Features for one candidate card at a reconstructed position.
- *  hSeat: remaining hand (Uint16Array(4)) of the seat on play.
- *  visHands: per-seat remaining hands the agent can see (null if unseen). */
-function featurize(pub, seat, agent, hSeat, visHands, nCands, c, ruleC) {
-  const u = SUIT[c], r = RANK[c];
-  const target = pub.target;
-  const need = target - pub.declTricks;
-  const defNeed = (13 - target + 1) - pub.defTricks;
-  const remTricks = 13 - pub.declTricks - pub.defTricks;
-  const declSide = pub.isDeclSide(seat);
-  const tl = pub.tl;
-  const led = tl > 0 ? SUIT[pub.tc[0]] : -1;
-  // who currently wins the trick on the table (relative to seat's side)
-  let partnerWinning = 0, oppWinning = 0;
-  if (tl > 0) {
-    const wSeat = (pub.leader + trickWinnerPos(pub.tc, tl, pub.strain)) & 3;
-    if (((wSeat ^ seat) & 1) === 0 && wSeat !== seat) partnerWinning = 1;
-    if (((wSeat ^ seat) & 1) === 1) oppWinning = 1;
-  }
-  // would this card win the trick as it stands now?
-  let wouldWinNow = 0;
-  if (tl === 0) wouldWinNow = 1;
-  else {
-    const tc = pub.tc.slice(); tc[tl] = c;
-    wouldWinNow = trickWinnerPos(tc, tl + 1, pub.strain) === tl ? 1 : 0;
-  }
-  // higher cards of this suit, unplayed, split by where they sit from the
-  // agent's point of view: in the playing seat's own hand, in another visible
-  // hand on the seat's side, in a visible opponent hand (a defender sees
-  // dummy), or unseen.
-  let higherUnseen = 0, higherOwn = 0, higherPartnerKnown = 0, higherOppKnown = 0;
-  for (let rr = r + 1; rr < 13; rr++) {
-    const bit = 1 << rr;
-    if (pub.played[u] & bit) continue;
-    if (hSeat[u] & bit) { higherOwn++; continue; }
-    let owner = -1;
-    for (let s = 0; s < 4; s++) if (s !== seat && visHands[s] && (visHands[s][u] & bit)) { owner = s; break; }
-    if (owner < 0) higherUnseen++;
-    else if (pub.isDeclSide(owner) === declSide) higherPartnerKnown++;
-    else higherOppKnown++;
-  }
-  // master: no card that could beat c remains in an unseen or visible-opponent hand
-  const isMaster = higherUnseen === 0 && higherOppKnown === 0 ? 1 : 0;
-  // opponents' publicly shown voids (void bits are public record)
-  const opp1 = (seat + 1) & 3, opp2 = (seat + 3) & 3;
-  const oppVoidsShown = popcount(pub.voids[opp1]) + popcount(pub.voids[opp2]);
-  return [
-    pub.strain === 4 ? 1 : 0, pub.level, need, defNeed, remTricks,
-    remTricks > 0 ? need / remTricks : 0, tl, declSide ? 1 : 0,
-    seat === pub.dummy ? 1 : 0, 52 - pub.n, nCands,
-    pub.strain < 4 ? popcount(hSeat[pub.strain]) : 0,
-    led >= 0 ? popcount(hSeat[led]) : 0, partnerWinning, oppWinning, oppVoidsShown,
-    u === pub.strain ? 1 : 0, led >= 0 && u === led ? 1 : 0,
-    led >= 0 && u !== led && u !== pub.strain ? 1 : 0, tl === 0 ? 1 : 0,
-    wouldWinNow, higherUnseen, higherPartnerKnown, higherOppKnown, isMaster, higherOwn,
-    popcount(hSeat[u]), r / 12,
-    c === ruleC ? 1 : 0,
-    hSeat[u] && r === lowRank(hSeat[u]) ? 1 : 0,
-    hSeat[u] && r === highRank(hSeat[u]) ? 1 : 0,
-    tl > 0 && u === pub.strain && led !== pub.strain && hSeat[led] === 0 ? 1 : 0,
-    tl > 0 && pub.leader === ((seat + 2) & 3) ? 1 : 0,
-    pub.n >> 2,
-  ];
 }
 
 /** Build (position, candidate) records from corpus rows.

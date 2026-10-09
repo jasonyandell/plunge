@@ -7,9 +7,10 @@
 //   node lab/bridge/tapecheck.mjs
 import { Rng, Pub, randomDeal, contractFor, legalCards, visibleSeats } from '../../public/lab/bridge/engine.js';
 import { waltDecide, agentOf } from '../../public/lab/bridge/walt.js';
+import SCORER_WEIGHTS from '../../public/lab/bridge/scorer-weights.js';
 
 const rng = new Rng(424242);
-let infoN = 0, pruneN = 0, pureN = 0, fullN = 0;
+let infoN = 0, pruneN = 0, pureN = 0, fullN = 0, scorerN = 0;
 const hand = (d, s, p) => [0, 1, 2, 3].map((u) => d[s * 4 + u] & ~p.played[u]);
 
 for (let g = 0; g < 25; g++) {
@@ -51,6 +52,17 @@ for (let g = 0; g < 25; g++) {
         if (a !== b) throw new Error(`prune changed card (k2 full): ${a} vs ${b} at game ${g} ply ${p.n}`);
         fullN++;
       }
+      // 2b. scorer minds: information rule + purity (only when weights exist)
+      if (SCORER_WEIGHTS && p.n % 6 === 4) {
+        const vis = visibleSeats(agent, p);
+        const masked = new Uint16Array(16);
+        for (let s = 0; s < 4; s++) if (vis & (1 << s)) for (let u = 0; u < 4; u++) masked[s * 4 + u] = d[s * 4 + u];
+        const cfg = { tape: true, n: 12, n0: 4, horizon: 52, margin: false, selfs: 'mind', l0: 'scorer', l0Tail: 12, k: 2, seed: g * 100 + p.n };
+        const a = waltDecide(p, agent, d, cfg).card, b = waltDecide(p, agent, masked, cfg).card;
+        if (a !== b) throw new Error(`scorer info rule: ${a} vs ${b} at game ${g} ply ${p.n}`);
+        if (waltDecide(p, agent, d, cfg).card !== a) throw new Error(`scorer impure at game ${g} ply ${p.n}`);
+        scorerN++;
+      }
       // 3. purity
       if (p.n % 11 === 7) {
         const cfg = { tape: true, n: 8, n0: 3, horizon: 10, seed };
@@ -61,4 +73,4 @@ for (let g = 0; g < 25; g++) {
     p.apply(L[rng.int(L.length)]);
   }
 }
-console.log(`tape info-rule: ${infoN} ok; prune-invariance h6: ${pruneN} ok, full-depth: ${fullN} ok; purity: ${pureN} ok`);
+console.log(`tape info-rule: ${infoN} ok; prune-invariance h6: ${pruneN} ok, full-depth: ${fullN} ok; purity: ${pureN} ok; scorer info+purity: ${SCORER_WEIGHTS ? scorerN + ' ok' : 'skipped (no weights)'}`);

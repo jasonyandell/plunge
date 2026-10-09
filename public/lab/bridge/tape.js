@@ -24,6 +24,10 @@ import {
   Rng, mix, SUIT, RANK, legalCards, legalReduced, canon, ruleCard,
   sampleDeals, visibleSeats, trickWinnerPos,
 } from './engine.js';
+import { featurize, makeScorer } from './features.js';
+import SCORER_WEIGHTS from './scorer-weights.js';
+
+const SCORER = SCORER_WEIGHTS ? makeScorer(SCORER_WEIGHTS) : null;
 
 export const MBIG = 1024;
 
@@ -193,6 +197,7 @@ function undo(ctx, c) { ctx.pub.undo(); ctx.zp = (ctx.zp ^ ZA[c]) | 0; ctx.zq = 
 export function tapeDecide(pub, agent, known, c) {
   if (agentOf(pub, pub.toMove()) !== agent) throw new Error("not this agent's turn");
   if (c.n * 2 >= MBIG || c.n0 * 2 >= MBIG) throw new Error('n too large for the margin tie-break');
+  if (c.l0 === 'scorer' && !SCORER) throw new Error('l0 scorer: no trained weights (run lab/bridge/scorer/train.mjs)');
   const ctx = makeCtx(pub, agent, c);
   const values = [];
   const rootRng = new Rng(mix(c.seed, ROOT_SEED));
@@ -254,13 +259,18 @@ function makeCtx(pub, agent, c) {
     // its n0 sampled worlds - instead of the recursive k-bounded search.
     // l0Tail: within the last T plies a 'flat' level-0 mind switches to the
     // recursive search (endgames want precision and their trees are tiny).
+    // l0 'scorer': a level-0 mind is the trained lawful-feature scorer —
+    // belief-free (no sampled worlds, no rollouts): argmax over its candidates
+    // of the net's P(make) logit from (its visible hands, public record).
+    // The 42 finding this tests: a net that is mediocre as a player can still
+    // be the right cheap inner mind for the search to model others with.
     selfs: c.selfs || 'branch', l0: c.l0 || 'search', l0Tail: c.l0Tail || 0,
     draws: c.draws || 1,
     minds: new Map(), zp: 0, zq: 0,
     tt: c.tt === true ? new Map() : null, // exact-value transpositions: sound under the tape, but
     // measured a net loss at k=2 (few identical (group, record) recurrences; hashing every node
     // costs more than the rare hit saves), so opt-in only
-    stats: { minds: 0, rollouts: 0, mindHits: 0, nodes: 0, ttHits: 0, flat: 0, refined: 0 },
+    stats: { minds: 0, rollouts: 0, mindHits: 0, nodes: 0, ttHits: 0, flat: 0, scored: 0, refined: 0 },
     vector: c.vector === true,
   };
   ctx.rootAgent = agent;
@@ -499,6 +509,29 @@ function decideM1(ctx, agent, known, n, rng) {
   return best;
 }
 
+/** l0 'scorer': the mind picks by the trained scorer's logit — a pure
+ *  function of (its visible hands, the public record); argmax for the
+ *  declarer side, argmin for the defence. No worlds, no rollouts. */
+function decideMS(ctx, agent, known) {
+  const pub = ctx.pub, seat = pub.toMove();
+  const h = handOf(known, seat, pub);
+  const opts = legalReduced(h, pub);
+  if (opts.length === 1) return opts[0];
+  ctx.stats.scored++;
+  const vis = visibleSeats(agent, pub);
+  const visHands = [null, null, null, null];
+  for (let s = 0; s < 4; s++) if (vis & (1 << s)) visHands[s] = handOf(known, s, pub);
+  const ph = agent === pub.decl ? visHands[(seat + 2) & 3] : null;
+  const ruleC = canon(ruleCard(pub, seat, h, ph), h, pub);
+  const maxi = pub.isDeclSide(seat);
+  let best = opts[0], bz = maxi ? -Infinity : Infinity;
+  for (const a of opts) {
+    const z = SCORER(featurize(pub, seat, agent, h, visHands, opts.length, a, ruleC));
+    if (maxi ? z > bz : z < bz) { bz = z; best = a; }
+  }
+  return best;
+}
+
 /** A modeled seat's move in deal d: a pure function of (seat, every hand its
  *  agent can see, the record, revealed voids, level) — cached under exactly
  *  that key. A modeled declarer sees dummy too, and at the opening lead the
@@ -525,8 +558,9 @@ function mindMove(ctx, agent, seat, d, h, level) {
   const hit = ctx.minds.get(key);
   if (hit !== undefined) { ctx.stats.mindHits++; return hit; }
   const rng = new Rng((mix(kA, kB) >>> 0) || 1);
-  const a = (level === 1 && ctx.l0 === 'flat' && 52 - pub.n > ctx.l0Tail)
-    ? decideM1(ctx, agent, d, ctx.n0, rng)
+  const cheap = level === 1 && 52 - pub.n > ctx.l0Tail;
+  const a = (cheap && ctx.l0 === 'scorer') ? decideMS(ctx, agent, d)
+    : (cheap && ctx.l0 === 'flat') ? decideM1(ctx, agent, d, ctx.n0, rng)
     : decideIn(ctx, agent, d, level - 1, ctx.n0, rng, null);
   if (ctx.minds.size < 8e6) ctx.minds.set(key, a); // cap: degrade to recompute, never crash
   return a;

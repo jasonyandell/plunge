@@ -10,7 +10,7 @@ const handOf = (d, seat, pub) => { const h = new Uint16Array(4); for (let u = 0;
 
 export function waltPlayer(cfg) {
   const tag = (c) => `n${c.n},n0${c.n0}${c.l0Tail ? ',tail' + c.l0Tail : ''}${c.draws > 1 ? ',d' + c.draws : ''}`;
-  const name = `walt(L${cfg.level ?? 1},n${cfg.n},n0${cfg.n0},h${cfg.horizon}${cfg.margin === false ? ',nomargin' : ''}${cfg.rollout ? ',dice' : ''}${cfg.tape ? ',tape' : ''}${cfg.k ? ',k' + cfg.k : ''}${cfg.kFrom ? ',kf' + cfg.kFrom : ''}${cfg.selfs === 'mind' ? ',selfmind' : ''}${cfg.l0 === 'flat' ? ',flat' : ''}${cfg.l0Tail ? ',tail' + cfg.l0Tail : ''}${cfg.draws > 1 ? ',d' + cfg.draws : ''}${cfg.vector ? ',vec' : ''}${cfg.refine ? ',ref(' + tag({ ...cfg, ...cfg.refine }) + ')' : ''}${cfg.field ? ',field' : ''}${cfg.ruleOrder === false ? ',noruleorder' : ''})`;
+  const name = `walt(L${cfg.level ?? 1},n${cfg.n},n0${cfg.n0},h${cfg.horizon}${cfg.margin === false ? ',nomargin' : ''}${cfg.rollout ? ',dice' : ''}${cfg.tape ? ',tape' : ''}${cfg.k ? ',k' + cfg.k : ''}${cfg.kFrom ? ',kf' + cfg.kFrom : ''}${cfg.selfs === 'mind' ? ',selfmind' : ''}${cfg.l0 === 'flat' ? ',flat' : cfg.l0 === 'scorer' ? ',scorer' : ''}${cfg.l0Tail ? ',tail' + cfg.l0Tail : ''}${cfg.draws > 1 ? ',d' + cfg.draws : ''}${cfg.vector ? ',vec' : ''}${cfg.refine ? ',ref(' + tag({ ...cfg, ...cfg.refine }) + ')' : ''}${cfg.field ? ',field' : ''}${cfg.ruleOrder === false ? ',noruleorder' : ''})`;
   // field: persistent mind cache across this player's decisions (cleared when
   // the record restarts, i.e. a new table). Separate map for the refine pass,
   // whose settings make it a different pure function.
