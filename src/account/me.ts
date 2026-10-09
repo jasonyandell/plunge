@@ -2,7 +2,8 @@ import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
 
 /** Who is signed in on this device, remembered so the home screen can say it before
  * (or without) the network. Signed out is the ordinary case: nothing is stored. */
-export interface Me { name: string }
+/** `waiting`: for the owner, how many people are waiting to be let in. */
+export interface Me { name: string; waiting?: number }
 const ME = 'plunge:me';
 /** The sample walkthrough's signed-in name, for this tab only. Shown only where accounts don't exist. */
 export const DEMO_ME = 'plunge:account-demo:me';
@@ -29,11 +30,11 @@ let asked: Promise<Me | null | undefined> | undefined;
 export const whoAmI = (): Promise<Me | null | undefined> => asked ??= QUESTIONS_LOCAL_ONLY || typeof fetch !== 'function'
   ? Promise.resolve(undefined)
   : fetch('/api/account', { credentials: 'same-origin', cache: 'no-store' }).then(r => r.json())
-    .then((data: { account?: { name?: unknown } | null; available?: unknown }) => {
+    .then((data: { account?: { name?: unknown } | null; available?: unknown; waiting?: unknown }) => {
       if (data.available !== true) return undefined;
       const me = data.account && typeof data.account.name === 'string' ? { name: data.account.name } : null;
       rememberMe(me);
-      return me;
+      return me && typeof data.waiting === 'number' && data.waiting > 0 ? { ...me, waiting: data.waiting } : me;
     })
     // Offline: trust what this device last knew.
     .catch(() => rememberedMe() ?? undefined);

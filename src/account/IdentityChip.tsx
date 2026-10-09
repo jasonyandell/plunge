@@ -15,7 +15,8 @@ export function IdentityChip() {
       {sample ?? 'Sign in · sample'}
     </a>;
   }
-  return <a class={me ? 'home-me signed-in' : 'home-me'} href="?account=1" aria-label={me ? `Signed in as ${me.name}. Your account` : 'Sign in, optional'}>
-    {me ? me.name : 'Sign in'}
+  const waiting = me?.waiting ? `${me.waiting} waiting` : '';
+  return <a class={me ? 'home-me signed-in' : 'home-me'} href="?account=1" aria-label={me ? `Signed in as ${me.name}. Your account${waiting ? `, ${waiting} to come in` : ''}` : 'Sign in, optional'}>
+    {me ? me.name : 'Sign in'}{waiting && <span class="home-me-waiting">{waiting}</span>}
   </a>;
 }

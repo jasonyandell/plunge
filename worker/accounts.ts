@@ -9,7 +9,7 @@ const ORIGIN='https://plunge.texas42.workers.dev', RP_ID='plunge.texas42.workers
 const SESSION='__Host-plunge-session', CEREMONY='__Host-plunge-passkey';
 const HEX=/^[a-f0-9]{64}$/;
 /** A recovery link lasts fifteen minutes; an invite waits a week for someone to get to it. */
-const RECOVERY_MS=900000, INVITE_MS=7*86400000, MAX_WAITING_INVITES=10;
+const RECOVERY_MS=900000, INVITE_MS=7*86400000, MAX_WAITING_INVITES=10, FAMILY_LINK_MS=7*86400000, MAX_LINK_REQUESTS=30;
 const familyAccess=(account:Account|null)=>!!account&&(!!account.family||!!account.owner);
 const cleanName=(value:unknown)=>typeof value==='string'&&value.trim()&&value.length<=40?value.trim():null;
 export const hashToken=async(value:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),b=>b.toString(16).padStart(2,'0')).join('');
@@ -42,6 +42,10 @@ async function linkSecret(db:IdeasDatabase,id:string,lifetime:number):Promise<st
     .bind(await hashToken(token),id,Date.now()+lifetime).run();
   return token;
 }
+async function liveFamilyLink(db:IdeasDatabase,token:string) {
+  return db.prepare('SELECT a.name by_name,l.expires FROM family_links l JOIN accounts a ON a.id=l.created_by WHERE l.hash=? AND l.expires>?')
+    .bind(await hashToken(token),Date.now()).first<{by_name:string;expires:number}>();
+}
 const passkeyCount=`(SELECT COUNT(*) FROM account_passkeys p WHERE p.account_id=a.id)`;
 async function signedIn(request:Request,db:IdeasDatabase,id:string,keyId:string) {
   const session=random();
@@ -69,7 +73,8 @@ export async function accountsRequest(request:Request,env:AccountEnv):Promise<Re
   if(!db || url.origin!==ORIGIN)return path===''?json({account:null,available:false}):json({error:'Open the main Plunge app to sign in.'},503);
   try {
     const account=await accountSession(request,env);
-    if(path===''&&request.method==='GET')return json({account,available:true});
+    // The owner also hears how many people are waiting to be let in.
+    if(path===''&&request.method==='GET')return json({account,available:true,...(account?.owner?{waiting:(await db.prepare('SELECT COUNT(*) n FROM accounts WHERE requested=1').first<{n:number}>())?.n??0}:{})});
     const bearer=request.headers.get('Authorization')?.replace(/^Bearer /,'')??'';
     const admin=!!env.IDEAS_ADMIN_TOKEN&&HEX.test(bearer)&&await hashToken(bearer)===await hashToken(env.IDEAS_ADMIN_TOKEN);
     if(request.method==='POST'&&!admin&&request.headers.get('Origin')!==ORIGIN)return json({error:'Please use the main Plunge app.'},403);
@@ -84,6 +89,13 @@ export async function accountsRequest(request:Request,env:AccountEnv):Promise<Re
       if(kind==='register') {
         const chosen=cleanName(data.name);if(!chosen)return json({error:'Choose a name of 1 to 40 characters.'},400);
         name=chosen;
+        // Through the family link: the account becomes a request the owner answers.
+        if(data.family!==undefined) {
+          if(typeof data.family!=='string'||!HEX.test(data.family)||!await liveFamilyLink(db,data.family))return json({error:'That family link has been turned off or expired. Ask Jason for the new one.'},401);
+          const open=await db.prepare('SELECT COUNT(*) n FROM accounts WHERE requested=1').first<{n:number}>();
+          if((open?.n??0)>=MAX_LINK_REQUESTS)return json({error:'Lots of people are waiting to be let in. Please try again tomorrow.'},429);
+          recoveryHash=await hashToken(data.family);
+        }
       }
       if(kind==='recover') {
         if(typeof data.token!=='string'||!HEX.test(data.token))return json({error:'That link is incomplete. Ask whoever sent it for a new one.'},401);
@@ -135,7 +147,14 @@ export async function accountsRequest(request:Request,env:AccountEnv):Promise<Re
         if(!result.verified)throw new Error('Not verified.');
         const key=result.registrationInfo.credential;
         const changes=[];
-        if(pending.kind==='register')changes.push(db.prepare('INSERT INTO accounts(id,name,created) VALUES(?,?,?)').bind(pending.account_id,pending.name,Date.now()));
+        if(pending.kind==='register') {
+          // A register ceremony carrying a family link's hash joins as a request, if the link is still on.
+          const link=pending.recovery_hash?await db.prepare('SELECT created_by FROM family_links WHERE hash=? AND expires>?').bind(pending.recovery_hash,Date.now()).first<{created_by:string}>():null;
+          if(pending.recovery_hash&&!link)throw new Error('Family link turned off.');
+          changes.push(link
+            ?db.prepare('INSERT INTO accounts(id,name,created,requested,invited_by,via_link) VALUES(?,?,?,1,?,1)').bind(pending.account_id,pending.name,Date.now(),link.created_by)
+            :db.prepare('INSERT INTO accounts(id,name,created) VALUES(?,?,?)').bind(pending.account_id,pending.name,Date.now()));
+        }
         if(pending.kind==='recover') {
           // Consume only after the new passkey verifies. Only one concurrent recovery can win.
           const recovered=await db.prepare('DELETE FROM account_recoveries WHERE hash=? AND account_id=? AND expires>? RETURNING account_id')
@@ -156,15 +175,25 @@ export async function accountsRequest(request:Request,env:AccountEnv):Promise<Re
     if(path==='/members'&&request.method==='GET') {
       if(!admin&&!account?.owner)return json({error:'Only Jason can manage family access.'},403);
       return json({members:(await db.prepare(`SELECT a.id,a.name,a.owner,a.requested,CASE WHEN m.revoked=0 THEN 1 ELSE 0 END family,
-          ${passkeyCount}>0 joined,i.name invited_by
+          ${passkeyCount}>0 joined,i.name invited_by,a.created,a.via_link
         FROM accounts a LEFT JOIN idea_members m ON m.id=a.member_id LEFT JOIN accounts i ON i.id=a.invited_by
         WHERE a.requested=1 OR a.member_id IS NOT NULL OR ?=1 ORDER BY a.created DESC LIMIT 200`).bind(admin?1:0).all()).results});
+    }
+    if(path==='/family-link'&&request.method==='GET') {
+      if(!account?.owner)return json({error:'Only Jason can manage the family link.'},403);
+      return json({expires:(await db.prepare('SELECT expires FROM family_links WHERE expires>? ORDER BY expires DESC LIMIT 1').bind(Date.now()).first<{expires:number}>())?.expires??null});
     }
     // Anyone with family access can see the invites they sent and whether each was used.
     if(path==='/invites'&&request.method==='GET') {
       if(!familyAccess(account))return json({invites:[]});
-      return json({invites:(await db.prepare(`SELECT a.id,a.name,${passkeyCount}>0 joined FROM accounts a WHERE a.invited_by=? ORDER BY a.created DESC LIMIT 50`)
+      return json({invites:(await db.prepare(`SELECT a.id,a.name,${passkeyCount}>0 joined FROM accounts a WHERE a.invited_by=? AND a.via_link=0 ORDER BY a.created DESC LIMIT 50`)
         .bind(account!.id).all()).results});
+    }
+    // Whose family link this is, so its page can say so before anyone signs up.
+    if(path==='/family-link/peek'&&request.method==='POST') {
+      const link=typeof data.token==='string'&&HEX.test(data.token)?await liveFamilyLink(db,data.token):null;
+      if(!link)return json({error:'That family link has been turned off or expired. Ask Jason for the new one.'},404);
+      return json({by:link.by_name,expires:link.expires});
     }
     // What an invite link is for, without using it: the welcome page greets the person by name.
     if(path==='/invite/peek'&&request.method==='POST') {
@@ -210,13 +239,21 @@ export async function accountsRequest(request:Request,env:AccountEnv):Promise<Re
       const invitee=cleanName(data.name);if(!invitee)return json({error:'Use a name of 1 to 40 characters.'},400);
       const inviter=account?.id??null;
       if(inviter) {
-        const waiting=await db.prepare(`SELECT COUNT(*) n FROM accounts a WHERE a.invited_by=? AND ${passkeyCount}=0`).bind(inviter).first<{n:number}>();
+        const waiting=await db.prepare(`SELECT COUNT(*) n FROM accounts a WHERE a.invited_by=? AND a.via_link=0 AND ${passkeyCount}=0`).bind(inviter).first<{n:number}>();
         if((waiting?.n??0)>=MAX_WAITING_INVITES)return json({error:`You have ${MAX_WAITING_INVITES} invites nobody has used yet. Send one of those again instead.`},409);
       }
       const id=random().slice(0,32);
       await db.prepare('INSERT INTO accounts(id,name,created,invited_by) VALUES(?,?,?,?)').bind(id,invitee,Date.now(),inviter).run();
       await grantFamily(db,id,true);
       return json({id,url:`${ORIGIN}/?account=1#join=${await linkSecret(db,id,INVITE_MS)}`});
+    }
+    // One shared link at a time. Making a new one turns the old one off; `off` turns it off.
+    if(path==='/family-link'&&account?.owner) {
+      await db.prepare('DELETE FROM family_links').run();
+      if(data.off===true)return json({ok:true});
+      const token=random(),expires=Date.now()+FAMILY_LINK_MS;
+      await db.prepare('INSERT INTO family_links(hash,created_by,expires) VALUES(?,?,?)').bind(await hashToken(token),account.id,expires).run();
+      return json({url:`${ORIGIN}/?account=1#family=${token}`,expires});
     }
     if(path==='/recovery'&&(admin||account?.owner)) {
       if(typeof data.id!=='string'||!/^[a-f0-9]{32}$/.test(data.id))return json({error:'Choose an account.'},400);

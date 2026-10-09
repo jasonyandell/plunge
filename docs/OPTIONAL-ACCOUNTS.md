@@ -20,6 +20,25 @@ Every account has a stable random ID that its stats attach to (below).
 Signing in does not upload game history, Walt receipts, or questions. Creating a
 second account—even with the same name—creates a separate identity.
 
+## The family link
+
+For bringing a group in at once, Jason's account page has **Family link → Make the
+family link**: one link (`/?account=1#family=…`) for the family chat, good for a week.
+Each person taps it and sees *“Pull up a chair. Jason's family is playing Plunge…”*,
+types the name they go by, and taps **Save my seat**. Their device makes a passkey and
+the hands already on it come along. The account starts as a request
+(`requested=1`, `via_link=1`, `invited_by` = the link's maker) with no family access,
+and their page says *“You're on the list”* and checks by itself every 20 seconds
+while it's open.
+
+Jason's name chip on the home screen shows how many people are waiting. His account
+page lists them under **Waiting to come in** with **Let … in** and **Not now**, and
+refreshes every 30 seconds. Anyone holding the link can ask, so the one-tap approval is
+the check: only let in people you know. Making a new link turns the old one off, and
+**Turn it off** ends it. At most 30 requests can wait at once. Link sign-ups don't
+count as anyone's personal invites. Migration `0009_family_link.sql` adds the
+`family_links` table and `accounts.via_link`.
+
 ## Inviting family
 
 Anyone with family access can invite someone from **Your account → Invite family**:

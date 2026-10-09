@@ -19,3 +19,7 @@
 .account-demo-actions {display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-top:10px;}
 .account-demo-actions .big-btn {width:auto;text-decoration:none;display:inline-block;padding-inline:18px;}
 .account-demo .demo-people button:disabled {opacity:.5;cursor:default;}
+.account-waiting {border:2px solid #d9b56f;border-radius:14px;padding:4px 16px 8px;margin-bottom:24px;background:#fff3d6;}
+.account-waiting .account-member {border-top:none;}
+/* Links styled as big buttons center their text like real buttons. */
+.account-page a.big-btn {display:flex;align-items:center;justify-content:center;}

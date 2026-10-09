@@ -19,7 +19,7 @@ for(const statement of (await readFile('migrations/0005_idea_screenshots.sql','u
 const [laneSql,laneTrigger]=(await readFile('migrations/0008_idea_hand_lane.sql','utf8')).split('CREATE TRIGGER');
 for(const statement of laneSql.split(';').filter(s=>s.replace(/--.*$/gm,'').trim()))await db.prepare(statement).run();await db.prepare(`CREATE TRIGGER${laneTrigger}`).run();
 for(const statement of (await readFile('migrations/0005_listed_tables.sql','utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
-for(const file of ['0004_family_table.sql','0006_hands.sql','0007_account_invites.sql'])for(const statement of (await readFile(`migrations/${file}`,'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
+for(const file of ['0004_family_table.sql','0006_hands.sql','0007_account_invites.sql','0009_family_link.sql'])for(const statement of (await readFile(`migrations/${file}`,'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
 const browser=await chromium.launch();
 const mime={'.html':'text/html','.js':'application/javascript','.css':'text/css','.wasm':'application/wasm','.json':'application/json','.svg':'image/svg+xml','.png':'image/png'};
 async function newPerson() {
@@ -80,7 +80,9 @@ try {
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM hand_players WHERE account_id=?').bind(dadId).first()).n,1);
  await dad.page.getByRole('button',{name:'Ask for family access'}).click();await dad.page.getByRole('button',{name:'Access requested'}).waitFor();
  await owner.page.getByRole('button',{name:'Refresh requests'}).click();
- const dadCard=owner.page.locator('.account-member').filter({hasText:dadId});await dadCard.getByRole('button',{name:'Grant family access'}).click();
+ await owner.page.locator('.account-waiting').getByText('asked from their account').waitFor();
+ await owner.page.getByRole('button',{name:'Let Dad in'}).click();await owner.page.getByText('Dad is in.').waitFor();
+ const dadCard=owner.page.locator('.account-member').filter({hasText:dadId});
  await dad.page.getByRole('button',{name:'Check access'}).click();await dad.page.getByRole('link',{name:'Open family ideas'}).waitFor();
  // Owner approval uses the real account cookie and D1 revision, not UI fixtures.
  await dad.page.getByRole('link',{name:'Open family ideas'}).click();
@@ -228,6 +230,39 @@ try {
  await guest.page.getByLabel('Invite link',{exact:true}).fill(rayInvite);await guest.page.getByRole('button',{name:'Open my invite'}).click();
  await guest.page.getByRole('heading',{name:'Hi, Cousin Ray.',exact:true}).waitFor();
  await guest.page.getByRole('button',{name:'Save my seat'}).click();await guest.page.getByRole('heading',{name:'You’re in, Cousin Ray.',exact:true}).waitFor();
+ // The family link: one link in the chat, people save their own seats, Jason lets each in.
+ await owner.page.goto(`${origin}/?account=1`);await owner.page.getByRole('heading',{name:'Family link'}).waitFor();
+ await owner.page.getByRole('button',{name:'Make the family link'}).click();
+ const familyLink=await owner.page.getByLabel('Family link',{exact:true}).inputValue();
+ assert.match(familyLink,/^https:\/\/plunge\.texas42\.workers\.dev\/\?account=1#family=[a-f0-9]{64}$/);
+ await owner.page.getByText(/The family link is on until/).waitFor();
+ const june=await newPerson();
+ await june.page.goto(origin);await june.page.evaluate(seedHand,{...localHand,id:'june-phone:1',gameId:'june-phone'});
+ await june.page.goto(familyLink);
+ await june.page.getByRole('heading',{name:'Pull up a chair.',exact:true}).waitFor();assert.equal(new URL(june.page.url()).hash,'');
+ await june.page.getByText('Jason’s family is playing Plunge, a Texas 42 game. Save your seat, and Jason will let you in.').waitFor();
+ for(const width of [320,390]){await june.page.setViewportSize({width,height:844});assert.ok(await june.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
+ await june.page.screenshot({path:'/tmp/plunge-family-link.png',fullPage:true});
+ await june.page.getByLabel('What should we call you at the table?').fill('Aunt June');
+ await june.page.getByRole('button',{name:'Save my seat'}).click();
+ await june.page.getByRole('heading',{name:'You’re on the list, Aunt June.',exact:true}).waitFor();
+ await june.page.screenshot({path:'/tmp/plunge-family-waiting.png',fullPage:true});
+ const juneId=await june.page.evaluate(async()=> (await (await fetch('/api/account')).json()).account.id);
+ assert.equal((await db.prepare('SELECT COUNT(*) n FROM hand_players WHERE account_id=?').bind(juneId).first()).n,1);
+ // Jason's home screen says someone is waiting; one tap lets her in.
+ await owner.page.goto(origin);await owner.page.getByRole('link',{name:/Signed in as Jason\. Your account, 1 waiting to come in/}).waitFor();
+ await owner.page.screenshot({path:'/tmp/plunge-owner-waiting-chip.png'});
+ await owner.page.getByRole('link',{name:/Signed in as Jason/}).click();
+ await owner.page.locator('.account-waiting').getByText('came through the family link').waitFor();
+ await owner.page.screenshot({path:'/tmp/plunge-owner-waiting.png',fullPage:true});
+ await owner.page.getByRole('button',{name:'Let Aunt June in'}).click();await owner.page.getByText('Aunt June is in.').waitFor();
+ // June's open page notices by itself.
+ await june.page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+ await june.page.getByRole('heading',{name:'You’re in, Aunt June.',exact:true}).waitFor();
+ // Turning the link off stops it.
+ await owner.page.getByRole('button',{name:'Turn it off'}).click();await owner.page.getByText('No family link is on right now.').waitFor();
+ const late=await newPerson();await late.page.goto(familyLink);await late.page.getByRole('alert').filter({hasText:'turned off or expired'}).waitFor();
+ console.log('PASS: family link — one shared link, own name, device hands along, owner waiting chip, one-tap let in, page notices, link off.');
  console.log('PASS: invites — share link, named welcome, device hands carried along, one-use, family table, home chip, inviter and owner status, signed-in guard, paste in the installed app.');
  await owner.page.goto(`${origin}/?account=1`);await owner.page.getByRole('heading',{name:'Who’s at the family table?'}).waitFor();
  await dad.page.goto(`${origin}/?account=1`);await dad.page.getByRole('heading',{name:'Hi, Dad.',exact:true}).waitFor();

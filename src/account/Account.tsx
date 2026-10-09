@@ -12,8 +12,11 @@ import '../ui/app.css';
 import '../ui/home.css';
 import '../ideas/ideas.css';
 import './account.css';
-interface Person {id:string;name:string;owner:number;requested:number;family:number;joined?:number;invited_by?:string|null}
-interface State {account:Person|null;available:boolean}
+interface Person {id:string;name:string;owner:number;requested:number;family:number;joined?:number;invited_by?:string|null;created?:number;via_link?:number}
+interface State {account:Person|null;available:boolean;waiting?:number}
+/** Whose family link this is, read before anyone signs up. */
+interface FamilyLink {by:string;expires:number}
+const day=(ms:number)=>new Date(ms).toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'});
 interface Invite {id:string;name:string;joined:number}
 /** What an invite link is for, read before anyone uses it. */
 interface Seat {name:string;invitedBy:string|null;joined:boolean;you:boolean}
@@ -22,8 +25,8 @@ async function liveApi<T>(path='',body?:unknown):Promise<T> {
     ...(body===undefined?{}:{headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})});
   const data=await response.json();if(!response.ok)throw new Error(data.error??'Please try again.');return data as T;
 }
-/** A recovery or invite secret from the address, removed from view at once and kept only for this visit. */
-function secretFromLink(key:'recover'|'join'):string {
+/** A recovery, invite or family-link secret from the address, removed from view at once and kept only for this visit. */
+function secretFromLink(key:'recover'|'join'|'family'):string {
   const hash=new URLSearchParams(location.hash.slice(1)),value=hash.get(key)??'';
   if(value){hash.delete(key);history.replaceState(null,'',location.pathname+location.search+(hash.size?`#${hash}`:''));}
   return /^[a-f0-9]{64}$/.test(value)?value:'';
@@ -36,8 +39,7 @@ function inviteFromInput(value:string):string {
 /** On iPhone a link opens in Safari, which keeps its own storage apart from the home-screen app. */
 const standalone=()=>matchMedia?.('(display-mode: standalone)').matches||(navigator as Navigator&{standalone?:boolean}).standalone===true;
 type Shared='shared'|'copied'|'shown';
-async function shareInvite(from:string,to:string,url:string):Promise<Shared> {
-  const text=`${to}, ${from} saved you a seat at our Plunge table. Tap to join:`;
+async function shareLink(text:string,url:string):Promise<Shared> {
   if(navigator.share){try{await navigator.share({title:'Plunge',text,url});return 'shared';}catch(e){if(e instanceof Error&&e.name==='AbortError')return 'shown';}}
   try{await navigator.clipboard.writeText(`${text} ${url}`);return 'copied';}catch{return 'shown';}
 }
@@ -49,7 +51,7 @@ export interface AccountBackend {
   authenticate(options:PublicKeyCredentialRequestOptionsJSON):Promise<unknown>;
   supported:boolean; localOnly:boolean;
   stats(account?:string):Promise<StatsStatus>;
-  share(from:string,to:string,url:string):Promise<Shared>;
+  share(text:string,url:string):Promise<Shared>;
   sitDown():Promise<void>;
 }
 export const liveBackend:AccountBackend={
@@ -59,9 +61,29 @@ export const liveBackend:AccountBackend={
   get supported(){return browserSupportsWebAuthn();},
   localOnly:QUESTIONS_LOCAL_ONLY,
   stats:syncStats,
-  share:shareInvite,
+  share:shareLink,
   sitDown:async()=>{const seat=await familyTable();try{saveSeat(seat,localStorage);}catch{/* The room page opens the seat it was given. */}location.assign(roomUrl(seat.roomId));},
 };
+/** One link for the family chat: anyone with it can save a seat and ask to come in; the owner lets each person in. */
+function FamilyLinkPanel({backend}:{backend:AccountBackend}) {
+  const api=backend.api;
+  const [expires,setExpires]=useState<number|null|undefined>(undefined),[made,setMade]=useState<{url:string;how:string}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+  useEffect(()=>{void api<{expires:number|null}>('/family-link').then(r=>setExpires(r.expires)).catch(()=>setExpires(null));},[]);
+  const change=(off:boolean)=>{setBusy(true);setError('');void (async()=>{try{
+    if(off){await api('/family-link',{off:true});setExpires(null);setMade(null);return;}
+    const result=await api<{url:string;expires:number}>('/family-link',{});setExpires(result.expires);
+    const how=await backend.share('Pull up a chair at our family’s Plunge table. Tap, type your name, and save your seat:',result.url);
+    setMade({url:result.url,how:how==='shared'?'Sent. Post it again any time with Make a new link.':how==='copied'?'Copied. Paste it in the family chat.':'Paste this in the family chat.'});
+  }catch(e){setError(e instanceof Error?e.message:'Please try again.');}finally{setBusy(false);}})();};
+  return <div class="account-invite"><h3>Family link</h3>
+    <p>One link for the family chat. Each person taps it, types their name, and saves a seat; they show up below for you to let in. Anyone holding the link can ask, so only let in people you know.</p>
+    {expires===undefined?null:expires?<p class="idea-help">The family link is on until {day(expires)}.</p>:<p class="idea-help">No family link is on right now.</p>}
+    <button class="big-btn secondary" disabled={busy||expires===undefined} onClick={()=>change(false)}>{expires?'Make a new link':'Make the family link'}</button>
+    {!!expires&&<button class="text-btn" disabled={busy} onClick={()=>change(true)}>Turn it off</button>}
+    {made&&<div class="idea-notice" role="status"><p>{made.how} Making a new link turns the old one off.</p><label>Family link<input readOnly value={made.url} onFocus={e=>e.currentTarget.select()}/></label></div>}
+    {error&&<p class="idea-error" role="alert">{error}</p>}
+  </div>;
+}
 /** Save a seat for someone: they get a link that works once, for a week. */
 function InviteFamily({me,backend}:{me:string;backend:AccountBackend}) {
   const api=backend.api;
@@ -71,7 +93,7 @@ function InviteFamily({me,backend}:{me:string;backend:AccountBackend}) {
   useEffect(()=>{void load();},[]);
   const send=(body:{name:string}|{id:string},to:string)=>{setBusy(true);setError('');void (async()=>{try{
     const {url}=await api<{url:string}>('/invite',body);
-    const how=await backend.share(me,to,url);
+    const how=await backend.share(`${to}, ${me} saved you a seat at our Plunge table. Tap to join:`,url);
     setSent({name:to,url,how:how==='shared'?`Sent. The link works once, for a week.`:how==='copied'?`Copied. Paste it in a message to ${to}. It works once, for a week.`:`Send this link to ${to}. It works once, for a week.`});
     setName('');await load();
   }catch(e){setError(e instanceof Error?e.message:'Please try again.');}finally{setBusy(false);}})();};
@@ -103,6 +125,7 @@ export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBacke
   const [state,setState]=useState<State|null>(null),[members,setMembers]=useState<Person[]>([]),[name,setName]=useState(tableName);
   const [error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
   const [recover,setRecover]=useState(()=>secretFromLink('recover')),[recoveryLink,setRecoveryLink]=useState<{name:string;url:string;kind:'Recovery'|'Invite'}|null>(null);
+  const [family,setFamily]=useState(()=>secretFromLink('family')),[familyLink,setFamilyLink]=useState<FamilyLink|null>(null);
   const [join,setJoin]=useState(()=>secretFromLink('join')),[seat,setSeat]=useState<Seat|null>(null),[pasted,setPasted]=useState('');
   /** Just claimed an invite: the welcome stays up until they move on. */
   const [welcomed,setWelcomed]=useState(false),[opening,setOpening]=useState(false);
@@ -115,11 +138,19 @@ export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBacke
     if(next.available)rememberMe(next.account&&{name:next.account.name});
     if(next.account?.owner)setMembers((await api<{members:Person[]}>('/members')).members);else {setMembers([]);setRecoveryLink(null);}};
   useEffect(()=>{void refresh().catch(e=>setError(String(e.message)));
-    const recoveryChanged=()=>{const token=secretFromLink('recover');if(token)setRecover(token);const invite=secretFromLink('join');if(invite)setJoin(invite);};
+    const recoveryChanged=()=>{const token=secretFromLink('recover');if(token)setRecover(token);const invite=secretFromLink('join');if(invite)setJoin(invite);const shared=secretFromLink('family');if(shared)setFamily(shared);};
     window.addEventListener('hashchange',recoveryChanged);return()=>window.removeEventListener('hashchange',recoveryChanged);
   },[]);
   // Greet the invited person by name before they use the link.
   useEffect(()=>{if(!join)return;setSeat(null);void api<Seat>('/invite/peek',{token:join}).then(setSeat).catch(e=>{setJoin('');setError(String(e.message));});},[join]);
+  useEffect(()=>{if(!family)return;void api<FamilyLink>('/family-link/peek',{token:family}).then(setFamilyLink).catch(e=>{setFamily('');setError(String(e.message));});},[family]);
+  // Waiting to be let in: notice it without anyone tapping anything, while the page is open.
+  const pending=!!state?.account&&!state.account.family&&!state.account.owner&&!!state.account.requested;
+  useEffect(()=>{if(!pending)return;const check=()=>{if(document.visibilityState==='visible')void refresh().catch(()=>{/* Checked again shortly. */});};
+    const timer=setInterval(check,20000);document.addEventListener('visibilitychange',check);return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',check);};},[pending]);
+  // The owner's list stays current as people trickle in.
+  const owner=!!state?.account?.owner;
+  useEffect(()=>{if(!owner)return;const timer=setInterval(()=>{if(document.visibilityState==='visible')void refresh().catch(()=>{});},30000);return()=>clearInterval(timer);},[owner]);
   const run=async(work:()=>Promise<void>)=>{setBusy(true);setError('');setNotice('');try{await work();}catch(e){
     const cancelled=e instanceof Error&&(e.name==='NotAllowedError'||e.name==='AbortError');
     setError(cancelled?'No problem—sign-in wasn’t completed. You can try again or keep playing.':e instanceof Error?e.message:'Please retry.');
@@ -128,11 +159,12 @@ export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBacke
   const passkey=(kind:'register'|'login'|'add'|'recover')=>run(async()=>{
     const path=`/passkey/${kind}`;
     // An invite is claimed exactly like a recovery of an account that never had a passkey.
-    const options=await api<PublicKeyCredentialCreationOptionsJSON & PublicKeyCredentialRequestOptionsJSON>(`${path}/options`,{name,token:join||recover});
+    const options=await api<PublicKeyCredentialCreationOptionsJSON & PublicKeyCredentialRequestOptionsJSON>(`${path}/options`,{name,token:join||recover,...(kind==='register'&&family?{family}:{})});
     const response=kind==='login'?await backend.authenticate(options):await backend.register(options);
     await api(`${path}/finish`,{response});
-    if(join){setJoin('');setSeat(null);setWelcomed(true);}
-    setRecover('');await refresh();if(!join)setNotice(kind==='add'?'Another passkey is ready.':'You’re signed in.');
+    const welcome=!!join||(kind==='register'&&!!family);
+    if(join){setJoin('');setSeat(null);}if(family)setFamily('');if(welcome)setWelcomed(true);
+    setRecover('');await refresh();if(!welcome)setNotice(kind==='add'?'Another passkey is ready.':'You’re signed in.');
   });
   const available=!!state?.available&&!backend.localOnly;
   const sitDown=async()=>{setOpening(true);setError('');try{await backend.sitDown();}
@@ -140,7 +172,7 @@ export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBacke
   /** The hands already on this device, which come along when someone signs in. */
   const waiting=stats&&stats.device>0?` Your ${plural(stats.device,'hand')} from this ${standalone()?'phone':'browser'} ${stats.device===1?'comes':'come'} with you.`:'';
   return <main class="ideas-page account-page">{heading}<header class="ideas-top"><a href="/">← Back to Plunge</a><span>Always welcome at the table</span></header>
-    <div class="ideas-heading">{join||welcomed?<><h1>Welcome to Plunge</h1><p>Texas 42 with the family, free for everyone.</p></>
+    <div class="ideas-heading">{join||family||welcomed?<><h1>Welcome to Plunge</h1><p>Texas 42 with the family, free for everyone.</p></>
       :<><h1>Your Plunge account</h1><p>Sign in if you’d like. Playing is always open to everyone.</p></>}</div>
     {!state ? <p role="status">{error?'Account details could not load.':'Opening your account…'}</p> : join ? <section class="idea-paper">
       {!seat ? <p role="status">Opening your invite…</p> : state.account && !seat.you ? <><h2>This invite is for {seat.name}</h2>
@@ -155,6 +187,27 @@ export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBacke
         {!supported&&<p class="idea-help">This browser can’t save seats. Open the link in Safari or Chrome on your phone.</p>}
         <a class="account-play" href="/">Not now, just play →</a>
       </>}
+    </section> : family ? <section class="idea-paper">
+      {!familyLink ? <p role="status">Opening the family link…</p> : state.account ? <><h2>You’re already signed in, {state.account.name}.</h2>
+        <p>{state.account.family||state.account.owner?'You’re already at the family table.':state.account.requested?`Your request is waiting for ${familyLink.by}.`:`Ask ${familyLink.by} to let you in to the family table.`}</p>
+        {!state.account.family&&!state.account.owner&&!state.account.requested&&<button class="big-btn" disabled={busy} onClick={()=>void act('/request',{},`${familyLink.by} can now see your request.`)}>Ask to come in</button>}
+        <button class="text-btn" onClick={()=>setFamily('')}>Go to my account</button>
+      </> : <><h2>Pull up a chair.</h2>
+        <p class="account-lede">{familyLink.by}’s family is playing Plunge, a Texas 42 game. Save your seat, and {familyLink.by} will let you in.</p>
+        <form onSubmit={event=>{event.preventDefault();if(name.trim())void passkey('register');}}>
+          <label>What should we call you at the table?<input value={name} maxLength={40} autoComplete="nickname" placeholder="Aunt June" onInput={e=>setName(e.currentTarget.value)}/></label>
+          <button class="big-btn" disabled={busy||!available||!supported||!name.trim()}>Save my seat</button>
+        </form>
+        <p class="idea-help">Your phone asks for your face, fingerprint, or passcode, the same as unlocking it. There’s nothing to download and nothing you can break; playing works the same either way.{waiting}</p>
+        {!supported&&<p class="idea-help">This browser can’t save seats. Open the link in Safari or Chrome on your phone.</p>}
+        <button class="text-btn" disabled={busy||!available||!supported} onClick={()=>void passkey('login')}>I already saved my seat: sign in</button>
+        <a class="account-play" href="/">Not now, just play →</a>
+      </>}
+    </section> : welcomed && pending && state.account ? <section class="idea-paper"><h2>You’re on the list, {state.account.name}.</h2>
+      <p class="account-lede">{familyLink?.by??'Jason'} will let you in to the family table soon. You don’t need to do anything else: this page notices when you’re in.</p>
+      <p>Your seat is saved{stats?.account&&stats.connected?`, along with ${plural(stats.connected,'hand')} from here`:''}.</p>
+      {!standalone()&&<p class="idea-help">Already have Plunge on your home screen? Open it and tap <strong>Sign in</strong> at the top. Your face or fingerprint does the rest, and the hands you’ve played there join you.</p>}
+      <a class="big-btn secondary account-ideas" href="/">Play while you wait</a>
     </section> : welcomed && state.account ? <section class="idea-paper"><h2>You’re in, {state.account.name}.</h2>
       <p>Your seat is saved{stats?.account&&stats.connected?`, along with ${plural(stats.connected,'hand')} from here`:''}.</p>
       {!standalone()&&<p class="account-lede">Already have Plunge on your home screen? Open it and tap <strong>Sign in</strong> at the top. Your face or fingerprint does the rest, and the hands you’ve played there join you.</p>}
@@ -201,10 +254,17 @@ export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBacke
         <p class="idea-help">Hands played on this device connect to your account while you’re signed in, and merge with your other devices and family games. Full game history and Walt results stay on this device; export a backup from More.</p>
         <button class="text-btn" disabled={busy} onClick={()=>void act('/logout',{},'Signed out. You can still play.')}>Sign out</button>
       </section>
-      {!!state.account.owner&&<section class="idea-paper"><h2>Who’s at the family table?</h2><p>Confirm the account number with the person before granting access. Anyone can choose a familiar name.</p>
-        {!members.length&&<p>No requests yet.</p>}
-        {members.map(member=><article class="account-member" key={member.id}><strong>{member.name}</strong><code>{member.id}</code>
-          <span>{[member.family?'Family access':member.requested?'Asked to join':'No family access',member.invited_by&&`invited by ${member.invited_by}`,member.joined===0&&'hasn’t used the invite yet'].filter(Boolean).join(' · ')}</span>
+      {!!state.account.owner&&<section class="idea-paper"><h2>Who’s at the family table?</h2>
+        {members.some(m=>m.requested&&!m.family)?<div class="account-waiting"><h3>Waiting to come in</h3>
+          {members.filter(m=>m.requested&&!m.family).map(member=><article class="account-member" key={member.id}><strong>{member.name}</strong>
+            <span>{[member.via_link?'came through the family link':'asked from their account',member.created&&`saved a seat ${new Date(member.created).toLocaleString(undefined,{weekday:'short',hour:'numeric',minute:'2-digit'})}`].filter(Boolean).join(' · ')}</span>
+            <button class="big-btn" disabled={busy} onClick={()=>void act('/grant',{id:member.id,enabled:true},`${member.name} is in.`)}>Let {member.name} in</button>
+            <button class="text-btn" disabled={busy} onClick={()=>void act('/grant',{id:member.id,enabled:false},`${member.name} stays out of the family table.`)}>Not now</button>
+          </article>)}</div>:<p class="idea-help">Nobody is waiting to come in.</p>}
+        <FamilyLinkPanel backend={backend}/>
+        <h3>Everyone</h3><p class="idea-help">Anyone can choose a familiar name. If you’re unsure, check with the person before letting them in.</p>
+        {members.filter(m=>!(m.requested&&!m.family)).map(member=><article class="account-member" key={member.id}><strong>{member.name}</strong><code>{member.id}</code>
+          <span>{[member.family?'Family access':member.requested?'Asked to join':'No family access',member.invited_by&&(member.via_link?`through ${member.invited_by}’s family link`:`invited by ${member.invited_by}`),member.joined===0&&'hasn’t used the invite yet'].filter(Boolean).join(' · ')}</span>
           <button class="big-btn secondary" disabled={busy} onClick={()=>void act('/grant',{id:member.id,enabled:!member.family},member.family?'Family access removed.':'Family access granted.')}>{member.family?'Remove family access':'Grant family access'}</button>
           {!member.owner&&member.joined!==0&&<details><summary>Help recover this account</summary><p>Confirm who you’re helping first. The link allows its recipient to replace all passkeys on this account. It expires in 15 minutes and works once.</p>
             <button class="text-btn" disabled={busy} onClick={()=>void run(async()=>{const result=await api<{url:string}>('/recovery',{id:member.id});setRecoveryLink({name:member.name,url:result.url,kind:'Recovery'});})}>Make recovery link</button>
