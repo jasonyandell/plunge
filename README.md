@@ -30,9 +30,10 @@ game stays saved. The home screen lists the tables that are live: who is at
 each, and whether to sit right down or knock. Anyone can knock, account or not.
 A table opened by a signed-in family member is listed; one opened without
 signing in stays private to its link. Listed tables start closed, and the table
-votes itself open when it wants walk-ins. Signed-in family (see **Your
-account**) sit under their account name, skip the name prompt, and always have
-their own chair at the standing **Family table** from any device.
+votes itself open when it wants walk-ins. Anyone signed in (see **Your
+account**) sits under their account name and skips the name prompt; signed-in
+family also always have their own chair at the standing **Family table** from any
+device, and can invite more family with a link.
 [The family table](docs/FAMILY-TABLE.md) describes the design.
 
 The live table plays **straight 42** with regular bidding: 30–41, then marks.

@@ -56,7 +56,8 @@ beforeAll(async()=>{
   const [tables,trigger]=sql.split('CREATE TRIGGER');for(const statement of tables!.split(';').filter(s=>s.trim()))await db.prepare(statement).run();await db.prepare(`CREATE TRIGGER${trigger}`).run();
   for(const statement of (await readFile(new URL('../migrations/0003_accounts.sql',import.meta.url),'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
   for(const statement of (await readFile(new URL('../migrations/0004_idea_authorizations.sql',import.meta.url),'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
-  for(const statement of (await readFile(new URL('../migrations/0005_idea_screenshots.sql',import.meta.url),'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
+  for(const file of ['0005_idea_screenshots.sql','0007_account_invites.sql'])
+    for(const statement of (await readFile(new URL(`../migrations/${file}`,import.meta.url),'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
   env={QUESTIONS:db,IDEAS_ADMIN_TOKEN:admin,ASSETS:{fetch:async()=>new Response('Game works')}};
 },20000);
 afterAll(async()=>{await mf?.dispose();});
@@ -122,6 +123,54 @@ it('adds a second passkey only to the signed-in account',async()=>{
   expect(await env.QUESTIONS!.prepare('SELECT COUNT(*) n FROM account_passkeys WHERE account_id=?').bind(dad.id).first()).toEqual({n:2});
   const switched=await start('add',dad.cookie),other=await authenticator();
   expect((await call('/passkey/add/finish','POST',{response:await registration(other,switched.options.challenge)},`${switched.cookie}; ${mom.cookie}`)).status).toBe(401);
+});
+it('lets family save a named seat that the invited person claims with their first passkey',async()=>{
+  const stranger=await register('Stranger');
+  expect((await call('/invite','POST',{name:'Benny'},stranger.cookie)).status).toBe(403);
+  expect((await call('/invite','POST',{name:'Benny'})).status).toBe(401);
+  expect((await call('/invite','POST',{name:'Benny'},dad.cookie,{Origin:'https://evil.test'})).status).toBe(403);
+  expect((await call('/invite','POST',{name:'  '},dad.cookie)).status).toBe(400);
+  const sent=await call('/invite','POST',{name:'Benny'},dad.cookie);expect(sent.status).toBe(200);
+  const {id,url}=await sent.json() as {id:string;url:string};
+  expect(url.startsWith(`${origin}/?account=1#join=`)).toBe(true);
+  const token=new URLSearchParams(new URL(url).hash.slice(1)).get('join')!;
+  // The welcome page greets Benny by name without using the link.
+  expect(await (await call('/invite/peek','POST',{token})).json()).toEqual({name:'Benny',invitedBy:'Dad',joined:false,you:false});
+  expect(await (await call('/invite/peek','POST',{token})).json()).toMatchObject({joined:false});
+  expect((await call('/invite/peek','POST',{token:'0'.repeat(64)})).status).toBe(404);
+  // An unused invite cannot sign in, and is already family.
+  expect(await env.QUESTIONS!.prepare('SELECT COUNT(*) n FROM account_passkeys WHERE account_id=?').bind(id).first()).toEqual({n:0});
+  const flow=await start('recover','',{token}),key=await authenticator();key.handle=flow.options.user!.id;
+  expect(flow.options.user).toMatchObject({name:'Benny'});
+  const claimed=await call('/passkey/recover/finish','POST',{response:await registration(key,flow.options.challenge)},flow.cookie);expect(claimed.status).toBe(200);
+  const benny=cookieFrom(claimed,'__Host-plunge-session');
+  expect((await (await call('','GET',undefined,benny)).json() as {account:unknown}).account).toMatchObject({id,name:'Benny',family:1,owner:0});
+  expect(await (await idea(benny)).json()).toMatchObject({id,name:'Benny'});
+  // Used once; Benny signs in with his passkey from now on.
+  expect((await call('/invite/peek','POST',{token})).status).toBe(404);
+  expect((await call('/passkey/recover/options','POST',{token})).status).toBe(401);
+  const login=await start('login');
+  expect((await call('/passkey/login/finish','POST',{response:await assertion(key,login.options.challenge)},login.cookie)).status).toBe(200);
+  // Dad sees his invite was used; nobody can send a link for an account that has a passkey.
+  expect(await (await call('/invites','GET',undefined,dad.cookie)).json()).toEqual({invites:[{id,name:'Benny',joined:1}]});
+  expect((await call('/invite','POST',{id},dad.cookie)).status).toBe(409);
+  expect((await call('/invite','POST',{id:mom.id},mom.cookie)).status).toBe(404);
+  expect(await (await call('/invites','GET',undefined,stranger.cookie)).json()).toEqual({invites:[]});
+  // Benny can invite too. An expired invite gets a fresh link, only from whoever sent it (or Jason).
+  const ray=await (await call('/invite','POST',{name:'Cousin Ray'},benny)).json() as {id:string;url:string};
+  await env.QUESTIONS!.prepare('UPDATE account_recoveries SET expires=0 WHERE account_id=?').bind(ray.id).run();
+  expect((await call('/invite/peek','POST',{token:new URLSearchParams(new URL(ray.url).hash.slice(1)).get('join')})).status).toBe(404);
+  expect((await call('/invite','POST',{id:ray.id},dad.cookie)).status).toBe(404);
+  const again=await (await call('/invite','POST',{id:ray.id},benny)).json() as {url:string};
+  expect(await (await call('/invite/peek','POST',{token:new URLSearchParams(new URL(again.url).hash.slice(1)).get('join')})).json()).toMatchObject({name:'Cousin Ray',invitedBy:'Benny'});
+  expect((await call('/invite','POST',{id:ray.id},mom.cookie)).status).toBe(200);
+  // Jason sees who invited whom and who has joined.
+  const {members}=await (await call('/members','GET',undefined,mom.cookie)).json() as {members:{id:string;invited_by:string|null;joined:number;family:number}[]};
+  expect(members.find(m=>m.id===id)).toMatchObject({invited_by:'Dad',joined:1,family:1});
+  expect(members.find(m=>m.id===ray.id)).toMatchObject({invited_by:'Benny',joined:0,family:1});
+  // Unused invites are capped per person.
+  for(let n=1;n<10;n++)expect((await call('/invite','POST',{name:`Cousin ${n}`},benny)).status).toBe(200);
+  expect((await call('/invite','POST',{name:'One too many'},benny)).status).toBe(409);
 });
 it('recovers the same account once, preserves family grants, and invalidates old keys and sessions',async()=>{
   expect((await call('/recovery','POST',{id:mom.id},dad.cookie)).status).toBe(403);

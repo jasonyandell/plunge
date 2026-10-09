@@ -18,6 +18,7 @@ import { ClosedTableError, enterRoom, familyProbe, forgetSeat, newVisitorId, Roo
   ROOMS_ENABLED, savedSeat, saveSeat, type RoomIdentity } from './client';
 import { relativeSeat, roomHistory } from './view';
 import { describeResult, VoteBar } from './VoteBar';
+import { rememberTableName, tableName, whoAmI } from '../account/me';
 import './room.css';
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -25,6 +26,7 @@ type Draft = DistributiveOmit<RoomCommand, 'id'>;
 type Timed = DistributiveOmit<Extract<RoomCommand, { revision: number }>, 'id' | 'revision'>;
 /** Walt plays a seat with nobody present: empty, or absent past the grace. */
 const waltDriven = (room: RoomState, seat: Seat) => !room.seats[seat] || room.seats[seat]!.away;
+const NUDGED = 'plunge:offered-sign-in';
 const presenceKey = (room: RoomState | undefined) => room ? `${room.runner}:${room.seats.map(s => s ? s.away ? 'a' : s.connected ? 'c' : 'd' : 'w').join('')}` : '';
 /** Who is playing a seat right now: the person, Walt for an absent person, or Walt. */
 export function seatLabel(room: RoomState, s: Seat): string {
@@ -61,10 +63,15 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
   });
   const [knock, setKnock] = useState<{ visitor: string; name: string; roomId: string; sent: boolean; answer: string | null } | null>(null);
   const [visitorRoom, setVisitorRoom] = useState<RoomState | null>(null);
-  const [name, setName] = useState('');
-  /** Signed in with family access: the coordinator seats this person under their account name. */
+  const [name, setName] = useState(tableName);
+  /** Signed in: the coordinator seats this person under their account name. Family also lists the tables they open. */
   const [member, setMember] = useState<string | null | undefined>(undefined); // undefined: not asked yet
-  useEffect(() => { let live = true; void familyProbe().then(value => { if (live) setMember(value.name ?? null); }); return () => { live = false; }; }, []);
+  const [family, setFamily] = useState(false);
+  useEffect(() => { let live = true; void familyProbe().then(value => { if (live) { setMember(value.name ?? null); setFamily(value.family); } }); return () => { live = false; }; }, []);
+  /** Signed out where accounts exist: after a hand, one quiet offer to keep the name and hands. Never again once dismissed. */
+  const [offerSignIn, setOfferSignIn] = useState(false);
+  useEffect(() => { let live = true; void whoAmI().then(me => { try { if (live && me === null && !localStorage.getItem(NUDGED)) setOfferSignIn(true); } catch { /* No offer without storage to remember the answer. */ } }); return () => { live = false; }; }, []);
+  const dismissOffer = () => { setOfferSignIn(false); try { localStorage.setItem(NUDGED, '1'); } catch { /* Gone for this visit. */ } };
   const [joinInput, setJoinInput] = useState('');
   const [opening, setOpening] = useState(false);
   const [online, setOnline] = useState(false);
@@ -194,6 +201,7 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     if (opening) return;
     setOpening(true); setError(null); setNotice(null);
     const who = member || (name.trim() || 'Player');
+    if (!member) rememberTableName(name);
     const target = joining2 ? roomFromInput(joinInput, location.origin) : roomId;
     try {
       if (joining2 && !target) throw new Error('Paste the room code or an invite link from this Plunge app.');
@@ -270,13 +278,16 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     {shown?.proposal && <VoteBar proposal={shown.proposal} seat={seat} seats={shown.seats} vote={vote} pending={pending} />}
     {!shown?.proposal && lastVote && <div class="room-takeback" role="status" data-vote-revision={lastVote.revision}>{describeResult(lastVote)}</div>}
     {shown?.lastUndo && !lastVote && !shown.proposal && <div class="room-takeback" role="status" data-undo-revision={shown.lastUndo.revision}>Takeback · Back to before {shown.lastUndo.name}’s last move, for everyone.</div>}
+    {offerSignIn && credentials && (table?.game?.phase === 'hand-over' || table?.game?.phase === 'game-over') && <div class="room-offer">
+      <a href="?account=1">Keep your name and the hands you play here? Sign in →</a><button onClick={dismissOffer}>Not now</button></div>}
   </> : null;
   const screen = !identity ? <div class="home"><div class="home-card"><p class="eyebrow">Plunge · Experimental</p><h1 class="title">Play with family</h1>
       <p class="room-intro">{roomId ? 'Pull up a chair at this family table. Come and go as you like; Walt covers an empty chair.' : 'Invite your family. Walt fills the empty chairs.'}</p>
       {notice && <p class="room-notice" role="status">{notice}</p>}
       <form onSubmit={e => { e.preventDefault(); void open(); }}>{member === null && <label class="room-label">Your name<input maxLength={20} value={name} onInput={e => setName(e.currentTarget.value)} autoComplete="nickname" placeholder="Name at the table" /></label>}
         <button class="big-btn" disabled={opening || member === undefined}>{opening ? 'Opening…' : `${roomId ? 'Join the table' : 'Open a family table'}${member ? ` as ${member}` : ''}`}</button></form>
-      <p class="setting-hint">{member ? 'A table you open is listed on the home screen for anyone to find. It starts closed, so newcomers knock until the table votes it open.'
+      <p class="setting-hint">{member && family ? 'A table you open is listed on the home screen for anyone to find. It starts closed, so newcomers knock until the table votes it open.'
+        : member ? 'You sit under your own name at any table, and the hands you play join your record. Share the invite only with your group.'
         : 'No account needed. Share the invite only with your group.'}</p>
       {!roomId && <form class="room-join" onSubmit={e => { e.preventDefault(); void open(true); }}>
         <label class="room-label">Room code or invite link<input value={joinInput} onInput={e => setJoinInput(e.currentTarget.value)} autoCapitalize="none" autoCorrect="off" spellcheck={false} placeholder="Paste from your family" /></label>

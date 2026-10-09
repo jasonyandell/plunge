@@ -18,7 +18,29 @@
   text-align: center;
   box-shadow: 0 18px 60px #140c0750, inset 0 0 0 5px #fff9ed55;
   margin: auto;
+  position: relative;
 }
+/* Who's here. Quiet when signed out; your name when signed in. */
+.home-me {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  max-width: 40%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  line-height: 32px;
+  min-height: 32px;
+  padding: 6px 10px;
+  margin: -6px -6px 0 0;
+  color: #715638;
+  text-decoration: none;
+  border-radius: 999px;
+}
+.home-me.signed-in { color: #205e49; }
+.home-me.signed-in::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #3f8f6a; vertical-align: 1px; }
+.home-me:focus-visible { outline: 2px solid #205e49; }
 
 .home-dominoes { display: flex; justify-content: center; gap: 9px; margin: 22px 0 20px; }
 .home-dominoes .dom { width: 37px; opacity: 1; }

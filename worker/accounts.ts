@@ -8,6 +8,10 @@ interface Passkey {id:string;account_id:string;public_key:string;counter:number}
 const ORIGIN='https://plunge.texas42.workers.dev', RP_ID='plunge.texas42.workers.dev';
 const SESSION='__Host-plunge-session', CEREMONY='__Host-plunge-passkey';
 const HEX=/^[a-f0-9]{64}$/;
+/** A recovery link lasts fifteen minutes; an invite waits a week for someone to get to it. */
+const RECOVERY_MS=900000, INVITE_MS=7*86400000, MAX_WAITING_INVITES=10;
+const familyAccess=(account:Account|null)=>!!account&&(!!account.family||!!account.owner);
+const cleanName=(value:unknown)=>typeof value==='string'&&value.trim()&&value.length<=40?value.trim():null;
 export const hashToken=async(value:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),b=>b.toString(16).padStart(2,'0')).join('');
 const random=()=>Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
 const encode=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
@@ -31,6 +35,14 @@ async function body(request:Request):Promise<Record<string,unknown>> {
   return data as Record<string,unknown>;
 }
 function jsonWithCookie(value:unknown,valueCookie:string){const response=json(value);response.headers.append('Set-Cookie',valueCookie);return response;}
+/** Store a one-use link secret for an account, replacing any earlier one. */
+async function linkSecret(db:IdeasDatabase,id:string,lifetime:number):Promise<string> {
+  const token=random();
+  await db.prepare('INSERT INTO account_recoveries(hash,account_id,expires) VALUES(?,?,?) ON CONFLICT(account_id) DO UPDATE SET hash=excluded.hash,expires=excluded.expires')
+    .bind(await hashToken(token),id,Date.now()+lifetime).run();
+  return token;
+}
+const passkeyCount=`(SELECT COUNT(*) FROM account_passkeys p WHERE p.account_id=a.id)`;
 async function signedIn(request:Request,db:IdeasDatabase,id:string,keyId:string) {
   const session=random();
   await db.batch([
@@ -70,15 +82,15 @@ export async function accountsRequest(request:Request,env:AccountEnv):Promise<Re
       let accountId=kind==='register'?random().slice(0,32):account?.id??null;
       let name=account?.name??'',recoveryHash:string|null=null;
       if(kind==='register') {
-        if(typeof data.name!=='string'||!data.name.trim()||data.name.length>40)return json({error:'Choose a name of 1 to 40 characters.'},400);
-        name=data.name.trim();
+        const chosen=cleanName(data.name);if(!chosen)return json({error:'Choose a name of 1 to 40 characters.'},400);
+        name=chosen;
       }
       if(kind==='recover') {
-        if(typeof data.token!=='string'||!HEX.test(data.token))return json({error:'Ask Jason for a new recovery link.'},401);
+        if(typeof data.token!=='string'||!HEX.test(data.token))return json({error:'That link is incomplete. Ask whoever sent it for a new one.'},401);
         recoveryHash=await hashToken(data.token);
         const recover=await db.prepare('SELECT a.id,a.name FROM accounts a JOIN account_recoveries r ON r.account_id=a.id WHERE r.hash=? AND r.expires>?')
           .bind(recoveryHash,Date.now()).first<{id:string;name:string}>();
-        if(!recover)return json({error:'That recovery link has expired or was used. Ask Jason for a new one.'},401);
+        if(!recover)return json({error:'That link has expired or was already used. Ask whoever sent it for a new one.'},401);
         accountId=recover.id;name=recover.name;
       }
       const credentials=kind==='add'?(await db.prepare('SELECT id FROM account_passkeys WHERE account_id=?').bind(accountId).all<{id:string}>()).results:[];
@@ -143,7 +155,25 @@ export async function accountsRequest(request:Request,env:AccountEnv):Promise<Re
     }
     if(path==='/members'&&request.method==='GET') {
       if(!admin&&!account?.owner)return json({error:'Only Jason can manage family access.'},403);
-      return json({members:(await db.prepare(`${columns} WHERE a.requested=1 OR a.member_id IS NOT NULL OR ?=1 ORDER BY a.created DESC LIMIT 200`).bind(admin?1:0).all()).results});
+      return json({members:(await db.prepare(`SELECT a.id,a.name,a.owner,a.requested,CASE WHEN m.revoked=0 THEN 1 ELSE 0 END family,
+          ${passkeyCount}>0 joined,i.name invited_by
+        FROM accounts a LEFT JOIN idea_members m ON m.id=a.member_id LEFT JOIN accounts i ON i.id=a.invited_by
+        WHERE a.requested=1 OR a.member_id IS NOT NULL OR ?=1 ORDER BY a.created DESC LIMIT 200`).bind(admin?1:0).all()).results});
+    }
+    // Anyone with family access can see the invites they sent and whether each was used.
+    if(path==='/invites'&&request.method==='GET') {
+      if(!familyAccess(account))return json({invites:[]});
+      return json({invites:(await db.prepare(`SELECT a.id,a.name,${passkeyCount}>0 joined FROM accounts a WHERE a.invited_by=? ORDER BY a.created DESC LIMIT 50`)
+        .bind(account!.id).all()).results});
+    }
+    // What an invite link is for, without using it: the welcome page greets the person by name.
+    if(path==='/invite/peek'&&request.method==='POST') {
+      if(typeof data.token!=='string'||!HEX.test(data.token))return json({error:'That invite link is incomplete.'},400);
+      const invite=await db.prepare(`SELECT a.id,a.name,i.name invited_by,${passkeyCount}>0 joined FROM accounts a
+          JOIN account_recoveries r ON r.account_id=a.id LEFT JOIN accounts i ON i.id=a.invited_by WHERE r.hash=? AND r.expires>?`)
+        .bind(await hashToken(data.token),Date.now()).first<{id:string;name:string;invited_by:string|null;joined:number}>();
+      if(!invite)return json({error:'That link has expired or was already used. Ask whoever sent it for a new one.'},404);
+      return json({name:invite.name,invitedBy:invite.invited_by,joined:!!invite.joined,you:account?.id===invite.id});
     }
     if(request.method!=='POST')return json({error:'Not found.'},404);
     if(path==='/logout') {
@@ -152,8 +182,8 @@ export async function accountsRequest(request:Request,env:AccountEnv):Promise<Re
     }
     if(!account&&!admin)return json({error:'Please sign in first.'},401);
     if(path==='/profile'&&account) {
-      if(typeof data.name!=='string'||!data.name.trim()||data.name.length>40)return json({error:'Use a name of 1 to 40 characters.'},400);
-      await db.batch([db.prepare('UPDATE accounts SET name=? WHERE id=?').bind(data.name.trim(),account.id),db.prepare('UPDATE idea_members SET name=? WHERE id=?').bind(data.name.trim(),account.member_id)]);
+      const chosen=cleanName(data.name);if(!chosen)return json({error:'Use a name of 1 to 40 characters.'},400);
+      await db.batch([db.prepare('UPDATE accounts SET name=? WHERE id=?').bind(chosen,account.id),db.prepare('UPDATE idea_members SET name=? WHERE id=?').bind(chosen,account.member_id)]);
       return json({ok:true});
     }
     if(path==='/request'&&account) {await db.prepare('UPDATE accounts SET requested=1 WHERE id=?').bind(account.id).run();return json({ok:true});}
@@ -167,16 +197,34 @@ export async function accountsRequest(request:Request,env:AccountEnv):Promise<Re
       if(!await db.prepare('SELECT id FROM accounts WHERE id=?').bind(data.id).first())return json({error:'Account not found.'},404);
       await db.prepare('UPDATE accounts SET owner=1 WHERE id=?').bind(data.id).run();await grantFamily(db,data.id,true);return json({ok:true});
     }
+    // Save a seat: a new account with family access and no passkey yet, and a week-long link to claim it.
+    // Sending a new link for an unused invite replaces the old one. Invites never touch an account with a passkey.
+    if(path==='/invite'&&(admin||familyAccess(account))) {
+      if(data.id!==undefined) {
+        if(typeof data.id!=='string'||!/^[a-f0-9]{32}$/.test(data.id))return json({error:'Choose an invite.'},400);
+        const target=await db.prepare(`SELECT a.invited_by,${passkeyCount} keys FROM accounts a WHERE a.id=?`).bind(data.id).first<{invited_by:string|null;keys:number}>();
+        if(!target||target.invited_by===null||(!admin&&!account?.owner&&target.invited_by!==account?.id))return json({error:'Invite not found.'},404);
+        if(target.keys)return json({error:'They already joined. They can sign in with their passkey.'},409);
+        return json({id:data.id,url:`${ORIGIN}/?account=1#join=${await linkSecret(db,data.id,INVITE_MS)}`});
+      }
+      const invitee=cleanName(data.name);if(!invitee)return json({error:'Use a name of 1 to 40 characters.'},400);
+      const inviter=account?.id??null;
+      if(inviter) {
+        const waiting=await db.prepare(`SELECT COUNT(*) n FROM accounts a WHERE a.invited_by=? AND ${passkeyCount}=0`).bind(inviter).first<{n:number}>();
+        if((waiting?.n??0)>=MAX_WAITING_INVITES)return json({error:`You have ${MAX_WAITING_INVITES} invites nobody has used yet. Send one of those again instead.`},409);
+      }
+      const id=random().slice(0,32);
+      await db.prepare('INSERT INTO accounts(id,name,created,invited_by) VALUES(?,?,?,?)').bind(id,invitee,Date.now(),inviter).run();
+      await grantFamily(db,id,true);
+      return json({id,url:`${ORIGIN}/?account=1#join=${await linkSecret(db,id,INVITE_MS)}`});
+    }
     if(path==='/recovery'&&(admin||account?.owner)) {
       if(typeof data.id!=='string'||!/^[a-f0-9]{32}$/.test(data.id))return json({error:'Choose an account.'},400);
       const target=await db.prepare('SELECT owner FROM accounts WHERE id=?').bind(data.id).first<{owner:number}>();
       if(!target)return json({error:'Account not found.'},404);
       // Recovering the owner requires the private admin helper, not a browser session.
       if(target.owner&&!admin)return json({error:'Use the private account helper to recover an owner.'},403);
-      const token=random();
-      await db.prepare('INSERT INTO account_recoveries(hash,account_id,expires) VALUES(?,?,?) ON CONFLICT(account_id) DO UPDATE SET hash=excluded.hash,expires=excluded.expires')
-        .bind(await hashToken(token),data.id,Date.now()+900000).run();
-      return json({url:`${ORIGIN}/?account=1#recover=${token}`});
+      return json({url:`${ORIGIN}/?account=1#recover=${await linkSecret(db,data.id,RECOVERY_MS)}`});
     }
     return json({error:'Not allowed.'},403);
   }catch(error){return error instanceof SyntaxError?json({error:'Invalid account request.'},400):json({error:'Accounts are temporarily unavailable. You can still play.'},503);}
