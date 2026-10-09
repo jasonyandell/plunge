@@ -42,11 +42,11 @@ async function roomBody(request: Request): Promise<{ name: unknown; knock?: unkn
   return JSON.parse(text + decoder.decode()) as { name: unknown; knock?: unknown; standing?: unknown };
 }
 /** Set only by the entry worker after checking the session; never trusted from a browser. */
-function accountFrom(request: Request): { id: string; name: string } | undefined {
+function accountFrom(request: Request): { id: string; name: string; family: boolean } | undefined {
   try {
-    const value = JSON.parse(request.headers.get(ACCOUNT_HEADER) ?? 'null') as { id?: unknown; name?: unknown } | null;
+    const value = JSON.parse(request.headers.get(ACCOUNT_HEADER) ?? 'null') as { id?: unknown; name?: unknown; family?: unknown } | null;
     return value && typeof value.id === 'string' && /^[a-f0-9]{32}$/.test(value.id) && typeof value.name === 'string'
-      ? { id: value.id, name: cleanName(value.name) } : undefined;
+      ? { id: value.id, name: cleanName(value.name), family: value.family === true } : undefined;
   } catch { return undefined; }
 }
 export const randomKey = (bytes: number): string => [...crypto.getRandomValues(new Uint8Array(bytes))]
@@ -78,9 +78,9 @@ export function cleanName(value: unknown): string {
 /** A table opened by a signed-in family member is listed for anyone to find, so it
  * starts closed: newcomers knock until the table votes it open. An invite room stays open. */
 export function createRoom(roomId: string, name: string, token = randomKey(32), now = Date.now(),
-  options: { standing?: boolean; account?: string } = {}): SavedRoom {
+  options: { standing?: boolean; account?: string; listed?: boolean } = {}): SavedRoom {
   return { state: { type: 'state', roomId, revision: 0, seed: '', sessionId: '', game: null,
-    seats: [null, null, null, null], runner: null, open: !options.account, visitors: 0, proposal: null, lastVote: null,
+    seats: [null, null, null, null], runner: null, open: !(options.listed ?? !!options.account), visitors: 0, proposal: null, lastVote: null,
     started: false, holdUntil: 0, thinkingSeat: null,
     nativeReceipts: {}, auctionSurveys: {}, retry: null, practiceHands: [], lastUndo: null },
     players: [{ name: cleanName(name), token, seen: now, ...(options.account ? { account: options.account } : {}) }, null, null, null],
@@ -126,9 +126,18 @@ export function roomListing(room: SavedRoom, connected: ReadonlySet<Seat>, now =
   return { roomId: room.state.roomId, standing: !!room.standing, open: room.state.open, started: room.state.started, updated: room.updated,
     seats: room.players.map((player, seat) => player ? { name: player.name, connected: connected.has(seat as Seat) && !isAway(room, seat as Seat, connected, now) } : null) };
 }
+/** Someone who sat down by name and then signed in: their seat takes their account and
+ * account name on reconnect, unless that account already holds another chair here. */
+export function claimSeat(room: SavedRoom, seat: Seat, account: { id: string; name: string }, now = Date.now()): boolean {
+  const player = room.players[seat];
+  if (!player || player.account || room.players.some(other => other?.account === account.id)) return false;
+  player.account = account.id; player.name = cleanName(account.name);
+  room.state = { ...room.state, revision: room.state.revision + 1 }; room.updated = now;
+  return true;
+}
 /** Sitting down works any time; a hand in progress just hands you the seat's dominoes.
- * A signed-in account gets its own chair back from any device, and always has one at the standing table. */
-export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), now = Date.now(), knock?: string, account?: string): RoomCredentials {
+ * A signed-in account gets its own chair back from any device; family always has one at the standing table. */
+export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), now = Date.now(), knock?: string, account?: string, family = false): RoomCredentials {
   // Record old human membership before a newcomer takes a formerly Walt seat.
   upgradeRoom(room);
   const own = account === undefined ? -1 : room.players.findIndex(player => player?.account === account);
@@ -138,7 +147,7 @@ export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), n
     return { roomId: room.state.roomId, token: player.token, seat: own as Seat };
   }
   // The standing table is the family's: a signed-in member sits without knocking. Everyone else meets the door.
-  if (!room.state.open && !(account && room.standing)) {
+  if (!room.state.open && !(account && family && room.standing)) {
     const admission = room.admitted!.findIndex(entry => entry.knock === knock && entry.until > now);
     if (admission < 0) throw new ClosedTable('This table is closed. Knock to ask to come in.');
     room.admitted!.splice(admission, 1);
@@ -450,7 +459,7 @@ export class PlungeRoom {
         const { name, standing } = await roomBody(request);
         // Only the entry worker, for a family account, opens a standing table.
         // A signed-in person sits under their account name, whatever the browser typed.
-        this.room = createRoom(roomId, account?.name ?? cleanName(name), undefined, Date.now(), { standing: standing === true && account !== undefined, ...(account ? { account: account.id } : {}) });
+        this.room = createRoom(roomId, account?.name ?? cleanName(name), undefined, Date.now(), { standing: standing === true && !!account?.family, listed: !!account?.family, ...(account ? { account: account.id } : {}) });
         await this.save();
         return json({ roomId, token: this.room.players[0]!.token, seat: 0 });
       }
@@ -461,7 +470,7 @@ export class PlungeRoom {
         const { name, knock } = await roomBody(request);
         settleRoom(this.room, this.connected(), Date.now());
         try {
-          const credentials = joinRoom(this.room, account?.name ?? cleanName(name), undefined, Date.now(), typeof knock === 'string' ? knock : undefined, account?.id);
+          const credentials = joinRoom(this.room, account?.name ?? cleanName(name), undefined, Date.now(), typeof knock === 'string' ? knock : undefined, account?.id, account?.family);
           await this.sync(true);
           return json(credentials);
         } catch (error) {
@@ -492,6 +501,7 @@ export class PlungeRoom {
           for (const old of this.live()) if (old.deserializeAttachment().seat === seat) old.close(CLOSE_OTHER_TAB, 'Seat opened in another tab.');
           attachment = { seat: seat as Seat, token: token!, id: randomKey(8), lastSeen: Date.now() };
           this.room.players[seat]!.seen = Date.now();
+          if (account) claimSeat(this.room, seat as Seat, account);
         }
       }
       const pair = new WebSocketPair(), client = pair[0], server = pair[1];
@@ -562,13 +572,14 @@ interface Statement { bind(...values: unknown[]): Statement; first<T>(): Promise
 interface FamilyDatabase { prepare(query: string): Statement; batch(statements: Statement[]): Promise<unknown[]> }
 export interface SessionAccount { id: string; name: string; family: number; owner: number }
 const familyAccess = (account: SessionAccount | null | undefined): account is SessionAccount => !!account && (!!account.family || !!account.owner);
-const identityHeader = (account: SessionAccount) => JSON.stringify({ id: account.id, name: account.name });
+const identityHeader = (account: SessionAccount) => JSON.stringify({ id: account.id, name: account.name, family: familyAccess(account) });
 /** Remember a table a family member opened, so the home screen can list it. Idempotent. */
 const listTable = (db: FamilyDatabase, roomId: string, account: string) =>
   db.prepare('INSERT OR IGNORE INTO listed_tables(room_id, account_id, created) VALUES (?, ?, ?)').bind(roomId, account, Date.now()).run();
 
-/** Browser room requests. A signed-in family member carries their identity in (the
- * coordinator seats them under their account), and a table they open is listed. */
+/** Browser room requests. A signed-in person carries their identity in (the coordinator
+ * seats them under their account name and records their hands), and a table a family
+ * member opens is listed. */
 export async function roomRequest(request: Request, namespace?: RoomsNamespace, db?: FamilyDatabase, account?: SessionAccount | null): Promise<Response> {
   if (!namespace) return json({ error: 'Family rooms are unavailable in this build.' }, 503);
   const url = new URL(request.url);
@@ -586,10 +597,10 @@ export async function roomRequest(request: Request, namespace?: RoomsNamespace, 
   }
   const forwarded = new Request(url, request);
   forwarded.headers.delete(ACCOUNT_HEADER);
-  const member = request.method === 'POST' && familyAccess(account);
-  if (member) forwarded.headers.set(ACCOUNT_HEADER, identityHeader(account));
+  const signed = (request.method === 'POST' || url.pathname.endsWith('/socket')) && account ? account : null;
+  if (signed) forwarded.headers.set(ACCOUNT_HEADER, identityHeader(signed));
   const response = await namespace.get(namespace.idFromName(roomId)).fetch(forwarded);
-  if (member && db && response.ok && url.pathname.endsWith('/create')) await listTable(db, roomId, account.id);
+  if (familyAccess(signed) && db && response.ok && url.pathname.endsWith('/create')) await listTable(db, roomId, signed.id);
   return response;
 }
 
@@ -619,8 +630,8 @@ export async function familyTableRequest(request: Request, namespace: RoomsNames
   account: SessionAccount | null): Promise<Response> {
   const url = new URL(request.url);
   const allowed = familyAccess(account);
-  // The home screen asks whether to offer the table at all, and what name the person sits under.
-  if (request.method === 'GET') return json(allowed && namespace && db ? { family: true, name: account.name } : { family: false });
+  // The home screen asks whether to offer the table at all, and what name the person sits under at any table.
+  if (request.method === 'GET') return json({ family: !!(allowed && namespace && db), ...(account ? { name: account.name } : {}) });
   if (request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
   const origin = request.headers.get('Origin');
   if (origin && origin !== url.origin) return json({ error: 'Wrong origin.' }, 403);

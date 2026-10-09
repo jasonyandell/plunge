@@ -40,7 +40,7 @@ const post = (path: string, body: unknown, extra: Record<string, string> = {}) =
 
 it('seats signed-in family at one standing table, gives each account its own chair back, and ignores forged identities', async () => {
   const probe = (cookie?: string) => mf.dispatchFetch(`${origin}/api/rooms/family`, { headers: cookie ? { Cookie: cookie } : {} }).then(r => r.json());
-  expect(await probe()).toEqual({ family: false }); expect(await probe(sessions.Stranger)).toEqual({ family: false }); expect(await probe(sessions.Mom)).toEqual({ family: true, name: 'Mom' });
+  expect(await probe()).toEqual({ family: false }); expect(await probe(sessions.Stranger)).toEqual({ family: false, name: 'Stranger' }); expect(await probe(sessions.Mom)).toEqual({ family: true, name: 'Mom' });
   expect((await family()).status).toBe(401);
   expect((await family(sessions.Stranger)).status).toBe(403);
   expect((await family(sessions.Mom, { Origin: 'https://other.test' })).status).toBe(403);
@@ -89,6 +89,10 @@ it('lists the tables family members opened for anyone to find, seats members und
   expect((await post(`/${opened.roomId}/join`, { name: 'Cousin' })).status).toBe(403); // Knock, like anyone.
   expect((await post(`/${anon.roomId}/join`, { name: 'Cousin' })).status).toBe(200); // The link is the door.
   expect((await post(`/${stranger.roomId}/join`, { name: 'Cousin' })).status).toBe(200);
+  // Signed in without family access: their own name and chair at any table, but no key to the standing table.
+  const strangerAgain = await (await post(`/${stranger.roomId}/join`, { name: 'Whatever' }, { Cookie: sessions.Stranger! })).json() as RoomCredentials;
+  expect(strangerAgain).toEqual(stranger);
+  expect((await post(`/${mom.roomId}/join`, { name: 'Stranger' }, { Cookie: sessions.Stranger! })).status).toBe(403);
   // Mom joining her own listed table from another device gets the same chair back by account.
   const again = await (await post(`/${opened.roomId}/join`, { name: 'Mom on the tablet' }, { Cookie: sessions.Mom! })).json() as RoomCredentials;
   expect(again).toEqual(opened);

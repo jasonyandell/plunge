@@ -11,10 +11,13 @@ import { useEffect, useState } from 'preact/hooks';
 import { ClosedTableError, familyProbe, familyTable, lastRoom, liveTables, ROOMS_ENABLED, roomUrl, savedSeat, saveSeat } from '../room/client';
 import { tableNote, tableTitle } from '../room/view';
 import type { ListedTable } from '../room/protocol';
+import type { ComponentChildren } from 'preact';
 
 interface HomeProps {
   app: AppState;
   dispatch: (e: AppEvent) => void;
+  /** Who's here, in the card's corner. Passed in so Home stays hook-free. */
+  identity?: ComponentChildren;
 }
 
 interface MoreProps extends HomeProps {
@@ -89,7 +92,7 @@ function FamilyEntry() {
 }
 
 /** The front door: one decision, everything else behind More. */
-export function Home({ app, dispatch }: HomeProps) {
+export function Home({ app, dispatch, identity }: HomeProps) {
   const paused = nelloPaused(app);
   // A finished game stays resumable while its last hand can still be undone or
   // replayed, so a reload doesn't strand those choices on the result card.
@@ -97,6 +100,7 @@ export function Home({ app, dispatch }: HomeProps) {
   return (
     <div class="home">
       <div class="home-card">
+        {identity}
         <p class="eyebrow">Texas 42</p>
         <div class="home-dominoes" aria-hidden="true">
           <Domino id="64" /><Domino id="55" /><Domino id="42" />

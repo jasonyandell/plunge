@@ -94,11 +94,15 @@ one expired, and seats the account. A standing table lives thirty days past its
 last activity. Seats there are keyed to the account, so the same person on a
 second device gets the same chair and key back; a browser cannot claim a chair
 by naming an account, because the entry worker sets the identity header only
-after checking the session and strips any copy a client sent. A family member
-always has a chair at the standing table, open or closed. The home screen asks
-`GET /api/rooms/family` whether the person is family and what name they sit
-under; signed-in family skip the name prompt everywhere and sit under their
-account name.
+after checking the session and strips any copy a client sent. The header says
+whether the account is family: a family member always has a chair at the standing
+table, open or closed; any other signed-in account gets its own name, its own chair
+back and its hands recorded, but meets the door like anyone else. The home screen
+asks `GET /api/rooms/family` whether the person is family and what name they sit
+under; anyone signed in skips the name prompt everywhere and sits under their
+account name. Someone who sat down by name and signs in later keeps their chair:
+the next socket connection carries the session, and the seat takes the account
+and its name (`claimSeat`) unless that account already holds another chair.
 
 **The list.** Anyone opening the app sees the tables that are live, and can sit
 down at an open one or knock at a closed one, account or not: 42 is a social

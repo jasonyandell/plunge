@@ -28,6 +28,7 @@ import { recordHistory, retryHistory, exportHistory } from '../history/recorder'
 import { syncStats } from '../history/stats-sync';
 import { Questions } from './Questions';
 import { attachGame, syncQuestions } from '../questions/client';
+import { IdentityChip } from '../account/IdentityChip';
 
 export function App() {
   const [app, reduce] = useReducer((state: AppState, event: AppEvent) => {
@@ -257,7 +258,7 @@ export function App() {
     </>;
     switch (app.screen) {
       case 'home':
-        return <Home app={app} dispatch={dispatch} />;
+        return <Home app={app} dispatch={dispatch} identity={<IdentityChip />} />;
       case 'how':
         return <HowTo dispatch={dispatch} />;
       case 'about':
@@ -268,7 +269,7 @@ export function App() {
         return app.game || app.scenarioGame ? (
           <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} />
         ) : (
-          <Home app={app} dispatch={dispatch} />
+          <Home app={app} dispatch={dispatch} identity={<IdentityChip />} />
         );
     }
   })();

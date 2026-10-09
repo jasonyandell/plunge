@@ -56,7 +56,8 @@ beforeAll(async()=>{
   const [tables,trigger]=sql.split('CREATE TRIGGER');for(const statement of tables!.split(';').filter(s=>s.trim()))await db.prepare(statement).run();await db.prepare(`CREATE TRIGGER${trigger}`).run();
   for(const statement of (await readFile(new URL('../migrations/0003_accounts.sql',import.meta.url),'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
   for(const statement of (await readFile(new URL('../migrations/0004_idea_authorizations.sql',import.meta.url),'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
-  for(const statement of (await readFile(new URL('../migrations/0005_idea_screenshots.sql',import.meta.url),'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
+  for(const file of ['0005_idea_screenshots.sql','0007_account_invites.sql','0009_family_link.sql'])
+    for(const statement of (await readFile(new URL(`../migrations/${file}`,import.meta.url),'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
   env={QUESTIONS:db,IDEAS_ADMIN_TOKEN:admin,ASSETS:{fetch:async()=>new Response('Game works')}};
 },20000);
 afterAll(async()=>{await mf?.dispose();});
@@ -122,6 +123,92 @@ it('adds a second passkey only to the signed-in account',async()=>{
   expect(await env.QUESTIONS!.prepare('SELECT COUNT(*) n FROM account_passkeys WHERE account_id=?').bind(dad.id).first()).toEqual({n:2});
   const switched=await start('add',dad.cookie),other=await authenticator();
   expect((await call('/passkey/add/finish','POST',{response:await registration(other,switched.options.challenge)},`${switched.cookie}; ${mom.cookie}`)).status).toBe(401);
+});
+it('lets family save a named seat that the invited person claims with their first passkey',async()=>{
+  const stranger=await register('Stranger');
+  expect((await call('/invite','POST',{name:'Benny'},stranger.cookie)).status).toBe(403);
+  expect((await call('/invite','POST',{name:'Benny'})).status).toBe(401);
+  expect((await call('/invite','POST',{name:'Benny'},dad.cookie,{Origin:'https://evil.test'})).status).toBe(403);
+  expect((await call('/invite','POST',{name:'  '},dad.cookie)).status).toBe(400);
+  const sent=await call('/invite','POST',{name:'Benny'},dad.cookie);expect(sent.status).toBe(200);
+  const {id,url}=await sent.json() as {id:string;url:string};
+  expect(url.startsWith(`${origin}/?account=1#join=`)).toBe(true);
+  const token=new URLSearchParams(new URL(url).hash.slice(1)).get('join')!;
+  // The welcome page greets Benny by name without using the link.
+  expect(await (await call('/invite/peek','POST',{token})).json()).toEqual({name:'Benny',invitedBy:'Dad',joined:false,you:false});
+  expect(await (await call('/invite/peek','POST',{token})).json()).toMatchObject({joined:false});
+  expect((await call('/invite/peek','POST',{token:'0'.repeat(64)})).status).toBe(404);
+  // An unused invite cannot sign in, and is already family.
+  expect(await env.QUESTIONS!.prepare('SELECT COUNT(*) n FROM account_passkeys WHERE account_id=?').bind(id).first()).toEqual({n:0});
+  const flow=await start('recover','',{token}),key=await authenticator();key.handle=flow.options.user!.id;
+  expect(flow.options.user).toMatchObject({name:'Benny'});
+  const claimed=await call('/passkey/recover/finish','POST',{response:await registration(key,flow.options.challenge)},flow.cookie);expect(claimed.status).toBe(200);
+  const benny=cookieFrom(claimed,'__Host-plunge-session');
+  expect((await (await call('','GET',undefined,benny)).json() as {account:unknown}).account).toMatchObject({id,name:'Benny',family:1,owner:0});
+  expect(await (await idea(benny)).json()).toMatchObject({id,name:'Benny'});
+  // Used once; Benny signs in with his passkey from now on.
+  expect((await call('/invite/peek','POST',{token})).status).toBe(404);
+  expect((await call('/passkey/recover/options','POST',{token})).status).toBe(401);
+  const login=await start('login');
+  expect((await call('/passkey/login/finish','POST',{response:await assertion(key,login.options.challenge)},login.cookie)).status).toBe(200);
+  // Dad sees his invite was used; nobody can send a link for an account that has a passkey.
+  expect(await (await call('/invites','GET',undefined,dad.cookie)).json()).toEqual({invites:[{id,name:'Benny',joined:1}]});
+  expect((await call('/invite','POST',{id},dad.cookie)).status).toBe(409);
+  expect((await call('/invite','POST',{id:mom.id},mom.cookie)).status).toBe(404);
+  expect(await (await call('/invites','GET',undefined,stranger.cookie)).json()).toEqual({invites:[]});
+  // Benny can invite too. An expired invite gets a fresh link, only from whoever sent it (or Jason).
+  const ray=await (await call('/invite','POST',{name:'Cousin Ray'},benny)).json() as {id:string;url:string};
+  await env.QUESTIONS!.prepare('UPDATE account_recoveries SET expires=0 WHERE account_id=?').bind(ray.id).run();
+  expect((await call('/invite/peek','POST',{token:new URLSearchParams(new URL(ray.url).hash.slice(1)).get('join')})).status).toBe(404);
+  expect((await call('/invite','POST',{id:ray.id},dad.cookie)).status).toBe(404);
+  const again=await (await call('/invite','POST',{id:ray.id},benny)).json() as {url:string};
+  expect(await (await call('/invite/peek','POST',{token:new URLSearchParams(new URL(again.url).hash.slice(1)).get('join')})).json()).toMatchObject({name:'Cousin Ray',invitedBy:'Benny'});
+  expect((await call('/invite','POST',{id:ray.id},mom.cookie)).status).toBe(200);
+  // Jason sees who invited whom and who has joined.
+  const {members}=await (await call('/members','GET',undefined,mom.cookie)).json() as {members:{id:string;invited_by:string|null;joined:number;family:number}[]};
+  expect(members.find(m=>m.id===id)).toMatchObject({invited_by:'Dad',joined:1,family:1});
+  expect(members.find(m=>m.id===ray.id)).toMatchObject({invited_by:'Benny',joined:0,family:1});
+  // Unused invites are capped per person.
+  for(let n=1;n<10;n++)expect((await call('/invite','POST',{name:`Cousin ${n}`},benny)).status).toBe(200);
+  expect((await call('/invite','POST',{name:'One too many'},benny)).status).toBe(409);
+});
+it('lets people join through one shared family link as requests the owner lets in',async()=>{
+  // Only the owner makes the link; family and strangers cannot.
+  expect((await call('/family-link','POST',{},dad.cookie)).status).toBe(403);
+  expect((await call('/family-link','GET',undefined,dad.cookie)).status).toBe(403);
+  expect(await (await call('/family-link','GET',undefined,mom.cookie)).json()).toEqual({expires:null});
+  const made=await (await call('/family-link','POST',{},mom.cookie)).json() as {url:string;expires:number};
+  const token=new URLSearchParams(new URL(made.url).hash.slice(1)).get('family')!;
+  expect(made.url.startsWith(`${origin}/?account=1#family=`)).toBe(true);
+  expect(await (await call('/family-link','GET',undefined,mom.cookie)).json()).toEqual({expires:made.expires});
+  expect(await (await call('/family-link/peek','POST',{token})).json()).toMatchObject({by:'Mom'});
+  // Aunt June makes her own account through it: a request, no family access yet.
+  const key=await authenticator(),flow=await start('register','',{name:'Aunt June',family:token});key.handle=flow.options.user!.id;
+  const joined=await call('/passkey/register/finish','POST',{response:await registration(key,flow.options.challenge)},flow.cookie);expect(joined.status).toBe(200);
+  const june=cookieFrom(joined,'__Host-plunge-session');
+  const {account}=await (await call('','GET',undefined,june)).json() as {account:{id:string;requested:number;family:number}};
+  expect(account).toMatchObject({requested:1,family:0});expect((await idea(june)).status).toBe(403);
+  // The owner hears someone is waiting, sees who brought them, and lets them in.
+  expect(await (await call('','GET',undefined,mom.cookie)).json()).toMatchObject({waiting:1});
+  expect(await (await call('','GET',undefined,dad.cookie)).json()).not.toHaveProperty('waiting');
+  const {members}=await (await call('/members','GET',undefined,mom.cookie)).json() as {members:{id:string;requested:number;invited_by:string|null}[]};
+  expect(members.find(m=>m.id===account.id)).toMatchObject({requested:1,invited_by:'Mom',via_link:1});
+  // A link sign-up isn't one of Mom's personal invites.
+  expect((await (await call('/invites','GET',undefined,mom.cookie)).json() as {invites:{id:string}[]}).invites.map(i=>i.id)).not.toContain(account.id);
+  expect((await call('/grant','POST',{id:account.id,enabled:true},mom.cookie)).status).toBe(200);
+  expect(await (await call('','GET',undefined,june)).json()).toMatchObject({account:{family:1,requested:0}});
+  expect(await (await call('','GET',undefined,mom.cookie)).json()).toMatchObject({waiting:0});
+  // A bad or turned-off link makes nothing.
+  expect((await call('/passkey/register/options','POST',{name:'Stranger',family:'0'.repeat(64)})).status).toBe(401);
+  const late=await start('register','',{name:'Late cousin',family:token}),lateKey=await authenticator();
+  expect((await call('/family-link','POST',{off:true},mom.cookie)).status).toBe(200);
+  expect((await call('/family-link/peek','POST',{token})).status).toBe(404);
+  expect((await call('/passkey/register/finish','POST',{response:await registration(lateKey,late.options.challenge)},late.cookie)).status).toBe(401);
+  expect(await env.QUESTIONS!.prepare("SELECT COUNT(*) n FROM accounts WHERE name='Late cousin'").first()).toEqual({n:0});
+  // A new link replaces the old one; an expired one is refused.
+  const second=await (await call('/family-link','POST',{},mom.cookie)).json() as {url:string};
+  await env.QUESTIONS!.prepare('UPDATE family_links SET expires=0').run();
+  expect((await call('/family-link/peek','POST',{token:new URLSearchParams(new URL(second.url).hash.slice(1)).get('family')})).status).toBe(404);
 });
 it('recovers the same account once, preserves family grants, and invalidates old keys and sessions',async()=>{
   expect((await call('/recovery','POST',{id:mom.id},dad.cookie)).status).toBe(403);

@@ -63,3 +63,7 @@
 
 .rooms-shell { height: 100%; display: flex; flex-direction: column; }
 .seat-note { background: #286f65; color: var(--cream); }
+/* One quiet offer, after a hand, to someone playing signed out. */
+.room-offer { display: flex; align-items: center; gap: 8px; padding: 4px 10px; background: #f3e6c8; color: #3e2f1f; font-size: 13px; line-height: 1.4; flex: 0 0 auto; }
+.room-offer a { color: #205e49; flex: 1; min-height: 36px; display: flex; align-items: center; }
+.room-offer button { background: none; border: 0; color: inherit; font: inherit; text-decoration: underline; min-height: 36px; }

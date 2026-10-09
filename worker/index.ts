@@ -39,7 +39,7 @@ export default {
     if (url.pathname === '/api/rooms/family') return familyTableRequest(request, env.ROOMS, env.QUESTIONS, await accountSession(request, env));
     if (url.pathname === '/api/rooms/live') return liveTablesRequest(request, env.ROOMS, env.QUESTIONS);
     if (url.pathname === '/api/rooms' || url.pathname.startsWith('/api/rooms/'))
-      return roomRequest(request, env.ROOMS, env.QUESTIONS, request.method === 'POST' ? await accountSession(request, env) : null);
+      return roomRequest(request, env.ROOMS, env.QUESTIONS, request.method === 'POST' || url.pathname.endsWith('/socket') ? await accountSession(request, env) : null);
     if (url.pathname === '/api/ideas' || url.pathname.startsWith('/api/ideas/')) return ideasRequest(request, env);
     const match=/^\/api\/questions(?:\/([a-f0-9]{32}))?$/.exec(url.pathname);
     if (!match) return json({error:'Not found.'},404);

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { legalActions, type GameState } from '../src/engine';
 import { finishedHand } from './hand-fixtures';
-import { createRoom, joinRoom, roomHandEntry } from '../worker/rooms';
+import { claimSeat, createRoom, joinRoom, roomHandEntry } from '../worker/rooms';
 import { grantFamily, hashToken } from '../worker/accounts';
 import type { RoomCredentials, RoomMessage, RoomState } from '../src/room/protocol';
 
@@ -32,8 +32,8 @@ beforeAll(async () => {
 }, 30000);
 afterAll(async () => { await mf?.dispose(); await rm(directory, { recursive: true, force: true }); });
 const cookie = `__Host-plunge-session=${token}`, dadCookie = `__Host-plunge-session=${dadToken}`;
-async function connect(credentials: RoomCredentials) {
-  const response = await mf.dispatchFetch(`${origin}/api/rooms/${credentials.roomId}/socket?token=${credentials.token}`, { headers: { Upgrade: 'websocket', Origin: origin } });
+async function connect(credentials: RoomCredentials, extra: Record<string, string> = {}) {
+  const response = await mf.dispatchFetch(`${origin}/api/rooms/${credentials.roomId}/socket?token=${credentials.token}`, { headers: { Upgrade: 'websocket', Origin: origin, ...extra } });
   expect(response.status).toBe(101);
   const socket = response.webSocket!, messages: RoomMessage[] = []; let waiters: (() => void)[] = [];
   socket.addEventListener('message', event => { if (event.data !== 'pong') { messages.push(JSON.parse(String(event.data)) as RoomMessage); for (const resolve of waiters.splice(0)) resolve(); } });
@@ -119,6 +119,24 @@ it('records a finished family-table hand with every human seat, the branch a tak
   expect((await rows('SELECT COUNT(*) n FROM hands'))[0]!.n).toBe(2);
   a.socket.close(); b.socket.close();
 }, 60000);
+
+it('gives a seat taken by name to the account that signs in and reconnects to it', async () => {
+  const created = await mf.dispatchFetch(`${origin}/api/rooms`, { method: 'POST', body: JSON.stringify({ name: 'Guest' }), headers: { 'Content-Type': 'application/json', Origin: origin } });
+  const seat = await created.json() as RoomCredentials;
+  const anonymous = await connect(seat);
+  expect((await anonymous.until(m => m.seats[0]?.connected === true)).seats[0]!.name).toBe('Guest');
+  anonymous.socket.close();
+  const signedIn = await connect(seat, { Cookie: dadCookie });
+  expect((await signedIn.until(m => m.seats[0]?.name === 'Dad')).seats[0]!.connected).toBe(true);
+  signedIn.socket.close();
+  // An account holds one chair per table, and a seat keeps the account it already has.
+  const room = createRoom('2'.repeat(32), 'Host');
+  joinRoom(room, 'Mom on the tablet', undefined, 1000, undefined, mom);
+  expect(claimSeat(room, 0, { id: mom, name: 'Mom' })).toBe(false);
+  expect(claimSeat(room, 0, { id: dad, name: 'Dad' })).toBe(true);
+  expect(room.players[0]).toMatchObject({ name: 'Dad', account: dad });
+  expect(claimSeat(room, 0, { id: 'b'.repeat(32), name: 'Someone' })).toBe(false);
+}, 20000);
 
 it('records each attempt once: a finished hand, a branch left part-way, a retry under its own id', () => {
   // An invite room: open to anyone by name. A seat may carry an account or not.

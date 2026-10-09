@@ -6,3 +6,20 @@
 .account-new {border-top:1px solid #cabc9e;margin-top:26px;padding-top:12px;}.account-help {margin:24px 0;line-height:1.6;}.account-help summary,.account-member summary {cursor:pointer;min-height:44px;}
 
 .account-stats {margin-top:28px;}.account-stats p {line-height:1.5;margin:6px 0;}.account-stats .big-btn {margin-top:10px;}
+
+.account-page .account-lede {font-size:19px;line-height:1.5;}
+.account-invite {margin-top:28px;border-top:1px solid #cabc9e;padding-top:8px;}
+.account-invites {list-style:none;padding:0;margin:12px 0 0;}
+.account-invites li {display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-height:44px;border-top:1px solid #e6dac1;}
+.account-invites span {font-size:14px;opacity:.8;}.account-invites .text-btn {margin-left:auto;}
+
+/* The sample walkthrough's bar, above the real account screens. */
+.account-demo {display:grid;gap:12px;margin-bottom:20px;}
+.account-demo .account-demo-hint {font-weight:600;font-size:15px;}
+.account-demo-actions {display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-top:10px;}
+.account-demo-actions .big-btn {width:auto;text-decoration:none;display:inline-block;padding-inline:18px;}
+.account-demo .demo-people button:disabled {opacity:.5;cursor:default;}
+.account-waiting {border:2px solid #d9b56f;border-radius:14px;padding:4px 16px 8px;margin-bottom:24px;background:#fff3d6;}
+.account-waiting .account-member {border-top:none;}
+/* Links styled as big buttons center their text like real buttons. */
+.account-page a.big-btn {display:flex;align-items:center;justify-content:center;}
