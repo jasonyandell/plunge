@@ -9,7 +9,7 @@
 // that agent) and the public record. Nothing reads a hand the agent cannot see.
 import { readFileSync } from 'node:fs';
 import {
-  Pub, SUIT, RANK, legalReduced, trickWinnerPos, visibleSeats,
+  Pub, SUIT, RANK, legalReduced, trickWinnerPos, visibleSeats, ruleCard, canon,
 } from '../../../public/lab/bridge/engine.js';
 import { agentOf } from '../../../public/lab/bridge/walt.js';
 
@@ -34,6 +34,8 @@ export function loadCorpus(path) {
 }
 
 const popcount = (x) => { let n = 0; while (x) { x &= x - 1; n++; } return n; };
+const lowRank = (m) => 31 - Math.clz32(m & -m);
+const highRank = (m) => 31 - Math.clz32(m);
 
 export const FEATURE_NAMES = [
   // position-level
@@ -43,12 +45,13 @@ export const FEATURE_NAMES = [
   // candidate-level
   'isTrump', 'followsLed', 'isDiscard', 'isLead', 'wouldWinNow', 'higherUnseen',
   'higherPartnerKnown', 'higherOppKnown', 'isMaster', 'higherOwn', 'suitLenOwn', 'rankFrac',
+  'isRuleCard', 'isLowestOfSuit', 'isHighestOfSuit', 'isRuff', 'ledByPartner', 'trickIdx',
 ];
 
 /** Features for one candidate card at a reconstructed position.
  *  hSeat: remaining hand (Uint16Array(4)) of the seat on play.
  *  visHands: per-seat remaining hands the agent can see (null if unseen). */
-function featurize(pub, seat, agent, hSeat, visHands, nCands, c) {
+function featurize(pub, seat, agent, hSeat, visHands, nCands, c, ruleC) {
   const u = SUIT[c], r = RANK[c];
   const target = pub.target;
   const need = target - pub.declTricks;
@@ -101,6 +104,12 @@ function featurize(pub, seat, agent, hSeat, visHands, nCands, c) {
     led >= 0 && u !== led && u !== pub.strain ? 1 : 0, tl === 0 ? 1 : 0,
     wouldWinNow, higherUnseen, higherPartnerKnown, higherOppKnown, isMaster, higherOwn,
     popcount(hSeat[u]), r / 12,
+    c === ruleC ? 1 : 0,
+    hSeat[u] && r === lowRank(hSeat[u]) ? 1 : 0,
+    hSeat[u] && r === highRank(hSeat[u]) ? 1 : 0,
+    tl > 0 && u === pub.strain && led !== pub.strain && hSeat[led] === 0 ? 1 : 0,
+    tl > 0 && pub.leader === ((seat + 2) & 3) ? 1 : 0,
+    pub.n >> 2,
   ];
 }
 
@@ -135,6 +144,8 @@ export function buildDataset(rows, deals, tag) {
         }
         for (let uu = 0; uu < 4; uu++) hSeat[uu] = deal[seat * 4 + uu] & ~pub.played[uu];
         const legal = new Set(legalReduced(hSeat, pub));
+        const ph = agent === pub.decl ? visHands[(seat + 2) & 3] : null;
+        const ruleC = canon(ruleCard(pub, seat, hSeat, ph), hSeat, pub);
         let vMin = Infinity, vMax = -Infinity;
         for (const [c, m] of vec.v) { if (m < vMin) vMin = m; if (m > vMax) vMax = m; }
         const decId = decId0++;
@@ -144,7 +155,7 @@ export function buildDataset(rows, deals, tag) {
             group: `${tag}:${row.board}`, board: row.board, tag, ply: pub.n, seat,
             card: c, y: makes / nDeals, makes, deals: nDeals, pick: vec.pick === c ? 1 : 0,
             decId, vMin, vMax, nCands: vec.v.length,
-            feat: featurize(pub, seat, agent, hSeat, visHands, vec.v.length, c),
+            feat: featurize(pub, seat, agent, hSeat, visHands, vec.v.length, c, ruleC),
           });
         }
       }
