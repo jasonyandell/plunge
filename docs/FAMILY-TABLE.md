@@ -53,7 +53,8 @@ absent people never block; the target of a kick does not vote on it.
 | start, restart, undo, open, close | veto | 5 s | nobody says no |
 | next hand | allow | 90 s | a second person (alone with Walt, just you) |
 | kick | allow | 10 s | most of the table |
-| admit a knock | allow | 60 s | one yes |
+
+A knock is not on this list: see Doors.
 
 - **Veto** proposals pass at the deadline unless someone says no, and pass early
   when everyone present has said yes. Alone with Walt, the proposer's own yes
@@ -63,7 +64,7 @@ absent people never block; the target of a kick does not vote on it.
   shaking must not take the result card away from people still reading it, so
   tapping **Shake the next hand** after someone else did counts as the second
   yes, and the ask quietly expires if nobody joins it.
-- Votes and knocks are keyed to the proposal id rather than the table revision.
+- Votes are keyed to the proposal id rather than the table revision.
   The revision guard protects game moves against stale state; a vote's
   precondition is the proposal's identity, and two votes cast at the same
   revision must both count.
@@ -77,9 +78,23 @@ The table is tuned in `VOTE_RULES` and nowhere else.
 
 An open table seats anyone with the link, as before. A closed table refuses the
 join with `closed: true`; the browser then opens a visitor socket (no seat, no
-key) and sends `knock`. The knock is an `admit` proposal; when it passes, the
-coordinator records an admission for that visitor for five minutes and the
-browser joins again with its knock id. Visitors see snapshots while they wait.
+key) and sends `knock`.
+
+A knock is a doorbell, not a vote. It used to be an `admit` proposal, which
+meant a knock during any other vote (most often the 90-second next hand) was
+turned away, and a waiting knock held up the table's own votes. Now knocks sit
+in their own list on the snapshot (`knocks`), next to whatever the table is
+deciding. Anyone seated answers with `door` (**Let them in** / **Not now**);
+the first answer decides, since one yes was all a knock ever needed. A yes
+records an admission for that visitor for five minutes and the browser joins
+again with its knock id.
+
+A knock stands while its visitor's socket is open: there is no timer to beat,
+and closing the app takes the knock away. If the knock goes missing (a dropped
+connection) the browser rings again; while all four chairs are taken it waits
+and rings when one opens. An answer stays on the list for five minutes so the
+visitor can read it; **Knock again** after a "not now" rings fresh. Visitors
+see snapshots while they wait.
 A kicked or departed key reconnects to a socket that is closed with code 4003
 and the reason on its first ping, so the browser can forget the seat instead of
 reconnecting forever.

@@ -17,7 +17,7 @@ import { CLOSE_EXPIRED, CLOSE_OTHER_TAB, CLOSE_SEAT_GONE } from './protocol';
 import { ClosedTableError, enterRoom, familyProbe, forgetSeat, newVisitorId, RoomConnection, roomCode, roomFromHash, roomFromInput,
   ROOMS_ENABLED, savedSeat, saveSeat, type RoomIdentity } from './client';
 import { relativeSeat, roomHistory } from './view';
-import { describeResult, VoteBar } from './VoteBar';
+import { describeResult, Doorbell, VoteBar } from './VoteBar';
 import { rememberTableName, tableName, whoAmI } from '../account/me';
 import './room.css';
 
@@ -61,7 +61,8 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
   const [credentials, setCredentials] = useState<RoomCredentials | null>(() => {
     try { return roomId ? savedSeat(roomId, localStorage) : null; } catch { return null; }
   });
-  const [knock, setKnock] = useState<{ visitor: string; name: string; roomId: string; sent: boolean; answer: string | null } | null>(null);
+  /** `sentAt`: the table's revision when this browser last knocked; an answer only counts after it. */
+  const [knock, setKnock] = useState<{ visitor: string; name: string; roomId: string; sentAt: number | null; answer: string | null } | null>(null);
   const [visitorRoom, setVisitorRoom] = useState<RoomState | null>(null);
   const [name, setName] = useState(tableName);
   /** Signed in: the coordinator seats this person under their account name. Family also lists the tables they open. */
@@ -151,17 +152,22 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
       setKnock(null); setNotice(null); setCredentials(got);
     } finally { joining.current = false; }
   };
-  // Knocking: once the visitor connection is up, ask; then watch the table's answer.
+  // Knocking: once the visitor connection is up, ring; ring again if the knock went
+  // missing (a dropped connection) or a chair just opened; then watch for the answer.
+  const atDoor = knock && visitorRoom ? visitorRoom.knocks?.find(entry => entry.visitor === knock.visitor) : undefined;
+  const chairsFull = !!visitorRoom && visitorRoom.seats.every(Boolean);
   useEffect(() => {
     if (!knock || !visitorRoom || !online || credentials || joining.current) return;
     if (visitorRoom.open) { void sitDown(knock.name, knock.roomId).catch(e => setError(String(e).replace(/^Error: /, ''))); return; }
-    if (!knock.sent) { if (send({ type: 'knock', name: knock.name })) setKnock({ ...knock, sent: true }); return; }
-    const result = visitorRoom.lastVote;
-    if (result?.knock === knock.visitor && result.kind === 'admit') {
-      if (result.outcome === 'passed') void sitDown(knock.name, knock.roomId, knock.visitor).catch(e => setError(String(e).replace(/^Error: /, '')));
-      else if (!knock.answer) setKnock({ ...knock, answer: describeResult(result) });
+    if (knock.answer) return;
+    if (knock.sentAt === null || (!atDoor && !chairsFull && visitorRoom.revision > knock.sentAt)) {
+      if (!chairsFull && send({ type: 'knock', name: knock.name })) setKnock({ ...knock, sentAt: visitorRoom.revision });
+      return;
     }
-  }, [knock?.visitor, knock?.sent, visitorRoom?.revision, online]);
+    if (!atDoor?.answer || visitorRoom.revision <= knock.sentAt) return;
+    if (atDoor.answer.yes) void sitDown(knock.name, knock.roomId, knock.visitor).catch(e => setError(String(e).replace(/^Error: /, '')));
+    else setKnock({ ...knock, answer: `${atDoor.answer.by} said not right now.` });
+  }, [knock?.visitor, knock?.sentAt, knock?.answer, visitorRoom?.revision, online]);
   const holding = !!table && table.holdUntil > Date.now();
   // Whoever is lowest at the table and present runs Walt for every seat
   // without a person. Presence changes cancel pending work; thinking updates do not.
@@ -212,7 +218,7 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     } catch (e) {
       if (e instanceof ClosedTableError && target) {
         history.replaceState(null, '', `?rooms=1#room=${target}`);
-        setKnock({ visitor: newVisitorId(), name: who, roomId: target, sent: false, answer: null });
+        setKnock({ visitor: newVisitorId(), name: who, roomId: target, sentAt: null, answer: null });
       } else setError(String(e).replace(/^Error: /, ''));
     }
     finally { setOpening(false); }
@@ -229,6 +235,7 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     setTableOpen(false);
   };
   const vote = (choice: Vote) => { if (online && table?.proposal) send({ type: 'vote', proposal: table.proposal.id, vote: choice }); };
+  const answerDoor = (visitor: string, yes: boolean) => { if (online) send({ type: 'door', visitor, yes }); };
   const agreeOr = (kind: ProposalKind) => {
     const open = table?.proposal;
     if (open?.kind === kind && seat !== null && open.votes[seat] === undefined) vote('yes'); else propose(kind);
@@ -275,6 +282,7 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     {!online && <div class="room-pause" role="status">Reconnecting… Your game and seat are saved.</div>}
     {notice && <div class="room-pause" role="status">{notice}</div>}
     {waitingOn && !shown?.proposal && <div class="room-pause" role="status">Waiting a moment for {waitingOn} to come back…</div>}
+    {credentials && shown?.knocks && <Doorbell knocks={shown.knocks} answer={answerDoor} disabled={!online} />}
     {shown?.proposal && <VoteBar proposal={shown.proposal} seat={seat} seats={shown.seats} vote={vote} pending={pending} />}
     {!shown?.proposal && lastVote && <div class="room-takeback" role="status" data-vote-revision={lastVote.revision}>{describeResult(lastVote)}</div>}
     {shown?.lastUndo && !lastVote && !shown.proposal && <div class="room-takeback" role="status" data-undo-revision={shown.lastUndo.revision}>Takeback · Back to before {shown.lastUndo.name}’s last move, for everyone.</div>}
@@ -298,9 +306,9 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     </div></div>
     : !shown ? <div class="room-wait" role="status">Connecting to the table…</div>
     : knock && !credentials ? <div class="room-wait"><div class="home-card"><p class="eyebrow">Closed table</p><h1 class="sheet-title">Knocking…</h1>
-      <p>{knock.answer ?? (shown.proposal?.knock === knock.visitor ? 'Anyone at the table can let you in.' : knock.sent ? 'Waiting for the table.' : 'Asking to come in.')}</p>
+      <p>{knock.answer ?? (atDoor ? 'Anyone at the table can let you in. Stay on this screen.' : chairsFull ? 'All four chairs are taken. You will knock again when one opens.' : 'Asking to come in.')}</p>
       <div class="room-chairs">{[0,2,1,3].map(s => <div key={s}><strong>{shown.seats[s]?.name ?? 'Walt'}</strong><span>{shown.seats[s] ? shown.seats[s]!.connected ? 'Here' : 'Away' : 'Open chair'}</span></div>)}</div>
-      {knock.answer && <button class="big-btn" onClick={() => setKnock({ ...knock, sent: false, answer: null })}>Knock again</button>}
+      {knock.answer && <button class="big-btn" onClick={() => setKnock({ ...knock, sentAt: null, answer: null })}>Knock again</button>}
       <a class="text-btn" href={location.pathname}>Back to solo play</a>
     </div></div>
     : credentials && !shown.game ? <div class="room-wait"><div class="home-card"><p class="eyebrow">Your family table</p><h1 class="sheet-title">Pull up a chair</h1>
@@ -318,7 +326,7 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
       <div class="room-people">{[0,2,1,3].map(s => { const person = table.seats[s]; return <div key={s} class="room-person"><span><strong>{person?.name ?? 'Walt'}</strong>{s === credentials.seat ? ' · You' : person ? person.away ? ' · Walt is playing' : person.connected ? ' · Here' : ' · Rejoining' : ''}</span>
         {person && s !== credentials.seat && <button class="text-btn" disabled={!online || pending || !!table.proposal} onClick={() => propose('kick', s as Seat)}>Ask to step out</button>}</div>; })}</div>
       <button class="big-btn secondary" disabled={!online || pending || !!table.proposal} onClick={() => propose(table.open ? 'close' : 'open')}>{table.open ? 'Close the table' : 'Open the table'}</button>
-      <p class="hint">{table.open ? 'Anyone with the invite can sit down.' : 'Newcomers knock; one yes from anyone here lets them in.'}</p>
+      <p class="hint">{table.open ? 'Anyone with the invite can sit down.' : 'Newcomers knock; anyone here can let them in, any time.'}</p>
       {table.game && <button class="big-btn secondary" disabled={!online || pending || !!table.proposal} onClick={() => propose('restart')}>Start over</button>}
       <button class="big-btn secondary" onClick={download}>Export history</button>
       <button class="big-btn" onClick={() => setTableOpen(false)}>Back to the table</button></div></div>}

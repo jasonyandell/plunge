@@ -4,7 +4,7 @@ import { applyAction, legalActions, newGame, PLUNGE_CONFIG, type Action, type Ga
 import { handSteps } from '../src/engine/hand-history';
 import { catalogueDeal } from '../src/ai/catalogue';
 import type { AuctionEvidence } from '../src/ai/auction';
-import type { ListedTable, Proposal, ProposalKind, RoomCommand, RoomCredentials, RoomState, VoteResult } from '../src/room/protocol';
+import type { Knock, ListedTable, Proposal, ProposalKind, RoomCommand, RoomCredentials, RoomState, VoteResult } from '../src/room/protocol';
 import { CLOSE_EXPIRED, CLOSE_OTHER_TAB, CLOSE_PAUSED, CLOSE_SEAT_GONE, ROOM_ID, VISITOR_ID } from '../src/room/protocol';
 import { roomAuctionConfig, roomUndoTarget, upgradeRoom } from './room-undo';
 import { newProposal, objector, PROPOSAL_KINDS, proposalStatus } from './room-votes';
@@ -155,7 +155,8 @@ export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), n
   const seat = ([2, 1, 3, 0] as const).find(seat => !room.players[seat]);
   if (seat === undefined) throw new Error('All four seats are taken.');
   room.players[seat] = { name: cleanName(name), token, seen: now, ...(account ? { account } : {}) };
-  room.state = { ...room.state, revision: room.state.revision + 1, thinkingSeat: null };
+  room.state = { ...room.state, revision: room.state.revision + 1, thinkingSeat: null,
+    knocks: (room.state.knocks ?? []).filter(entry => entry.visitor !== knock) };
   room.updated = now;
   return { roomId: room.state.roomId, token, seat };
 }
@@ -197,7 +198,7 @@ function undoLastHuman(room: SavedRoom): boolean {
 }
 const finished = (game: GameState | null) => !game || game.phase === 'game-over';
 /** Whether this proposal could pass right now; the message explains why not. */
-function checkProposal(room: SavedRoom, kind: ProposalKind, by: Seat | null, target: Seat | undefined, now: number): void {
+function checkProposal(room: SavedRoom, kind: ProposalKind, by: Seat, target: Seat | undefined, now: number): void {
   const game = room.state.game;
   if (kind === 'start' && !finished(game)) throw new Error('The game is already in progress.');
   if (kind === 'restart' && !game) throw new Error('Start the game first.');
@@ -210,7 +211,6 @@ function checkProposal(room: SavedRoom, kind: ProposalKind, by: Seat | null, tar
     if (target === undefined || !room.players[target]) throw new Error('That chair is already Walt’s.');
     if (target === by) throw new Error('Use Leave to step out yourself.');
   }
-  if (kind === 'admit' && room.players.every(Boolean)) throw new Error('All four seats are taken.');
 }
 function applyProposal(room: SavedRoom, proposal: Proposal, now: number): boolean {
   checkProposal(room, proposal.kind, proposal.by, proposal.target, now);
@@ -225,10 +225,6 @@ function applyProposal(room: SavedRoom, proposal: Proposal, now: number): boolea
     case 'open': room.state = { ...room.state, open: true }; return true;
     case 'close': room.state = { ...room.state, open: false }; return true;
     case 'kick': vacate(room, proposal.target!, 'kicked'); return true;
-    case 'admit':
-      room.admitted = [...room.admitted!.filter(entry => entry.until > now && entry.knock !== proposal.knock),
-        { knock: proposal.knock!, name: proposal.byName, until: now + ADMISSION }];
-      return true;
   }
 }
 function vacate(room: SavedRoom, seat: Seat, reason: 'kicked' | 'left'): void {
@@ -250,8 +246,7 @@ export function settleRoom(room: SavedRoom, connected: ReadonlySet<Seat>, now = 
   const present = seated(room, connected), status = proposalStatus(proposal, present, now);
   if (status === 'open') return false;
   const result: VoteResult = { revision: room.state.revision + 1, kind: proposal.kind, byName: proposal.byName, outcome: status,
-    ...(proposal.target !== undefined ? { targetName: seatName(room, proposal.target) } : {}),
-    ...(proposal.knock ? { knock: proposal.knock } : {}) };
+    ...(proposal.target !== undefined ? { targetName: seatName(room, proposal.target) } : {}) };
   if (status === 'failed') { const who = objector(proposal, present); if (who !== undefined) result.noFrom = seatName(room, who); }
   room.state = { ...room.state, proposal: null };
   if (status === 'passed') {
@@ -267,7 +262,8 @@ function touch(room: SavedRoom, connected: ReadonlySet<Seat>, now: number): void
   for (const seat of connected) if (room.players[seat]) room.players[seat]!.seen = Math.max(room.players[seat]!.seen, now);
 }
 
-/** A visitor at a closed table asks the people present to let them in. */
+/** A visitor at a closed table rings the doorbell. Not a vote, so it never waits on one:
+ * the knock stands until someone at the table answers or the visitor stops waiting. */
 export function knockRoom(room: SavedRoom, visitor: string, id: string, name: string, connected: ReadonlySet<Seat>,
   now = Date.now()): 'duplicate' | 'changed' {
   if (!COMMAND_ID.test(id) || !VISITOR_ID.test(visitor)) throw new Error('Invalid room command.');
@@ -275,22 +271,34 @@ export function knockRoom(room: SavedRoom, visitor: string, id: string, name: st
   if (room.accepted.includes(key)) return 'duplicate';
   touch(room, connected, now); upgradeRoom(room); settleRoom(room, connected, now);
   if (room.state.open) throw new Error('This table is open. Come on in.');
-  checkProposal(room, 'admit', null, undefined, now);
+  if (room.players.every(Boolean)) throw new Error('All four seats are taken.');
   if (room.admitted!.some(entry => entry.knock === visitor && entry.until > now)) throw new Error('The table already said yes. Come on in.');
-  if (room.state.proposal?.knock === visitor) return 'duplicate';
-  if (room.state.proposal) throw new Error('The table is deciding something else. Knock again in a moment.');
-  room.state = { ...room.state, proposal: newProposal(id, 'admit', null, cleanName(name), now, { knock: visitor }) };
+  const knocks = room.state.knocks ?? [], mine = knocks.find(entry => entry.visitor === visitor);
+  if (mine && !mine.answer) return 'duplicate';
+  if (!mine && knocks.length >= MAX_VISITORS) throw new Error('The doorway is crowded. Try again in a moment.');
+  // Knocking again after a "not now" replaces the answer with a fresh knock.
+  room.state = { ...room.state, knocks: [...knocks.filter(entry => entry.visitor !== visitor), { visitor, name: cleanName(name), at: now }] };
   if (!settleRoom(room, connected, now)) room.state = { ...room.state, revision: room.state.revision + 1 };
   room.accepted = [...room.accepted.slice(-511), key];
   room.updated = now;
   return 'changed';
 }
 
+/** The doorstep: a knock lasts while its visitor waits, and an answer long enough to be read.
+ * `waiting`: visitor ids with a live connection. Returns whether the room changed (one revision). */
+export function tidyDoor(room: SavedRoom, waiting: ReadonlySet<string>, now = Date.now()): boolean {
+  const knocks = room.state.knocks ?? [];
+  const kept = knocks.filter(entry => entry.answer ? entry.answer.at + ADMISSION > now : waiting.has(entry.visitor));
+  if (kept.length === knocks.length) return false;
+  room.state = { ...room.state, knocks: kept, revision: room.state.revision + 1 };
+  return true;
+}
+
 /** The same guard protects human moves, delayed Walt replies and reconnect retries. */
 export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
   connected: ReadonlySet<Seat>, now = Date.now()): 'duplicate' | 'changed' | 'thinking' {
   if (!command || !COMMAND_ID.test(command.id) || command.type === 'knock'
-    || !['action', 'thinking', 'propose', 'vote', 'leave'].includes(command.type)) throw new Error('Invalid room command.');
+    || !['action', 'thinking', 'propose', 'vote', 'leave', 'door'].includes(command.type)) throw new Error('Invalid room command.');
   const key = `${seat}:${command.id}`;
   if (room.accepted.includes(key)) return 'duplicate';
   if (!room.players[seat]) throw new Error('This seat is no longer yours.');
@@ -303,6 +311,17 @@ export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
     if (!['yes', 'no'].includes(command.vote)) throw new Error('Invalid room command.');
     if (proposal.target === seat) throw new Error('The rest of the table decides this one.');
     room.state = { ...room.state, proposal: { ...proposal, votes: { ...proposal.votes, [seat]: command.vote } } };
+  } else if (command.type === 'door') {
+    // The first person to answer decides; one yes is all a knock ever needed.
+    if (!VISITOR_ID.test(command.visitor) || typeof command.yes !== 'boolean') throw new Error('Invalid room command.');
+    const knocks = room.state.knocks ?? [], knock = knocks.find(entry => entry.visitor === command.visitor);
+    if (!knock) throw new Error('They stopped knocking.');
+    if (knock.answer) throw new Error(`${knock.answer.by} already answered.`);
+    if (command.yes && room.players.every(Boolean)) throw new Error('All four seats are taken.');
+    if (command.yes) room.admitted = [...room.admitted!.filter(entry => entry.until > now && entry.knock !== knock.visitor),
+      { knock: knock.visitor, name: knock.name, until: now + ADMISSION }];
+    const answered: Knock = { ...knock, answer: { by: room.players[seat]!.name, yes: command.yes, at: now } };
+    room.state = { ...room.state, knocks: knocks.map(entry => entry === knock ? answered : entry) };
   } else if (command.type === 'leave') {
     vacate(room, seat, 'left');
     room.state = { ...room.state, thinkingSeat: null };
@@ -311,7 +330,7 @@ export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
     if (command.revision !== room.state.revision) throw new Error('The table changed. Please try your move again.');
     const runner = runnerOf(room, connected);
     if (command.type === 'propose') {
-      if (!PROPOSAL_KINDS.includes(command.kind) || command.kind === 'admit') throw new Error('Invalid room command.');
+      if (!PROPOSAL_KINDS.includes(command.kind)) throw new Error('Invalid room command.');
       if (command.target !== undefined && ![0, 1, 2, 3].includes(command.target)) throw new Error('Invalid room command.');
       if (room.state.proposal) throw new Error('The table is already deciding something. One moment.');
       checkProposal(room, command.kind, seat, command.target, now);
@@ -429,6 +448,8 @@ export class PlungeRoom {
     if (!this.room) return;
     const connected = this.connected(exclude);
     if (settleRoom(this.room, connected, Date.now())) changed = true;
+    const waiting = new Set(this.live(exclude).map(socket => socket.deserializeAttachment().visitor).filter((id): id is string => !!id));
+    if (tidyDoor(this.room, waiting, Date.now())) changed = true;
     if (changed) await this.save();
     if (changed) await this.recordHands();
     for (const socket of this.live(exclude)) {

@@ -30,7 +30,7 @@ describe('one vote at a time', () => {
     // If the other person drops, the one still here decides.
     expect(proposalStatus(next, present(0), 1001)).toBe('passed');
   });
-  it('needs the rest of the table for a kick and one yes for a knock, and fails at the deadline', () => {
+  it('needs the rest of the table for a kick, and fails at the deadline', () => {
     const kick = newProposal('k', 'kick', 0, 'Host', 1000, { target: 1 });
     expect(voters(kick, present(0, 1, 2, 3))).toEqual([0, 2, 3]);
     expect(proposalStatus(kick, present(0, 1, 2, 3), 1000)).toBe('open');
@@ -39,12 +39,5 @@ describe('one vote at a time', () => {
     expect(proposalStatus({ ...kick, votes: { 0: 'yes', 3: 'no' } }, present(0, 1, 2, 3), 1001)).toBe('failed');
     expect(proposalStatus(kick, present(0, 1, 2, 3), 1000 + VOTE_RULES.kick.window)).toBe('failed');
     expect(proposalStatus(kick, present(0, 1), 1000)).toBe('passed');
-    const knock = newProposal('a', 'admit', null, 'Cousin', 1000, { knock: 'f'.repeat(16) });
-    expect(knock.votes).toEqual({});
-    expect(proposalStatus(knock, present(0, 2), 1000)).toBe('open');
-    expect(proposalStatus({ ...knock, votes: { 2: 'yes' } }, present(0, 2), 1001)).toBe('passed');
-    expect(proposalStatus({ ...knock, votes: { 0: 'no' } }, present(0, 2), 1001)).toBe('failed');
-    expect(proposalStatus(knock, present(), 60999)).toBe('open');
-    expect(proposalStatus(knock, present(), 61000)).toBe('failed');
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { legalActions, type Seat } from '../src/engine';
-import { ClosedTable, commandRoom, createRoom, GRACE, joinRoom, knockRoom, roomSnapshot, settleRoom, type SavedRoom } from '../worker/rooms';
+import { upgradeRoom } from '../worker/room-undo';
+import { ClosedTable, commandRoom, createRoom, GRACE, joinRoom, knockRoom, roomSnapshot, settleRoom, tidyDoor, type SavedRoom } from '../worker/rooms';
 import type { ProposalKind, RoomCommand } from '../src/room/protocol';
 
 const hostToken = 'b'.repeat(64), guestToken = 'c'.repeat(64), thirdToken = 'e'.repeat(64);
@@ -150,27 +151,52 @@ describe('family table without a host', () => {
     expect(room.state.open).toBe(false);
     expect(() => commandRoom(room, 0, { type: 'propose', id: 'close2', revision: room.state.revision, kind: 'close' }, only, 1005)).toThrow(/already closed/);
     expect(() => joinRoom(room, 'Stranger', '9'.repeat(64), 1006)).toThrow(ClosedTable);
-    const visitor = '0123456789abcdef';
-    expect(knockRoom(room, visitor, 'knock', 'Cousin', only, 1006)).toBe('changed');
-    expect(room.state.proposal).toMatchObject({ kind: 'admit', by: null, byName: 'Cousin', knock: visitor, votes: {} });
-    expect(knockRoom(room, visitor, 'knock', 'Cousin', only, 1007)).toBe('duplicate');
-    expect(knockRoom(room, visitor, 'knock-again', 'Cousin', only, 1007)).toBe('duplicate');
-    expect(() => knockRoom(room, 'fedcba9876543210', 'other', 'Neighbor', only, 1007)).toThrow(/deciding something else/);
+    // A knock is not a vote: it lands while the table is deciding something else, and leaves that vote alone.
+    const visitor = '0123456789abcdef', neighbor = 'fedcba9876543210', two = new Set<Seat>([0, 2]);
+    commandRoom(room, 0, { type: 'propose', id: 'busy', revision: room.state.revision, kind: 'open' }, two, 1006);
+    expect(knockRoom(room, visitor, 'knock', 'Cousin', two, 1006)).toBe('changed');
+    expect(room.state.proposal).toMatchObject({ id: 'busy', kind: 'open' });
+    expect(room.state.knocks).toEqual([{ visitor, name: 'Cousin', at: 1006 }]);
+    expect(knockRoom(room, visitor, 'knock', 'Cousin', two, 1007)).toBe('duplicate');
+    expect(knockRoom(room, visitor, 'knock-again', 'Cousin', two, 1007)).toBe('duplicate');
+    expect(knockRoom(room, neighbor, 'other', 'Neighbor', two, 1007)).toBe('changed');
+    commandRoom(room, 2, { type: 'vote', id: 'stay-shut', proposal: 'busy', vote: 'no' }, two, 1007);
+    expect(room.state.open).toBe(false); expect(room.state.knocks).toHaveLength(2);
     expect(() => joinRoom(room, 'Cousin', '8'.repeat(64), 1008, visitor)).toThrow(/closed/);
-    expect(commandRoom(room, 0, { type: 'vote', id: 'door', proposal: 'knock', vote: 'yes' }, only, 1008)).toBe('changed');
-    expect(room.state.lastVote).toMatchObject({ kind: 'admit', outcome: 'passed', knock: visitor });
-    expect(() => joinRoom(room, 'Cousin', '8'.repeat(64), 1009, 'fedcba9876543210')).toThrow(/closed/);
+    // The first answer decides.
+    expect(commandRoom(room, 0, { type: 'door', id: 'door', visitor, yes: true }, two, 1008)).toBe('changed');
+    expect(room.state.knocks![0]!.answer).toEqual({ by: room.players[0]!.name, yes: true, at: 1008 });
+    expect(() => commandRoom(room, 2, { type: 'door', id: 'door2', visitor, yes: false }, two, 1008)).toThrow(/already answered/);
+    expect(commandRoom(room, 2, { type: 'door', id: 'not-now', visitor: neighbor, yes: false }, two, 1008)).toBe('changed');
+    expect(() => joinRoom(room, 'Neighbor', '6'.repeat(64), 1009, neighbor)).toThrow(/closed/);
     expect(joinRoom(room, 'Cousin', '8'.repeat(64), 1009, visitor).seat).toBe(1);
+    expect(room.state.knocks!.map(entry => entry.visitor)).toEqual([neighbor]);
     expect(() => joinRoom(room, 'Cousin twin', '7'.repeat(64), 1010, visitor)).toThrow(/closed/);
-    // A knock nobody answers fails at the deadline; an open table needs no knock.
+    expect(() => commandRoom(room, 0, { type: 'door', id: 'ghost', visitor, yes: true }, two, 1010)).toThrow(/stopped knocking/);
+    // Knocking again after "not now" rings fresh; walking away takes the knock with you.
+    expect(knockRoom(room, neighbor, 'again', 'Neighbor', two, 1011)).toBe('changed');
+    expect(room.state.knocks).toEqual([{ visitor: neighbor, name: 'Neighbor', at: 1011 }]);
+    expect(tidyDoor(room, new Set([neighbor]), 1012)).toBe(false);
+    expect(tidyDoor(room, new Set(), 1012)).toBe(true); expect(room.state.knocks).toEqual([]);
     commandRoom(room, 1, { type: 'leave', id: 'cousin-bye' }, new Set<Seat>([0, 1]), 1012);
-    knockRoom(room, 'fedcba9876543210', 'quiet', 'Neighbor', new Set<Seat>(), 1013);
-    expect(settleRoom(room, new Set<Seat>(), 1013 + 59999)).toBe(false);
-    expect(settleRoom(room, new Set<Seat>(), 1013 + 60000)).toBe(true);
-    expect(room.state.lastVote).toMatchObject({ kind: 'admit', outcome: 'failed' });
+    // An answered "not now" stays long enough to be read, then goes.
+    knockRoom(room, neighbor, 'once-more', 'Neighbor', only, 1013);
+    commandRoom(room, 0, { type: 'door', id: 'no-again', visitor: neighbor, yes: false }, only, 1013);
+    expect(tidyDoor(room, new Set(), 1014)).toBe(false);
+    expect(tidyDoor(room, new Set(), 1013 + 5 * 60 * 1000)).toBe(true);
     commandRoom(room, 0, { type: 'propose', id: 'open', revision: room.state.revision, kind: 'open' }, only, 1014);
     expect(room.state.open).toBe(true);
     expect(() => knockRoom(room, 'fedcba9876543210', 'needless', 'Neighbor', only, 1015)).toThrow(/open/);
+  });
+  it('moves a knock saved while knocks were votes to the door', () => {
+    const room = fixture(), visitor = '0123456789abcdef';
+    const legacy = { id: 'old', kind: 'admit', mode: 'allow', needs: 'one', by: null, byName: 'Cousin', knock: visitor, at: 5, deadline: 60005, votes: {} };
+    room.state = { ...room.state, proposal: legacy as unknown as typeof room.state.proposal,
+      lastVote: { revision: 1, kind: 'admit', byName: 'Aunt', outcome: 'failed' } as unknown as typeof room.state.lastVote };
+    expect(upgradeRoom(room)).toBe(true);
+    expect(room.state.proposal).toBeNull(); expect(room.state.lastVote).toBeNull();
+    expect(room.state.knocks).toEqual([{ visitor, name: 'Cousin', at: 5 }]);
+    expect(upgradeRoom(room)).toBe(false);
   });
   it('completes a legal two-human hand, holds each trick, shakes the next hand by vote, and survives a save/reload', () => {
     const room = fixture(); let now = 2000, decisions = 0, holds = 0;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { Seat } from '../engine';
-import type { Proposal, RoomSeat, Vote, VoteResult } from './protocol';
+import type { Knock, Proposal, RoomSeat, Vote, VoteResult } from './protocol';
 import { neededYes } from '../../worker/room-votes';
 
 export function describeProposal(p: Proposal): string {
@@ -12,16 +12,14 @@ export function describeProposal(p: Proposal): string {
     case 'open': return `${p.byName} wants to open the table`;
     case 'close': return `${p.byName} wants to close the table`;
     case 'kick': return `${p.byName} asks someone to step out`;
-    case 'admit': return `${p.byName} is knocking`;
   }
 }
 const DONE: Record<VoteResult['kind'], string> = { start: 'New game', restart: 'Starting over', 'next-hand': 'Next hand',
-  undo: 'Takeback', open: 'Table open', close: 'Table closed', kick: 'Chair freed', admit: 'Come on in' };
+  undo: 'Takeback', open: 'Table open', close: 'Table closed', kick: 'Chair freed' };
 const ASK: Record<VoteResult['kind'], string> = { start: 'starting', restart: 'starting over', 'next-hand': 'the next hand',
-  undo: 'the takeback', open: 'opening the table', close: 'closing the table', kick: 'that', admit: 'letting them in' };
+  undo: 'the takeback', open: 'opening the table', close: 'closing the table', kick: 'that' };
 export function describeResult(r: VoteResult): string {
-  if (r.outcome === 'passed') return r.kind === 'admit' ? `${DONE.admit} · the table let ${r.byName} in`
-    : r.kind === 'kick' ? `${r.targetName ?? 'A chair'} stepped out · Walt plays that seat` : `${DONE[r.kind]} · ${r.byName} asked, the table agreed`;
+  if (r.outcome === 'passed') return r.kind === 'kick' ? `${r.targetName ?? 'A chair'} stepped out · Walt plays that seat` : `${DONE[r.kind]} · ${r.byName} asked, the table agreed`;
   if (r.outcome === 'failed') return r.noFrom ? `${r.noFrom} said no to ${ASK[r.kind]}` : `Nobody answered ${r.byName} about ${ASK[r.kind]}`;
   return `Nothing left for ${ASK[r.kind]}`;
 }
@@ -56,8 +54,21 @@ export function VoteBar({ proposal, seat, seats, vote, pending }: {
     {seat === null ? null : proposal.target === seat ? <span class="vote-you">The table decides</span>
       : mine ? <span class="vote-you">{nextHand && mine === 'yes' ? 'You are ready' : `You said ${mine}`}</span>
       : <div class="vote-buttons">
-        <button class="vote-yes" disabled={!canVote} onClick={() => vote('yes')}>{proposal.kind === 'admit' ? 'Let them in' : nextHand ? 'Ready' : proposal.mode === 'veto' ? 'Fine' : 'Yes'}</button>
+        <button class="vote-yes" disabled={!canVote} onClick={() => vote('yes')}>{nextHand ? 'Ready' : proposal.mode === 'veto' ? 'Fine' : 'Yes'}</button>
         <button class="vote-no" disabled={!canVote} onClick={() => vote('no')}>{proposal.mode === 'veto' ? 'Wait, no' : nextHand ? 'Not yet' : 'No'}</button>
       </div>}
   </div>;
+}
+/** Whoever is at the door, beside (never behind) the table's vote. The first answer decides. */
+export function Doorbell({ knocks, answer, disabled }: {
+  knocks: readonly Knock[]; answer: (visitor: string, yes: boolean) => void; disabled: boolean;
+}) {
+  return <>{knocks.filter(knock => !knock.answer).map(knock =>
+    <div key={knock.visitor} class="vote-bar vote-door" role="status" data-knock={knock.visitor}>
+      <div class="vote-text"><strong>{knock.name} is at the door</strong><span>Anyone here can answer</span></div>
+      <div class="vote-buttons">
+        <button class="vote-yes" disabled={disabled} onClick={() => answer(knock.visitor, true)}>Let them in</button>
+        <button class="vote-no" disabled={disabled} onClick={() => answer(knock.visitor, false)}>Not now</button>
+      </div>
+    </div>)}</>;
 }
