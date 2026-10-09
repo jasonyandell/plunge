@@ -224,9 +224,15 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     finally { setOpening(false); }
   };
   const invite = identity ? `${location.origin}${location.pathname}?rooms=1#room=${identity.roomId}` : '';
-  const share = () => {
+  const showInvite = () => {
     setInviteOpen(true);
     void navigator.clipboard?.writeText(invite).then(() => setCopied(true)).catch(() => setCopied(false));
+  };
+  /** On a phone, the share sheet: straight to a text message. Elsewhere, the link and code to copy. */
+  const share = () => {
+    if (typeof navigator.share !== 'function') { showInvite(); return; }
+    void navigator.share({ title: 'Plunge', text: 'Pull up a chair at my 42 table:', url: invite })
+      .catch((e: unknown) => { if (!(e instanceof Error && e.name === 'AbortError')) showInvite(); });
   };
   const act = (action: Action) => { if (online && !pending && !holding) sendAt({ type: 'action', action }, table?.revision); };
   const propose = (kind: ProposalKind, target?: Seat) => {
@@ -314,7 +320,7 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     : credentials && !shown.game ? <div class="room-wait"><div class="home-card"><p class="eyebrow">Your family table</p><h1 class="sheet-title">Pull up a chair</h1>
       <p>You are {shown.seats[credentials.seat]?.name}. Anyone here can start; the table gets five seconds to object. People can join or leave any time, and Walt plays an empty chair.</p>
       <div class="room-chairs">{[0,2,1,3].map(s => <div key={s}><strong>{shown.seats[s]?.name ?? 'Walt'}</strong><span>{s === credentials.seat ? 'You' : s === (credentials.seat + 2) % 4 ? 'Your partner' : 'Across the table'}{shown.seats[s] && !shown.seats[s]!.connected ? ' · Away' : ''}</span></div>)}</div>
-      <button class="big-btn secondary" onClick={share}>Copy invite link</button>
+      <button class="big-btn secondary" onClick={share}>Invite someone</button>
       <button class="big-btn" disabled={!online || pending || !!shown.proposal} onClick={() => propose('start')}>Start with {people} {people === 1 ? 'person' : 'people'} + Walt</button>
       <p class="setting-hint">Refreshing rejoins this seat. Undo, kicking, starting over and opening or closing the table are all quick votes.</p>
       <p class="setting-hint">For Nel-O, win a bid of 1 mark or more, then choose Nel-O. The bidder’s partner sits out. Rooms last up to 24 hours without activity.</p>

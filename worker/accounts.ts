@@ -177,7 +177,7 @@ export async function accountsRequest(request:Request,env:AccountEnv):Promise<Re
       return json({members:(await db.prepare(`SELECT a.id,a.name,a.owner,a.requested,CASE WHEN m.revoked=0 THEN 1 ELSE 0 END family,
           ${passkeyCount}>0 joined,i.name invited_by,a.created,a.via_link
         FROM accounts a LEFT JOIN idea_members m ON m.id=a.member_id LEFT JOIN accounts i ON i.id=a.invited_by
-        WHERE a.requested=1 OR a.member_id IS NOT NULL OR ?=1 ORDER BY a.created DESC LIMIT 200`).bind(admin?1:0).all()).results});
+        ORDER BY a.created DESC LIMIT 200`).all()).results});
     }
     if(path==='/family-link'&&request.method==='GET') {
       if(!account?.owner)return json({error:'Only Jason can manage the family link.'},403);
@@ -216,6 +216,25 @@ export async function accountsRequest(request:Request,env:AccountEnv):Promise<Re
       return json({ok:true});
     }
     if(path==='/request'&&account) {await db.prepare('UPDATE accounts SET requested=1 WHERE id=?').bind(account.id).run();return json({ok:true});}
+    // Already signed in when the invite arrives: the seat joins the account they have, and the
+    // placeholder it was saved under goes away. Nobody signs out. Never a real account's link.
+    if(path==='/invite/accept'&&account) {
+      if(typeof data.token!=='string'||!HEX.test(data.token))return json({error:'That invite link is incomplete.'},400);
+      const invite=await db.prepare(`SELECT a.id,a.invited_by,${passkeyCount} keys FROM accounts a JOIN account_recoveries r ON r.account_id=a.id WHERE r.hash=? AND r.expires>? AND a.owner=0`)
+        .bind(await hashToken(data.token),Date.now()).first<{id:string;invited_by:string|null;keys:number}>();
+      if(!invite)return json({error:'That link has expired or was already used. Ask whoever sent it for a new one.'},404);
+      if(invite.keys||invite.id===account.id)return json({error:'That link is for someone else’s account.'},409);
+      if(familyAccess(account))return json({error:'You already have a family seat. Send this link to whoever it’s for.'},409);
+      await grantFamily(db,account.id,true);
+      await db.batch([
+        db.prepare('UPDATE accounts SET invited_by=COALESCE(invited_by,?) WHERE id=?').bind(invite.invited_by,account.id),
+        db.prepare('DELETE FROM account_recoveries WHERE account_id=?').bind(invite.id),
+        db.prepare('DELETE FROM account_ceremonies WHERE account_id=?').bind(invite.id),
+        db.prepare('UPDATE idea_members SET revoked=1 WHERE id=(SELECT member_id FROM accounts WHERE id=?)').bind(invite.id),
+        db.prepare('DELETE FROM accounts WHERE id=? AND NOT EXISTS (SELECT 1 FROM account_passkeys WHERE account_id=?)').bind(invite.id,invite.id),
+      ]);
+      return json({ok:true});
+    }
     if(path==='/grant'&&(admin||account?.owner)) {
       if(typeof data.id!=='string'||!/^[a-f0-9]{32}$/.test(data.id)||typeof data.enabled!=='boolean')return json({error:'Invalid account.'},400);
       if(!await db.prepare('SELECT id FROM accounts WHERE id=?').bind(data.id).first())return json({error:'Account not found.'},404);

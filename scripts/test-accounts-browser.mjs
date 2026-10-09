@@ -78,7 +78,7 @@ try {
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM hand_players WHERE account_id=?').bind(dadId).first()).n,1);
  await dad.page.getByRole('button',{name:'Connect now',exact:true}).click();await dad.page.getByText('Your account holds 1 hand, every device and family game included.',{exact:true}).waitFor();
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM hand_players WHERE account_id=?').bind(dadId).first()).n,1);
- await dad.page.getByRole('button',{name:'Ask for family access'}).click();await dad.page.getByRole('button',{name:'Access requested'}).waitFor();
+ await dad.page.getByRole('button',{name:'Ask to join the family'}).click();await dad.page.getByRole('button',{name:'Asked · waiting for Jason'}).waitFor();
  await owner.page.getByRole('button',{name:'Refresh requests'}).click();
  await owner.page.locator('.account-waiting').getByText('asked from their account').waitFor();
  await owner.page.getByRole('button',{name:'Let Dad in'}).click();await owner.page.getByText('Dad is in.').waitFor();
