@@ -335,3 +335,130 @@ BB (PIMC vs PIMC) seeds depend only on (seed, board, table), so it does not depe
 **Walt ms/move** (Walt moves only, 60 boards): n = 32 mean 148 / median 38 / p90 458 / max 3,499 ms; n = 128 mean **643** / median 150 / p90 2,025 / max **19,416** ms. PIMC averaged 75–77 ms/move in both runs.
 
 **What changed:** 4× root samples did not improve Walt against PIMC. The duplicate gap went from −0.133 to −0.183 (now clearly below 0), within noise of the n = 32 result (the intervals overlap heavily on the same boards). Declarer play moved slightly toward PIMC (−0.083 → −0.033, CI spans 0); defence got worse (−0.050 → −0.150; PIMC made 57/60 against Walt's defence, up from 51). Cost rose about 4.3× in mean ms/move, with a 19 s worst move, outside the phone budget. Consistent with the caveat above that Walt's bridge strength is limited by its weak opponent model and post-horizon rule-bot playout rather than by sampling noise, though this single run does not isolate the cause.
+
+## Rerun: the tape — full-depth Walt, all 13 tricks
+
+EXPLORATORY tier. This section documents a second engine (`public/lab/bridge/tape.js`,
+reached through `waltDecide` with `tape: true`) that removes the two-trick horizon and
+the rule-bot rollout entirely: minds to the end of the hand, a random bottom, exact
+integer counts throughout. The shipped page and the sections above are unchanged.
+
+### What it is
+
+- **The tickertape** (texas-42 Def 3.5/3.6): every bottom-rung random draw is keyed on
+  (world, record-as-state), never on the search path. The same world at the same record
+  plays the same card in every branch, so worlds partition instead of multiplying
+  branches, common random numbers across candidates are automatic, and modeled minds
+  become pure functions of their information state — cached under (seat, every hand the
+  mind's agent can see, record, revealed voids, level).
+- **Count alpha-beta**: fail-soft windows over the exact make-counts. Verified
+  prune-invariant (the chosen card never changes; `tapecheck.mjs`, 400+ positions).
+- **Bounded choice**: at interior own-turn nodes, a uniform k-subset of the reduced
+  legal cards, keyed on (own hand, record, frozen seed) — the same structural-noise
+  discipline as the dice, so inclusion reads nothing hidden and carries no rank or
+  rule-bot presupposition. k = 2 is the feasible regime (k = 3 cost ~70x). Coverage of
+  excluded cards comes from revisits: other worlds give minds other hands, other records
+  redraw the subset.
+- **Self-minds** (`selfs:'mind'`): below the root, the live player's own turns are
+  played by the same cached level-0 mind machinery as every other seat — level 1 = best
+  response at the root to a world where everyone, including future-me, is a level-0
+  mind. The value tree then only partitions; it never branches below the root. This
+  replaced k-bounded branching of my own future turns, which modeled future-me as
+  nearly random and lost badly (−0.45 vs PIMC on tuning boards).
+- **Flat level-0 minds** (`l0:'flat'`): a mind is the myopic best response to random —
+  argmax over its cards of the make-count under all-dice taped rollouts across its n0
+  sampled worlds. `l0Tail: T` switches minds to the recursive search inside the last T
+  plies (endgames want precision; their trees are tiny). `draws: R` averages R taped
+  rollouts per world (keyed on (world, record, draw)), reducing playout noise only.
+- **Binary objective.** The margin tie-break is incompatible with full depth: it widens
+  `decided()` and defeats the saturation cutoffs (>50x cost measured). Ties go to the
+  rule bot's card (ordering only — the rule bot is NOT in the evaluation path; rollouts
+  are pure dice).
+- **pmake vectors as output**: `vector: true` evaluates every root candidate exactly
+  (fail-soft bounds are fine for the argmax but are not data); `refine: {…}` re-estimates
+  the finalists within eps of the blunt best on a fresh sample with finer settings;
+  `field: true` persists the mind cache across decisions (sound at full depth by purity;
+  verified play-invariant). `h2h.mjs --pmake` logs every non-forced decision's vector;
+  `collect.mjs` gathers exact vectors from vector-mode self-play
+  (`results/pmake/selfplay-*.jsonl`, one row per board, positions reconstructible by
+  replaying `plays` to `ply`).
+
+### Cost
+
+Full depth from the opening lead was impossible before bounded choice (the full-width
+probe did not finish one opening decision in 240 s even at n=8, n0=2, binary). With it,
+the final configuration (`n=64, n0=32, l0Tail=28, k=2, selfs=mind, l0=flat, field`)
+plays complete games at **mean 0.8 s, median 0.1 s, p90 2.3 s, max 9.6 s per move**
+(Node 24, Apple Silicon, 18-core box, several concurrent runs). A value transposition
+table was tried and measured a net loss (the tape makes identical (group, record)
+recurrences rare); it remains opt-in (`tt: true`).
+
+### Head-to-head (duplicate, 60 test boards, same deals/contracts/seeds as above)
+
+This machine reproduces the stored test-set results byte-identically (all 60 boards of
+`results/walt-vs-pimc.jsonl`, both tables, identical card sequences), so the four runs
+below are directly comparable to the headline tables above. The stored
+`results/tune/*.jsonl` files do NOT reproduce (apparently generated from an older code
+state during development); every tuning comparison was re-measured locally.
+
+| pair | duplicate A − B [95% CI] | +1/0/−1 |
+|---|---|---|
+| **tape Walt vs PIMC(W20)** | **−0.233 [−0.351, −0.116]** | 1 / 44 / 15 |
+| shipped Walt vs PIMC(W20) (local re-run, = stored) | −0.133 [−0.261, −0.006] | 4 / 44 / 12 |
+| **tape Walt vs shipped Walt** | **+0.050 [−0.107, +0.207]** | 13 / 37 / 10 |
+| tape Walt vs rule bot (boards 0–29) | **+0.600 [+0.422, +0.778]** | 18 / 12 / 0 |
+
+Split vs PIMC: declarer −0.117 [−0.249, +0.016], defence −0.117 [−0.241, +0.007].
+Tables: tape declares 41/60 (68%); PIMC declares 55/60 (92%) vs tape defence; BB 48/60.
+Vs the rule bot, tape Walt declares 29/30 and holds the rule declarer to 11/30 — the
+shipped Walt's same floor was +0.400 (26/30 and 14/30).
+
+A non-transitive triangle: the full-depth pure card is **even with the shipped
+horizon+rule-bot Walt head-to-head** (+0.05, 13/37/10) and **beats the common floor
+harder** (+0.60 vs +0.40), yet sits **further behind PIMC** (−0.233 vs −0.133). The
+reading: tape Walt optimizes against lawfully-sampled but weak minds, and PIMC's
+double-dummy play punishes exactly the thin lines that model credits, while equal or
+weaker opposition does not.
+
+### Tuning (boards 80–89, local, 10 boards — treat as ordering hints only)
+
+n0 (worlds per modeled mind) was the dominant quality lever: n0 = 8 → 16 → 24/32 moved
+the duplicate gap vs PIMC from −0.30 to −0.10/0.00. Root worlds n = 32 → 128 changed
+nothing (model-limited, as the n=128 rerun above also found). The 10-board winner
+(n0=32, tail28: 0.000) regressed to −0.233 on the held-out 60 — tuning noise at this
+sample size is ±0.2, which is itself a finding: these league tables need the full set.
+
+### Reproduce
+
+```sh
+python3 -m venv /tmp/bridge-venv && /tmp/bridge-venv/bin/pip install endplay==0.5.12
+export DDS_PYTHON=/tmp/bridge-venv/bin/python
+node lab/bridge/tapecheck.mjs            # info rule, prune-invariance, purity
+F='{"tape":true,"n":64,"n0":32,"horizon":52,"margin":false,"selfs":"mind","l0":"flat","l0Tail":28,"k":2,"field":true}'
+node lab/bridge/h2h.mjs --deals lab/bridge/deals-test.json --a walt --b pimc --walt "$F" \
+  --W 20 --tables AB,BA,BB --seed 1 --pmake --from 0 --to 60 --out lab/bridge/results/tape-final/tape-vs-pimc.jsonl
+node lab/bridge/h2h.mjs --deals lab/bridge/deals-test.json --a walt --b walt2 --walt "$F" \
+  --walt2 '{"n":32,"n0":8,"horizon":8}' --tables AB,BA --seed 1 --from 0 --to 60 --out lab/bridge/results/tape-final/tape-vs-shipped.jsonl
+node lab/bridge/h2h.mjs --deals lab/bridge/deals-test.json --a walt --b rule --walt "$F" \
+  --tables AB,BA --seed 1 --from 0 --to 30 --out lab/bridge/results/tape-final/tape-vs-rule.jsonl
+node lab/bridge/collect.mjs --cfg "${F%\}},\"vector\":true}" --from 0 --to 60 --seed 1 \
+  --out lab/bridge/results/pmake/selfplay.jsonl
+node lab/bridge/summarize.mjs lab/bridge/results/tape-final/*.jsonl
+```
+
+Deterministic given the seeds; chunked runs (`--from/--to`) concatenate to the same
+results.
+
+### Verdict
+
+**All 13 tricks is reached, lawfully, at playable speed.** The card's pure form — minds
+all the way down, random bottom, no game knowledge in the evaluation path — now plays
+even with the shipped rule-bot-crutched Walt and clearly above the rule bot, at about
+0.8 s/move. What it did not do is close the gap to PIMC; the binding constraint remains
+the opponent model (level-0 minds answer "best response to random," and no amount of
+sampling fixes the question being one rung too shallow — n and draws scaling confirmed
+this twice). The levers that mattered: bounded choice width k, mind belief size n0, and
+the endgame search tail; the levers that didn't: root worlds n, rollout draws, value
+transpositions. The pmake-vector corpus (`results/pmake/`) is the base for the next
+step: estimates keyed by stochastic similarity between positions, refined iteratively
+rather than recomputed from scratch.
