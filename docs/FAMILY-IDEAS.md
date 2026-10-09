@@ -83,6 +83,31 @@ retained under `~/.local/share/plunge-ideas/runs/`. These contain private family
 text; they are not repository files. Unload the local LaunchAgent to stop new builds.
 Do not delete an active run directory.
 
+## Hand-built lane
+
+Some changes are made by hand (by Jason, or a session working with him) rather than
+by the automatic builder: anything outside its scope, like accounts. They still go
+to the family through the same board and the same in-app preview:
+
+```sh
+node scripts/ideas/admin.mjs adopt 42 --title "Let Benny log in" --body "What it does, in family words."
+node scripts/ideas/admin.mjs adopt 42 IDEA_ID   # link it to an existing card instead
+```
+
+`adopt` reads the open PR's head commit with `gh`, then calls `POST
+/api/ideas/admin/adopt` with the builder key. A new card speaks as the owner; an
+existing card keeps its author and conversation (a card the builder is working on
+is refused). Either way the card moves to the `hand` lane in **Checking your
+preview** with a short note, and prints its link. From there it is tracked like any
+builder card: the same `version.json` check marks it **Ready to try**, a push
+refreshes it, merging makes it **In the game**. A hand-built PR whose checks fail
+stays watched, so the next push brings it back to checking.
+
+The automatic builder never claims a hand-lane card, and the owner's access
+approval and `retry` don't apply to one. A family reply stays conversation for
+Jason (the card says so) instead of queueing a build. `ideas.lane` and the reply
+trigger change are migration `0008_idea_hand_lane.sql`.
+
 ## Activation
 
 The production workflow only deploys main. Review and merge this implementation
