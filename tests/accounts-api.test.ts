@@ -159,6 +159,17 @@ it('lets family save a named seat that the invited person claims with their firs
   expect((await call('/invite','POST',{id},dad.cookie)).status).toBe(409);
   expect((await call('/invite','POST',{id:mom.id},mom.cookie)).status).toBe(404);
   expect(await (await call('/invites','GET',undefined,stranger.cookie)).json()).toEqual({invites:[]});
+  // Someone already signed in (never asked, not family) uses an invite saved for them: no signing out.
+  const max=await register('max'),forMax=await (await call('/invite','POST',{name:'Max'},benny)).json() as {id:string;url:string};
+  const maxToken=new URLSearchParams(new URL(forMax.url).hash.slice(1)).get('join')!;
+  expect((await call('/invite/accept','POST',{token:maxToken})).status).toBe(401);
+  expect((await call('/invite/accept','POST',{token:maxToken},dad.cookie)).status).toBe(409); // Family already: send it on.
+  expect((await call('/invite/accept','POST',{token},max.cookie)).status).toBe(404); // Used.
+  expect((await call('/invite/accept','POST',{token:maxToken},max.cookie)).status).toBe(200);
+  expect((await (await call('','GET',undefined,max.cookie)).json() as {account:unknown}).account).toMatchObject({id:max.id,name:'max',family:1});
+  expect(await env.QUESTIONS!.prepare('SELECT COUNT(*) n FROM accounts WHERE id=?').bind(forMax.id).first()).toEqual({n:0});
+  expect(await env.QUESTIONS!.prepare('SELECT invited_by FROM accounts WHERE id=?').bind(max.id).first()).toEqual({invited_by:id});
+  expect((await call('/invite/peek','POST',{token:maxToken})).status).toBe(404);
   // Benny can invite too. An expired invite gets a fresh link, only from whoever sent it (or Jason).
   const ray=await (await call('/invite','POST',{name:'Cousin Ray'},benny)).json() as {id:string;url:string};
   await env.QUESTIONS!.prepare('UPDATE account_recoveries SET expires=0 WHERE account_id=?').bind(ray.id).run();
