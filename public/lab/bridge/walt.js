@@ -20,8 +20,9 @@
 import {
   Pub, Rng, Sim, legalCards, legalReduced, canon, ruleCard, sampleDeals, visibleSeats,
 } from './engine.js';
+import { tapeDecide } from './tape.js';
 
-export const DEFAULTS = Object.freeze({ level: 1, n: 32, n0: 8, horizon: 8, rollout: 0, margin: true, seed: 1 });
+export const DEFAULTS = Object.freeze({ level: 1, n: 32, n0: 8, horizon: 8, rollout: 0, margin: true, seed: 1, tape: false });
 
 // Per-deal payoff. Binary (margin off): 1 if the contract makes. With margin on, the
 // payoff is MBIG*[made] + [made with an overtrick] + [not down two]: the make count stays
@@ -52,6 +53,7 @@ function handOf(d, seat, pub) {
  *  can see (only those are read). Returns {card, forced, values, stats}. */
 export function waltDecide(pub, agent, known, cfg = {}) {
   const c = { ...DEFAULTS, ...cfg };
+  if (c.tape) return tapeDecide(pub, agent, known, c); // tape.js: record-keyed dice, full-depth minds
   if (agentOf(pub, pub.toMove()) !== agent) throw new Error('not this agent\'s turn');
   const ctx = {
     pub, hEnd: pub.n + Math.max(1, c.horizon), mode: c.rollout, n0: c.n0, margin: c.margin,

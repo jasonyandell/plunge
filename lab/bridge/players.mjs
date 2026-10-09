@@ -9,7 +9,7 @@ import { waltDecide } from '../../public/lab/bridge/walt.js';
 const handOf = (d, seat, pub) => { const h = new Uint16Array(4); for (let u = 0; u < 4; u++) h[u] = d[seat * 4 + u] & ~pub.played[u]; return h; };
 
 export function waltPlayer(cfg) {
-  return { name: `walt(L${cfg.level ?? 1},n${cfg.n},n0${cfg.n0},h${cfg.horizon}${cfg.margin === false ? ',nomargin' : ''}${cfg.rollout ? ',dice' : ''})`, kind: 'walt',
+  return { name: `walt(L${cfg.level ?? 1},n${cfg.n},n0${cfg.n0},h${cfg.horizon}${cfg.margin === false ? ',nomargin' : ''}${cfg.rollout ? ',dice' : ''}${cfg.tape ? ',tape' : ''}${cfg.k ? ',k' + cfg.k : ''}${cfg.kFrom ? ',kf' + cfg.kFrom : ''}${cfg.selfs === 'mind' ? ',selfmind' : ''}${cfg.l0 === 'flat' ? ',flat' : ''}${cfg.l0Tail ? ',tail' + cfg.l0Tail : ''}${cfg.ruleOrder === false ? ',noruleorder' : ''})`, kind: 'walt',
     choose(pub, agent, known, seed) { return waltDecide(pub, agent, known, { ...cfg, seed }).card; } };
 }
 
