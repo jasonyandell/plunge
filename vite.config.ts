@@ -1,6 +1,8 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 
 // PR previews have no question database: `PLUNGE_QUESTIONS=local-only` builds an
 // app that keeps questions on the device. Anything unexpected fails the build.
@@ -12,6 +14,27 @@ if (rooms !== 'off' && rooms !== 'experimental') throw new Error('PLUNGE_ROOMS m
 
 export default defineConfig({
   plugins: [preact(), {
+    // Offline from the first launch: stamp the service worker with this build
+    // and every file it needs, so it saves the whole game (Walt too) at install.
+    name: 'plunge-offline',
+    apply: 'build',
+    closeBundle() {
+      const out = 'dist', files: string[] = [];
+      for (const entry of readdirSync(out, { recursive: true, withFileTypes: true })) {
+        if (!entry.isFile()) continue;
+        const path = '/' + relative(out, join(entry.parentPath, entry.name)).split('\\').join('/');
+        // The page itself is saved as '/'; onyx's model isn't wired into the game.
+        if (['/sw.js', '/index.html', '/version.json'].includes(path) || path.startsWith('/models/')) continue;
+        files.push(path);
+      }
+      const sw = join(out, 'sw.js'), source = readFileSync(sw, 'utf8');
+      const stamped = source
+        .replace("const BUILD = 'dev';", `const BUILD = ${JSON.stringify(process.env.GITHUB_SHA ?? String(Date.now()))};`)
+        .replace('const FILES = [];', `const FILES = ${JSON.stringify(files.sort())};`);
+      if (stamped === source || !stamped.includes('/assets/')) throw new Error('plunge-offline: could not stamp dist/sw.js.');
+      writeFileSync(sw, stamped);
+    },
+  }, {
     // Lets preview tooling confirm what was built, before and after deployment.
     name: 'plunge-questions-mode',
     transformIndexHtml: () => [
