@@ -19,3 +19,5 @@ jobs:
       - run: python3 scripts/test-update-walt.py
       - run: npm test
       - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:offline:browser

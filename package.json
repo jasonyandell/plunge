@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:rooms:browser": "node scripts/test-rooms-browser.mjs",
+    "test:offline:browser": "node scripts/test-offline-browser.mjs",
     "typecheck": "tsc --noEmit",
     "prebuild": "node scripts/verify-walt.mjs",
     "ideas:build": "node scripts/ideas/builder.mjs",
