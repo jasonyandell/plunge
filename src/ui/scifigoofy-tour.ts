@@ -1,6 +1,6 @@
 import { birdwatchDemoApp } from './birdwatch-demo';
 
-export const SHOWCASE_ID='95800f33b0474271a054f761871d2fc6';
+export const SHOWCASE_ID='f98536466db4422aa0af37418476d46a';
 export const TOUR_STEPS=[
   {key:'blossoms',title:'A little blossom at the table',short:'Blossoms',text:'Cherry blossoms frame your partner’s hand. Switch them off and on to compare.'},
   {key:'shuffle',title:'A tandem ride around the shuffle',short:'Tandem shuffle',text:'The couple circles a pile of dominoes when a new hand begins. Replay it as often as you like.'},
