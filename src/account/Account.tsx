@@ -9,6 +9,7 @@ import { syncStats, type StatsStatus } from '../history/stats-sync';
 import { familyTable, ROOMS_ENABLED, roomUrl, saveSeat } from '../room/client';
 import { rememberMe, tableName } from './me';
 import { connectionReturn } from './connection';
+import { ideaAccountReturn } from '../ideas/account-return';
 import '../ui/app.css';
 import '../ui/home.css';
 import '../ideas/ideas.css';
@@ -124,6 +125,7 @@ function statsLines(s:StatsStatus,localOnly:boolean):string[] {
 export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBackend;heading?:ComponentChildren}={}) {
   const api=backend.api;
   const returnTo=connectionReturn(new URLSearchParams(location.search).get('returnTo'),location.origin);
+  const returnToIdea=ideaAccountReturn(location.search);
   const [state,setState]=useState<State|null>(null),[members,setMembers]=useState<Person[]>([]),[name,setName]=useState(tableName);
   const [error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
   const [recover,setRecover]=useState(()=>secretFromLink('recover')),[recoveryLink,setRecoveryLink]=useState<{name:string;url:string;kind:'Recovery'|'Invite'}|null>(null);
@@ -176,6 +178,10 @@ export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBacke
   return <main class="ideas-page account-page">{heading}<header class="ideas-top"><a href="/">← Back to Plunge</a><span>Always welcome at the table</span></header>
     <div class="ideas-heading">{join||family||welcomed?<><h1>Welcome to Plunge</h1><p>Texas 42 with the family, free for everyone.</p></>
       :<><h1>Your Plunge account</h1><p>Sign in if you’d like. Playing is always open to everyone.</p></>}</div>
+    {returnToIdea && <section class="idea-paper"><h2>Back to your idea</h2>
+      {state?.account?.family ? <a class="big-btn" href={returnToIdea}>Continue to your idea →</a>
+        : <p>Sign in below with your family account. Your idea link stays here.</p>}
+    </section>}
     {returnTo && <section class="idea-paper"><h2>Connect your chat companion</h2>
       {state?.account ? <><p>Continue as {state.account.name} to review the connection.</p><a class="big-btn" href={returnTo}>Continue to connection</a></>
         : <p>Sign in with your passkey below, then return here to continue.</p>}</section>}

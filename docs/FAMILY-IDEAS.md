@@ -105,6 +105,16 @@ and bounded operator repair, use the personal `plunge-idea-board` skill.
 
 ## Hand-built lane
 
+For owner-directed board maintenance, the private admin helper supports
+`triage IDEA_ID --revision N --action note|close --message-file FILE [--title TITLE]`.
+Read the current card with `inspect` first. Triage refuses an active build or a
+changed request revision, and identical retries append only one operator note.
+Notes never impersonate a family request or approve access. Closing preserves
+the conversation, PR identity and run archives, clears preview readiness, and
+moves the card to the hand lane so later replies remain conversation instead of
+restarting the builder. To consolidate ideas, link the originals from the chosen
+card and close each original with a note pointing to that conversation.
+
 Some changes are made by hand (by Jason, or a session working with him) rather than
 by the automatic builder: anything outside its scope, like accounts. They still go
 to the family through the same board and the same in-app preview:

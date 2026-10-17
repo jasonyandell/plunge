@@ -170,6 +170,33 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
   }
   if (request.method !== 'POST') return json({error:'Method not allowed.'},405);
   const data = await body(request), now = new Date().toISOString();
+  if (path === '/admin/triage') {
+    const idea=id(data.id), action=data.action, message=field(data.message,3000);
+    const title=data.title===undefined ? null : field(data.title,100);
+    if(!['note','close'].includes(String(action)) || !Number.isSafeInteger(data.revision) || Number(data.revision)<1)
+      return json({error:'Use note or close with the current request revision.'},400);
+    // Exact retries reuse an immutable operator note. Notes never pretend to be a
+    // family request or grant access. Closing retains all messages and run archives.
+    const note=(await hash(JSON.stringify(['triage',idea,data.revision,action,title,message]))).slice(0,32);
+    const previous=await db.prepare('SELECT id FROM idea_messages WHERE id=? AND idea_id=?').bind(note,idea).first();
+    if(previous)return json(await thread(db,idea));
+    await db.batch([
+      db.prepare(`INSERT OR IGNORE INTO idea_messages(id,idea_id,role,body,created)
+        SELECT ?,id,'builder',?,? FROM ideas WHERE id=? AND revision=? AND status!='building'`)
+        .bind(note,message,now,idea,data.revision),
+      db.prepare(`UPDATE ideas SET title=COALESCE(?,title),updated=?,
+        status=CASE WHEN ? THEN 'closed' ELSE status END,
+        lane=CASE WHEN ? THEN 'hand' ELSE lane END,
+        preview=CASE WHEN ? THEN NULL ELSE preview END,
+        preview_revision=CASE WHEN ? THEN NULL ELSE preview_revision END
+        WHERE id=? AND revision=? AND status!='building'
+        AND EXISTS(SELECT 1 FROM idea_messages WHERE id=? AND idea_id=ideas.id)`)
+        .bind(title,now,...Array(4).fill(action==='close'?1:0),idea,data.revision,note),
+    ]);
+    const saved=await db.prepare('SELECT id FROM idea_messages WHERE id=?').bind(note).first();
+    if(!saved)return json({error:'This idea changed, is building, or no longer exists. Inspect it again.'},409);
+    return json(await thread(db,idea));
+  }
   if (path === '/admin/retry') {
     const retried = await db.prepare("UPDATE ideas SET status='queued',updated=? WHERE id=? AND lane='builder' AND status IN ('question','failed','queued') RETURNING id")
       .bind(now,id(data.id)).first();

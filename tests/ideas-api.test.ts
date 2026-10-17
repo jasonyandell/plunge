@@ -33,6 +33,43 @@ beforeAll(async()=>{
 },20000);
 afterAll(async()=>{await mf?.dispose();});
 describe('family idea conversations and automatic builds',()=>{
+  it('closes a stopped card without deleting history, granting access, or restarting it on replies',async()=>{
+    const idea=id(9100);
+    await call(`/${idea}`,'PUT',{body:'Review security',context:'Phone'});
+    await env.QUESTIONS!.prepare("UPDATE ideas SET status='failed' WHERE id=?").bind(idea).run();
+    const data={id:idea,revision:1,action:'close',message:'Closed at the owner’s request: the sandbox held.'};
+    expect((await call('/admin/triage','POST',data,mom.token)).status).toBe(403);
+    expect((await call('/admin/triage','POST',data,admin,'https://elsewhere.test')).status).toBe(403);
+    const first=await call('/admin/triage','POST',data,admin);
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({card:{status:'closed',lane:'hand',revision:1,preview:null},permissions:{scope:'limited'}});
+    await call('/admin/triage','POST',data,admin);
+    let current=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect(current.messages.map(m=>m.body)).toEqual(['Review security',data.message]);
+    await call(`/${idea}/messages`,'PUT',{id:id(9101),body:'Keep this evidence.'});
+    // A lost-response retry cannot re-close or overwrite the newer conversation.
+    await call('/admin/triage','POST',data,admin);
+    current=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect(current.card).toMatchObject({status:'closed',revision:2});
+    expect(current.messages).toHaveLength(3);
+  });
+  it('requires a current idle revision for triage and keeps notes out of the build queue',async()=>{
+    const idea=id(9110),note={id:idea,revision:1,action:'note',message:'Combined preview will be here.',title:'One visual playground'};
+    await call(`/${idea}`,'PUT',{body:'Flowers',context:'Phone'});
+    await env.QUESTIONS!.prepare("UPDATE ideas SET status='building' WHERE id=?").bind(idea).run();
+    expect((await call('/admin/triage','POST',note,admin)).status).toBe(409);
+    await env.QUESTIONS!.prepare("UPDATE ideas SET status='question' WHERE id=?").bind(idea).run();
+    await call(`/${idea}/messages`,'PUT',{id:id(9111),body:'And birds.'});
+    expect((await call('/admin/triage','POST',note,admin)).status).toBe(409);
+    await env.QUESTIONS!.prepare("UPDATE ideas SET status='question' WHERE id=?").bind(idea).run();
+    const result=await call('/admin/triage','POST',{...note,revision:2},admin);
+    expect(result.status).toBe(200);
+    const current=await result.json() as IdeaThread;
+    expect(current.card).toMatchObject({title:note.title,status:'question',revision:2});
+    expect(current.messages.map(m=>m.body)).toEqual(['Flowers','And birds.',note.message]);
+    expect((await call('/admin/triage','POST',{...note,revision:2,action:'erase'},admin)).status).toBe(400);
+    await env.QUESTIONS!.prepare("UPDATE ideas SET status='closed' WHERE id=?").bind(idea).run();
+  });
   it('provides a private read-only inventory, including stopped cards and their conversations',async()=>{
     expect((await call('/admin/cards','GET',undefined,mom.token)).status).toBe(403);
     await call(`/${id(9000)}`,'PUT',{body:'Inspection fixture',context:'Phone'});
