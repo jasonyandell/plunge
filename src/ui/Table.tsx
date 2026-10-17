@@ -147,7 +147,7 @@ export function Table({ app, dispatch: rawDispatch, shuffling = false, thinking 
   const humanSitsOut = g.sittingOut === HUMAN_SEAT;
 
   return (
-    <div class="table-screen" style={{ '--trick-hold-ms': `${TRICK_HOLD_MS}ms` }}>
+    <div class={`table-screen${!scenario && g.phase === 'playing' ? ' birdwatch-table' : ''}`} style={{ '--trick-hold-ms': `${TRICK_HOLD_MS}ms` }}>
       <StatusStrip g={g} onMenu={() => setMenuOpen(true)} />
       {!scenario && !review && !birdwatchDemo && (
         <div class="hand-tools">
