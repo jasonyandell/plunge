@@ -31,6 +31,7 @@ import './table.css';
 import './questions.css';
 import { saveQuestion } from '../questions/client';
 import { MoveQuestionPrompt } from './MoveQuestionPrompt';
+import { Birdwatch } from './Birdwatch';
 
 const POS: readonly string[] = ['bottom', 'left', 'top', 'right'];
 
@@ -85,6 +86,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
   useEffect(() => setPlayError(null), [g, app.settings.showHints]);
   const [histOpen, setHistOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [dominoPicks, setDominoPicks] = useState(0);
   // A shared hand from a link is shown instead of the player's own game,
   // view-only, and opens straight into review.
   const scenario = app.scenarioGame !== null;
@@ -163,7 +165,13 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
         />
       )}
       <div class="felt">
-        <OpponentTop g={g} thinking={thinking} note={seatNote(2)} />
+        <div class="birdwatch-perch">
+          <OpponentTop g={g} thinking={thinking} note={seatNote(2)} />
+          {!scenario && g.phase === 'playing' && !showingLast && !review && !menuOpen &&
+            !histOpen && !question && confirmRestart === null && !app.room?.table?.proposal && (
+            <Birdwatch key={`${app.sessionId}:${app.epoch}:${g.handNumber}:${g.tricks.length}:${g.currentTrick.length}:${g.turn}:${dominoPicks}`} />
+          )}
+        </div>
         <div class="middle">
           <OpponentSide g={g} seat={1} thinking={thinking} note={seatNote(1)} />
           <TrickArea
@@ -204,6 +212,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
                   state={humanTurn && app.settings.showHints ? (legal.has(id) ? 'legal' : 'illegal') : 'idle'}
                   interactive={humanTurn && !app.settings.showHints}
                   onTap={() => {
+                    setDominoPicks(picks => picks + 1);
                     if (!legal.has(id)) { setPlayError('You must follow suit when you can.'); return; }
                     dispatch({ type: 'human', action: { type: 'play', domino: id } });
                   }}
