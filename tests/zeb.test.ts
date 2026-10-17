@@ -83,6 +83,8 @@ describe('Zeb at the Plunge boundary',()=>{
     expect(app.game!.hands).toEqual(newGame(LEGACY_PLUNGE_CONFIG,'fresh-zeb').hands);
     const loaded=initialApp(toSaved(app));
     expect(loaded.settings.difficulty).toBe('zeb');expect(loaded.game).toEqual(app.game);
+    const linked=initialApp(toSaved(app),'?settings=player');
+    expect(linked.screen).toBe('more');expect(linked.game).toEqual(app.game);expect(linked.settings).toEqual(app.settings);
     expect(auctionKey(loaded.game!,'test')).toBe(auctionKey(app.game!,'test'));
   });
 });

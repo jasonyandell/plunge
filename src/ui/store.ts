@@ -226,7 +226,7 @@ export function initialApp(saved?: SavedState | null, search = ''): AppState {
       : experiment === 'off' || experiment === 'ordinary' ? { nelloPreview: false } : {}) };
   const game = configureAuction(saved?.game ?? null, settings);
   return {
-    screen: 'home',
+    screen: new URLSearchParams(search).get('settings') === 'player' ? 'more' : 'home',
     settings,
     seed: saved?.seed ?? 'plunge',
     game,

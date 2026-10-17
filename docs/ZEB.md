@@ -1,5 +1,6 @@
 # Zeb in Plunge
 
+`/?settings=player` opens the player controls directly without changing a saved game.
 More → Computer player selects **Walt** or **Zeb** for solo play. Existing Walt
 saves continue, including the older L1 selection. A change of player invalidates
 in-flight decisions without discarding the game. Family rooms continue using Walt;
