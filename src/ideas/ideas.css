@@ -72,3 +72,8 @@
 .screenshot-dialog img { display:block; width:100%; height:auto; margin-top:16px; }
 .screenshot-dialog canvas { display:block; max-width:100%; max-height:55dvh; width:auto; height:auto; margin:auto; touch-action:none; }
 .ideas-page input[type="file"][hidden] { display:none; }
+.screen-idea-dialog { margin:auto; }
+.screen-idea-dialog button:focus-visible,.screen-idea-dialog a:focus-visible { outline:3px solid #286f65;outline-offset:3px; }
+.screen-idea-dialog input[hidden] { display:none; }
+.screen-idea-shortcut { position:fixed;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap; }
+.screen-idea-shortcut:focus { z-index:200;top:8px;left:8px;width:auto;height:auto;clip-path:none;padding:12px;background:#fff8e8;color:#35291c;border:2px solid #286f65;border-radius:8px; }

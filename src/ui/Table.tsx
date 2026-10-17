@@ -279,6 +279,7 @@ function GameMenu({ app, dispatch, onClose, onHome, extra }: {
         <HintsSwitch app={app} dispatch={dispatch} />
         {extra}
         <button type="button" class="big-btn" onClick={onClose}>Keep playing</button>
+        <button type="button" class="big-btn secondary" onClick={()=>{onClose();requestAnimationFrame(()=>window.dispatchEvent(new Event('plunge-screen-idea')));}}>Share an idea about this screen</button>
         <button type="button" class="big-btn secondary" onClick={onHome}>Back to home</button>
       </div>
     </div>
