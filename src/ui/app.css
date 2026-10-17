@@ -1,4 +1,4 @@
-/* Global shell: warm Texas-table palette + pure-CSS wood backdrop.
+/* Global shell: warm Texas-table palette + pure-CSS red backdrop.
    Mobile-first; everything is flex/grid with min-height:0 (nothing clips). */
 
 :root {
@@ -26,14 +26,14 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
     Arial, sans-serif;
   color: var(--cream);
-  background-color: #43291a;
-  /* Quiet walnut grain and a warm pool of light around the table. */
+  background-color: #70181e;
+  /* Quiet grain and a warm pool of light over a deep red backdrop. */
   background-image:
     radial-gradient(ellipse at 50% 18%, rgba(232, 183, 113, 0.16), transparent 72%),
     repeating-linear-gradient(176deg,
       rgba(255, 233, 195, 0.018) 0 2px, transparent 2px 19px,
       rgba(10, 7, 4, 0.025) 19px 21px, transparent 21px 43px),
-    linear-gradient(145deg, #4c3527, #35271f 65%, #2b211b);
+    linear-gradient(145deg, #8b2026, #70181e 65%, #541116);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   touch-action: manipulation; /* no double-tap zoom on play taps */
