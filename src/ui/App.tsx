@@ -29,8 +29,21 @@ import { syncStats } from '../history/stats-sync';
 import { Questions } from './Questions';
 import { attachGame, syncQuestions } from '../questions/client';
 import { IdentityChip } from '../account/IdentityChip';
+import { VictoryPreview } from './VictoryPreview';
 
 export function App() {
+  const [preview, setPreview] = useState(() => new URLSearchParams(location.search).get('preview') === 'congrats');
+  // Open the picture without mounting the game, its room connection or save effects.
+  if (preview) return <VictoryPreview onClose={() => {
+    const url = new URL(location.href);
+    url.searchParams.delete('preview');
+    history.replaceState(null, '', url);
+    setPreview(false);
+  }} />;
+  return <GameApp />;
+}
+
+function GameApp() {
   const [app, reduce] = useReducer((state: AppState, event: AppEvent) => {
     const next = reducer(state, event);
     // A shared table records its own canonical history (see useRoom).
