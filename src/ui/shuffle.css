@@ -1,0 +1,27 @@
+.shuffle-flourish {
+  height: 104px;
+  flex: 0 0 104px;
+  pointer-events: none;
+  overflow: hidden;
+  background: radial-gradient(ellipse at center, #b8d88418, transparent 70%);
+}
+.shuffle-flourish svg { display: block; width: 208px; height: 104px; margin: auto; }
+.shuffle-bike { transform: translate(120px, 105px) scale(.7); }
+@media (prefers-reduced-motion: no-preference) {
+  .shuffle-bike { animation: tandem-circle 2.8s linear both; }
+  .shuffle-tile { animation: tandem-shuffle .5s ease-in-out 5 alternate; }
+  @keyframes tandem-circle {
+    0%, 100% { transform: translate(120px, 105px) scale(.7); }
+    12.5% { transform: translate(174px, 97px) scale(.67); }
+    25% { transform: translate(197px, 79px) scale(.6); }
+    37.5% { transform: translate(174px, 60px) scale(.53); }
+    50% { transform: translate(120px, 52px) scale(.5); }
+    62.5% { transform: translate(66px, 60px) scale(.53); }
+    75% { transform: translate(43px, 79px) scale(.6); }
+    87.5% { transform: translate(66px, 97px) scale(.67); }
+  }
+  @keyframes tandem-shuffle {
+    from { transform: translate(-2px, 0) rotate(-8deg); }
+    to { transform: translate(2px, 1px) rotate(8deg); }
+  }
+}
