@@ -1,6 +1,7 @@
-import { useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { IdeaPreview, useIdeaPreview } from './IdeaPreview';
-import { newId, readDraft } from './client';
+import { IdeaShare } from './IdeaShare';
+import { cardFromHash, newId, readDraft } from './client';
 import type { IdeaThread } from './model';
 import '../ui/app.css';
 import '../ui/home.css';
@@ -18,15 +19,28 @@ const seed: IdeaThread = {
 };
 function initialCards(): IdeaThread[] {
   try { const saved=JSON.parse(localStorage.getItem(STORAGE) ?? 'null');
-    if(Array.isArray(saved) && saved.length && saved.every(t=>t?.card?.id && typeof t.card.title==='string' && Array.isArray(t.messages))) return saved;
+    if(Array.isArray(saved) && saved.length && saved.every(t=>t?.card?.id && typeof t.card.title==='string' && Array.isArray(t.messages))) return saved.some(t=>t.card.id===BID_ID) ? saved : [seed,...saved];
   } catch { /* The example works without storage. */ }
   return [seed];
+}
+function selectedFromHash(): string|null {
+  return cardFromHash() ?? (new URLSearchParams(location.hash.slice(1)).get('board')==='1' ? null : BID_ID);
+}
+function demoLink(id: string|null): string {
+  const demo=new URLSearchParams(location.search).get('demo')==='sharing' ? 'sharing' : 'bidding';
+  return `${location.origin}/?ideas=1&demo=${demo}#${id ? `idea=${id}` : 'board=1'}`;
 }
 
 /** A browser-only walkthrough. Never calls the ideas service or starts a build. */
 export function IdeasDemo() {
   const [cards,setCards]=useState(initialCards),[person,setPerson]=useState('Mom');
-  const [selected,setSelected]=useState<string|null>(BID_ID),[notice,setNotice]=useState('');
+  const [selected,setSelected]=useState(selectedFromHash),[notice,setNotice]=useState('');
+  useEffect(()=>{
+    const changed=()=>{setSelected(selectedFromHash());setNotice('');};
+    window.addEventListener('popstate',changed);window.addEventListener('hashchange',changed);
+    return ()=>{window.removeEventListener('popstate',changed);window.removeEventListener('hashchange',changed);};
+  },[]);
+  const open=(id:string|null)=>{history.pushState(null,'',demoLink(id));setSelected(id);setNotice('');};
   const trial=useIdeaPreview();
   const current=cards.find(t=>t.card.id===selected);
   const save=(next:IdeaThread[])=>{
@@ -39,22 +53,24 @@ export function IdeasDemo() {
     if(current) save(cards.map(t=>t.card.id===current.card.id?{...t,messages:[...t.messages,message]}:t));
     else {
       const id=newId();
+      open(id);
       save([...cards,{card:{...seed.card,id,number:cards.length+1,name:person,title:body,pr:null,sha:null,preview:null,status:'queued',created:message.created},messages:[message]}]);
-      setSelected(id);
     }
   };
   if(trial.id===BID_ID) return <IdeaPreview pr={22} title={seed.card.title} onClose={trial.close}/>;
   return <main class="ideas-page">
     <header class="ideas-top"><a href="/">← Back to Plunge</a><span>Made together</span></header>
-    <aside class="demo-banner"><strong>Try the family ideas demo</strong><p>Sample conversation, real playable fix. Messages stay in this browser; demo replies don’t start builds.</p></aside>
+    <aside class="demo-banner"><strong>Try the family ideas demo</strong><p>Use “Copy link” or “Link to this idea” below to reopen this sample conversation inside Plunge. The sample link works in another browser; your demo replies and new cards stay in this browser and don’t start builds.</p></aside>
     <div class="ideas-heading"><p class="eyebrow">Your seat at the drawing table</p><h1>Ideas for Plunge</h1><p>Little fixes. Big ideas. A game that feels more like ours.</p></div>
     <div class="ideas-welcome"><div><p>Hi, {person}.</p><div class="demo-people" role="group" aria-label="Try the demo as">
       {['Mom','Dad'].map(name=><button type="button" aria-pressed={person===name} onClick={()=>setPerson(name)} key={name}>{name}</button>)}
-    </div></div><button class="big-btn secondary" onClick={()=>{setSelected(null);setNotice('');}}>＋ Another idea</button></div>
+    </div></div><button class="big-btn secondary" onClick={()=>open(null)}>＋ Another idea</button></div>
     {current ? <>
-      <button class="text-btn" onClick={()=>{setSelected(null);setNotice('');}}>← All ideas</button>
+      <button class="text-btn" onClick={()=>open(null)}>← All ideas</button>
       <section class="idea-paper"><div class="idea-meta"><span>{current.card.name}’s idea</span><span class={`idea-status ${current.card.id===BID_ID?'ready':'queued'}`}>{current.card.id===BID_ID?'Ready to try':'Demo idea saved'}</span></div>
         <h2>{current.card.title}</h2>
+        <IdeaShare key={current.card.id} id={current.card.id} link={demoLink(current.card.id)} />
+        {current.card.id!==BID_ID && <p class="idea-help">This demo card’s link works only in this browser. Live idea links open the same conversation for your family.</p>}
         {current.card.id===BID_ID ? <>
           <ol class="demo-steps" aria-label="Example progress"><li>Idea shared</li><li>Change built</li><li>Ready to try</li></ol>
           <div class="demo-bid-example" aria-label="Illustration of the bidding fix"><div><small>Before</small><span>You</span></div><span aria-hidden="true">→</span><div><small>With your idea</small><span>You <b>Bid 30</b></span></div></div>
@@ -66,10 +82,14 @@ export function IdeasDemo() {
         <DemoComposer key={`${person}:${current.card.id}`} person={person} id={current.card.id} onSend={send}/>
       </section>
     </> : <>
+      {selected && <p role="status" class="idea-notice">That demo card isn’t saved in this browser. <a href={demoLink(BID_ID)}>Open the sample idea</a> to try sharing a link.</p>}
       <section class="idea-paper"><h2>What would make the game better?</h2><p>Say it just like you would at the table.</p><DemoComposer key={`${person}:new`} person={person} id="new" onSend={send}/></section>
-      <h2 class="ideas-board-title">Around the table</h2><div class="ideas-grid">{cards.map(t=><button class="idea-paper idea-card" key={t.card.id} onClick={()=>{setSelected(t.card.id);setNotice('');}}>
+      <h2 class="ideas-board-title">Around the table</h2><div class="ideas-grid">{cards.map(t=><a href={demoLink(t.card.id)} class="idea-paper idea-card" key={t.card.id} onClick={event=>{
+        if(event.button!==0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)return;
+        event.preventDefault();open(t.card.id);
+      }}>
         <span class="idea-meta">{t.card.name} · Idea {t.card.number}</span><h3>{t.card.title}</h3><span class={`idea-status ${t.card.id===BID_ID?'ready':'queued'}`}>{t.card.id===BID_ID?'Ready to try':'Demo idea saved'}</span><span class="idea-open">Open conversation →</span>
-      </button>)}</div>
+      </a>)}</div>
     </>}
     {notice && <p class="idea-notice" role="status">{notice}</p>}
     <p class="idea-help">Try replying as Mom, then switch to Dad and add another idea. In the live version, each person uses their own invite and the family shares the cards.</p>

@@ -6,6 +6,7 @@ import type { Difficulty } from '../ai';
 import { DEEP_WORLDS, NATIVE_TABLE, isNative, nativeLabel } from '../ai/native';
 import { canRestart, canUndo, nelloAvailable, nelloPaused, type AppEvent, type AppState } from './store';
 import { Domino } from './Domino';
+import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
 import './home.css';
 import { useEffect, useState } from 'preact/hooks';
 import { ClosedTableError, familyProbe, familyTable, lastRoom, liveTables, ROOMS_ENABLED, roomUrl, savedSeat, saveSeat } from '../room/client';
@@ -132,6 +133,7 @@ export function Home({ app, dispatch, identity }: HomeProps) {
             More{nelloAvailable(app.settings) && <small class="preview-badge">Nel-O</small>}
           </button>
         </div>
+        {QUESTIONS_LOCAL_ONLY && <p><a class="text-btn" style={{display:'inline-flex',alignItems:'center'}} href="/?ideas=1&demo=sharing">Try idea links · demo</a></p>}
       </div>
     </div>
   );
