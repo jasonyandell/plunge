@@ -5,6 +5,8 @@ import { IdeaActivity } from './IdeaActivity';
 import { IdeasBoard } from './IdeasBoard';
 import { hasIdeaDemo, ideaPresentation } from './presentation';
 import { IdeaPreview, useIdeaPreview } from './IdeaPreview';
+import { PreviewSignIn } from './PreviewSignIn';
+import { clearPreviewSession } from './preview-access';
 import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
 import { LIVE_PLUNGE, type IdeaCard, type IdeaThread } from './model';
 import { cardFromHash, ideasApi, ideasLink, initialToken, InviteError, inviteToken, TOKEN_KEY } from './client';
@@ -35,7 +37,7 @@ export function Ideas() {
   }, [selected]);
   useEffect(() => {
     const epoch = ++generation.current; let running = false;
-    if (QUESTIONS_LOCAL_ONLY) return;
+    if (QUESTIONS_LOCAL_ONLY && !token) return;
     const refresh = async () => {
       if (running) return; running=true;
       try {
@@ -75,18 +77,22 @@ export function Ideas() {
   const more = async () => {try {const page=await ideasApi<{cards:IdeaCard[];next:number|null}>(token,`?before=${next}`);
     olderLoaded.current=true;setCards(c => [...c,...page.cards.filter(x=>!c.some(y=>y.id===x.id))]);setNext(page.next);
   } catch(e) {setError(String(e));}};
-  if(trial.id && thread?.card.id===trial.id && name && !QUESTIONS_LOCAL_ONLY)
+  if(trial.id && thread?.card.id===trial.id && name)
     return <IdeaPreview pr={hasIdeaDemo(thread.card) ? thread.card.pr! : 0} title={ideaPresentation(thread.card).title} onClose={trial.close}/>;
   return <main class="ideas-page">
     <header class="ideas-top"><a href="/">← Back to Plunge</a><span>Made together</span></header>
     <div class="ideas-heading"><p class="eyebrow">Our community game</p><h1>Building Plunge together</h1>
       <p>Your ideas belong here. See what everyone’s making, try a demo, and help shape our game.</p></div>
-    {QUESTIONS_LOCAL_ONLY ? <section class="idea-paper"><h2>Keep the conversation going</h2><p>This is a test version of Plunge. Your ideas and replies live together on the main game.</p>
-      <a class="big-btn" href="/?ideas=1&demo=bidding">Try the family ideas demo</a><p><a href={ideasLink(selected ?? undefined)}>Open your live ideas</a></p></section>
+    {QUESTIONS_LOCAL_ONLY && !name ? <section class="idea-paper"><h2>Your real family ideas</h2><p>Use your Plunge account to explore this dashboard with your family’s ideas.</p>
+      <PreviewSignIn />
+      {token && !error && <p role="status">Opening your family ideas…</p>}
+      <p><a href={ideasLink(selected ?? undefined)} target="_blank" rel="noopener noreferrer">Open ideas in the main game ↗</a></p></section>
     : !name ? <section class="idea-paper"><h2>Come on in</h2><p>Sign in to use family access Jason has granted you.</p><a class="big-btn" href="/?account=1">Open your account</a><details><summary>Have a personal invite instead?</summary><p>You can still paste your invite here.</p>
       <form onSubmit={enter}><label>Your invite link<input autoComplete="off" type="password" value={invite} onInput={e=>setInvite(e.currentTarget.value)} /></label><button class="big-btn" type="submit">Open my ideas</button></form></details>
       {token && !error && <p role="status">Opening your ideas…</p>}</section>
     : <>
+      {QUESTIONS_LOCAL_ONLY && <aside class="demo-banner"><strong>Dashboard demo · real family ideas</strong><p>You’re signed in as {name}. Ideas and replies here go to the family. Game progress stays in this preview.</p>
+        <button class="text-btn" type="button" disabled={busy} onClick={()=>{clearPreviewSession();setToken('');setName('');setOwner(false);setCards([]);setThread(null);setSaved('');setError('');}}>Disconnect demo</button></aside>}
       <div class="ideas-welcome"><p>Hi, {name}.</p><button class="big-btn secondary" type="button" disabled={busy} onClick={()=>{open(null);setAdding(true);}}>＋ Share an idea</button></div>
       {selected ? <>
         <button class="text-btn" type="button" disabled={busy} onClick={()=>open(null)}>← All ideas</button>

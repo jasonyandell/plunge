@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { IdeaPreview, useIdeaPreview } from './IdeaPreview';
 import { IdeasBoard } from './IdeasBoard';
 import { ideaPresentation } from './presentation';
+import { PreviewSignIn } from './PreviewSignIn';
 import { newId, readDraft } from './client';
 import type { IdeaThread } from './model';
 import '../ui/app.css';
@@ -55,7 +56,7 @@ export function IdeasDemo() {
   if(trial.id===BID_ID) return <IdeaPreview pr={22} title={ideaPresentation(seed.card).title} onClose={trial.close}/>;
   return <main class="ideas-page">
     <header class="ideas-top"><a href="/">← Back to Plunge</a><span>Made together</span></header>
-    <aside class="demo-banner"><strong>Try the family ideas demo</strong><p>Sample conversation, real playable fix. Messages stay in this browser; demo replies don’t start builds.</p></aside>
+    <aside class="demo-banner"><strong>Try the family ideas demo</strong><p>Sample conversation, real playable fix. Messages stay in this browser; demo replies don’t start builds.</p><PreviewSignIn /></aside>
     <div class="ideas-heading"><p class="eyebrow">Our community game</p><h1>Building Plunge together</h1><p>Your ideas belong here. See what everyone’s making, try a demo, and help shape our game.</p></div>
     <div class="ideas-welcome"><div><p>Hi, {person}.</p><div class="demo-people" role="group" aria-label="Try the demo as">
       {['Mom','Dad'].map(name=><button type="button" aria-pressed={person===name} onClick={()=>setPerson(name)} key={name}>{name}</button>)}
