@@ -31,6 +31,7 @@ import './table.css';
 import './questions.css';
 import { saveQuestion } from '../questions/client';
 import { MoveQuestionPrompt } from './MoveQuestionPrompt';
+import { SharedCurrentHand, ShareHandButton } from './ShareHand';
 
 const POS: readonly string[] = ['bottom', 'left', 'top', 'right'];
 
@@ -111,6 +112,9 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
     if (scenario) setReview(true);
   }, [scenario]);
   if (!g) return null;
+  if (scenario && g.phase !== 'hand-over' && g.phase !== 'game-over') {
+    return <SharedCurrentHand g={g} onClose={() => dispatch({ type: 'go', screen: 'home' })} />;
+  }
 
   const selectQuestion = (ply: number, target: HTMLElement): void => {
     if (question?.target === target) { setQuestion(null); return; }
@@ -278,6 +282,7 @@ function GameMenu({ app, dispatch, onClose, onHome, extra }: {
       <div class="card game-menu" role="dialog" aria-label="Menu">
         <HintsSwitch app={app} dispatch={dispatch} />
         {extra}
+        {(app.scenarioGame ?? app.game) && <ShareHandButton g={(app.scenarioGame ?? app.game)!} className="big-btn secondary" />}
         <button type="button" class="big-btn" onClick={onClose}>Keep playing</button>
         <button type="button" class="big-btn secondary" onClick={onHome}>Back to home</button>
       </div>

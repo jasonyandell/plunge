@@ -37,6 +37,21 @@ export function shareUrl(g: GameState): string | null {
   return `${location.origin}${location.pathname}#r=${code}`;
 }
 
+/** Freeze the current position; keep existing finished-hand review links working. */
+export function currentHandUrl(g: GameState): string | null {
+  if (g.phase === 'hand-over' || g.phase === 'game-over') return shareUrl(g);
+  const code = encodeReplay(g);
+  return code ? `${location.origin}${location.pathname}#hand=${code}` : null;
+}
+
+/** Separate from the finished-hand decoder used by saved observations. */
+export function currentHandFromHash(hash: string): GameState | null {
+  const code = /^#hand=([A-Za-z0-9.]{61,256})$/.exec(hash)?.[1];
+  if (!code) return null;
+  const game = decodeReplay(code);
+  return game && encodeReplay(game) === code ? game : null;
+}
+
 /** Extract a share code from a location hash, if present. */
 export function codeFromHash(hash: string): string | null {
   const m = /[#&]r=([A-Za-z0-9.]+)/.exec(hash);

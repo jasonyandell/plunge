@@ -6,18 +6,21 @@
  * null instead of a broken table. Plus the store's view-only scenario mode.
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   type GameState,
   CASUAL_CONFIG,
+  PLUNGE_CONFIG,
   applyAction,
+  legalDominoes,
   mulberry32,
   newDealtGame,
   newGame,
   toSeed,
 } from '../src/engine';
 import { chooseAction } from '../src/ai';
-import { decodeHand, encodeHand } from '../src/ui/share';
+import { currentHandFromHash, currentHandUrl, decodeHand, encodeHand } from '../src/ui/share';
+import { rotateGame } from '../src/room/view';
 import { initialApp, pendingAiSeat, reducer, toSaved } from '../src/ui/store';
 
 /** Drive with medium to the end of the current hand. */
@@ -108,5 +111,79 @@ describe('store: view-only scenario mode', () => {
     app = reducer(app, { type: 'resume' });
     expect(app.screen).toBe('table');
     expect(app.game).toBe(myGame);
+  });
+});
+
+describe('current hand sharing', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const mockLocation = () => vi.stubGlobal('location', new URL('https://plunge.example/preview/?rooms=1#room=private'));
+
+  it('round-trips bidding, trump selection, partial tricks and completed tricks from every seat', () => {
+    mockLocation();
+    let g = newGame(PLUNGE_CONFIG, 'snapshot');
+    const positions = [g];
+    g = applyAction(g, { type: 'bid', bid: { kind: 'points', value: 30 } });
+    positions.push(g);
+    for (let i = 0; i < 3; i++) g = applyAction(g, { type: 'bid', bid: { kind: 'pass' } });
+    positions.push(g);
+    g = applyAction(g, { type: 'declare', decl: { type: 'pip', pip: 6 } });
+    positions.push(g);
+    for (let i = 0; i < 5; i++) {
+      g = applyAction(g, { type: 'play', domino: legalDominoes(g)[0]! });
+      positions.push(g);
+    }
+    for (const position of positions) {
+      for (const seat of [0, 1, 2, 3] as const) {
+        const viewed = rotateGame(position, seat);
+        const original = JSON.stringify(viewed);
+        const url = new URL(currentHandUrl(viewed)!);
+        expect(url.origin + url.pathname).toBe('https://plunge.example/preview/');
+        expect(url.search).toBe('');
+        const snapshot = currentHandFromHash(url.hash);
+        expect(snapshot).not.toBeNull();
+        for (const key of ['phase', 'turn', 'hands', 'dealt', 'bids', 'contract', 'declaration', 'tricks', 'currentTrick', 'points', 'sittingOut'] as const) {
+          expect(snapshot![key], key).toEqual(viewed[key]);
+        }
+        expect(JSON.stringify(viewed)).toBe(original);
+      }
+    }
+  });
+
+  it('keeps finished hands on the established review link', () => {
+    mockLocation();
+    const g = finishHand('share-a');
+    const url = new URL(currentHandUrl(g)!);
+    expect(url.hash).toBe(`#r=${encodeHand(g)}`);
+    expect(decodeHand(url.hash.slice(3))?.tricks).toEqual(g.tricks);
+  });
+
+  it('rejects malformed snapshot links and corrupt deals', () => {
+    mockLocation();
+    const hash = new URL(currentHandUrl(newGame(PLUNGE_CONFIG, 'snapshot'))!).hash;
+    const code = hash.slice('#hand='.length);
+    expect(currentHandFromHash(hash + '!')).toBeNull();
+    expect(currentHandFromHash(hash + '00')).toBeNull();
+    expect(currentHandFromHash('#hand=garbage')).toBeNull();
+    expect(currentHandFromHash('#hand=' + 'v'.repeat(10000))).toBeNull();
+    expect(currentHandFromHash(hash.replace('#hand=', '#room='))).toBeNull();
+    expect(currentHandFromHash('#hand=' + code.slice(0, 4) + code.slice(6, 8) + code.slice(6))).toBeNull();
+  });
+
+  it('leaves the recipient’s ongoing game and save intact while viewing a partial hand', () => {
+    mockLocation();
+    const snapshot = currentHandFromHash(new URL(currentHandUrl(newGame(PLUNGE_CONFIG, 'sender'))!).hash)!;
+    let app = { ...initialApp(), screen: 'table' as const, game: newGame(PLUNGE_CONFIG, 'recipient') } as ReturnType<typeof initialApp>;
+    const saved = toSaved(app);
+    const game = app.game;
+    app = reducer(app, { type: 'view-scenario', game: snapshot });
+    expect(pendingAiSeat(app)).toBeNull();
+    expect(reducer(app, { type: 'human', action: { type: 'bid', bid: { kind: 'pass' } } })).toBe(app);
+    expect(reducer(app, { type: 'ai', epoch: app.epoch })).toBe(app);
+    expect(reducer(app, { type: 'undo', epoch: app.epoch })).toBe(app);
+    expect(toSaved(app)).toEqual(saved);
+    app = reducer(app, { type: 'go', screen: 'home' });
+    app = reducer(app, { type: 'resume' });
+    expect(app.scenarioGame).toBeNull();
+    expect(app.game).toBe(game);
   });
 });
