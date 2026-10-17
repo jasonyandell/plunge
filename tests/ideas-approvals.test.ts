@@ -38,6 +38,7 @@ beforeAll(async()=>{
  const [laneSql,laneTrigger]=(await readFile(new URL('../migrations/0008_idea_hand_lane.sql',import.meta.url),'utf8')).split('CREATE TRIGGER');
  for(const statement of laneSql!.split(';').filter(s=>s.replace(/--.*$/gm,'').trim()))await db.prepare(statement).run();
  await db.prepare(`CREATE TRIGGER${laneTrigger}`).run();
+  for(const statement of (await readFile(new URL('../migrations/0010_idea_preview_revision.sql',import.meta.url),'utf8')).split(';').filter(s=>s.replace(/--.*$/gm,'').trim()))await db.prepare(statement).run();
 },20000);
 afterAll(async()=>{await mf?.dispose();});
 it('preserves verified legacy authorship without trusting matching invitation names',async()=>{

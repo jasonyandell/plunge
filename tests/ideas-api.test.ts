@@ -26,12 +26,52 @@ beforeAll(async()=>{
   const [laneSql,laneTrigger]=(await readFile(new URL('../migrations/0008_idea_hand_lane.sql',import.meta.url),'utf8')).split('CREATE TRIGGER');
   for(const statement of laneSql!.split(';').filter(s=>s.replace(/--.*$/gm,'').trim()))await db.prepare(statement).run();
   await db.prepare(`CREATE TRIGGER${laneTrigger}`).run();
+  for(const statement of (await readFile(new URL('../migrations/0010_idea_preview_revision.sql',import.meta.url),'utf8')).split(';').filter(s=>s.replace(/--.*$/gm,'').trim()))await db.prepare(statement).run();
   env={QUESTIONS:db,IDEAS_ADMIN_TOKEN:admin,ASSETS:{fetch:async()=>new Response('app')}};
   mom=await (await call('/admin/members','POST',{name:'Mom'},admin)).json() as typeof mom;
   dad=await (await call('/admin/members','POST',{name:'Dad'},admin)).json() as typeof dad;
 },20000);
 afterAll(async()=>{await mf?.dispose();});
 describe('family idea conversations and automatic builds',()=>{
+  it('provides a private read-only inventory, including stopped cards and their conversations',async()=>{
+    expect((await call('/admin/cards','GET',undefined,mom.token)).status).toBe(403);
+    await call(`/${id(9000)}`,'PUT',{body:'Inspection fixture',context:'Phone'});
+    const before=await (await call(`/${id(9000)}`)).json();
+    expect((await (await call('/admin/cards','GET',undefined,admin)).json() as {id:string}[]).some(c=>c.id===id(9000))).toBe(true);
+    expect(await (await call(`/admin/cards/${id(9000)}`,'GET',undefined,admin)).json()).toMatchObject({card:{id:id(9000)},messages:[{body:'Inspection fixture'}]});
+    expect((await call(`/admin/cards/${id(9999)}`,'GET',undefined,admin)).status).toBe(404);
+    expect(await (await call(`/${id(9000)}`)).json()).toMatchObject({card:{revision:(before as IdeaThread).card.revision,status:'queued'}});
+    await env.QUESTIONS!.prepare("UPDATE ideas SET status='closed' WHERE id=?").bind(id(9000)).run();
+  });
+  it('keeps failed previews watched, but never revives a preview for a newer failed request',async()=>{
+    const idea=id(9001),sha='a'.repeat(40),nextSha='b'.repeat(40);
+    await call(`/${idea}`,'PUT',{body:'Recover my preview',context:'Phone'});
+    await call('/admin/claim','POST',{runId:id(9002),ideaId:idea},admin);
+    await finish(9002,{status:'checking',message:'Local checks passed.',pr:9001,sha});
+    const publish=(status:string,build=sha)=>call('/admin/publish','POST',{id:idea,sha:build,status},admin);
+    await publish('failed'); await publish('failed');
+    const tracked=async()=>(await (await call('/admin/tracked','GET',undefined,admin)).json() as {id:string}[]).map(c=>c.id);
+    expect(await tracked()).toContain(idea);
+    let current=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect(current.messages.filter(m=>m.body.includes('final checks'))).toHaveLength(1);
+    const fetch=vi.spyOn(globalThis,'fetch');
+    fetch.mockResolvedValueOnce(Response.json({build:nextSha,preview_pr:9001}));
+    expect((await publish('ready')).status).toBe(409);
+    fetch.mockResolvedValueOnce(Response.json({build:sha,preview_pr:9001}));
+    expect((await publish('ready')).status).toBe(200);
+    await publish('failed');
+    await call('/admin/refresh','POST',{id:idea,sha,nextSha},admin);
+    expect((await (await call(`/${idea}`)).json() as IdeaThread).card).toMatchObject({status:'checking',sha:nextSha});
+    await call(`/${idea}/messages`,'PUT',{id:id(9003),body:'A new request'});
+    await call('/admin/claim','POST',{runId:id(9004),ideaId:idea},admin);
+    await finish(9004,{status:'failed',message:'The new source failed its tests.'});
+    expect(await tracked()).not.toContain(idea);
+    fetch.mockResolvedValueOnce(Response.json({build:nextSha,preview_pr:9001}));
+    await publish('ready',nextSha); fetch.mockRestore();
+    current=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect(current.card).toMatchObject({status:'failed',preview:null});
+    await env.QUESTIONS!.prepare("UPDATE ideas SET status='closed' WHERE id=?").bind(idea).run();
+  });
   it('requires a personal invite, keeps builder operations separate, rejects other origins',async()=>{
     expect((await call('','GET',undefined,'')).status).toBe(401);
     expect((await call('/admin/claim','POST',{runId:id(99)},mom.token)).status).toBe(403);
