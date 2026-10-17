@@ -17,6 +17,14 @@ Conversations live in new tables in the existing production D1 database, separat
 from game questions and temporary preview Workers. Closing a PR does not delete
 an idea. Everyone with a valid family invite or a signed-in account granted family access
 can read and reply to the board.
+
+Production configuration also reserves a separate `IDEAS_CACHE` Workers KV
+binding (`plunge-ideas-cache`), provisioned for the `companions` deployment profile.
+Core releases omit both OAuth storage and this optional cache binding. This makes a
+disposable cache available for future idea features; no board reads or writes
+use it yet. D1 remains the source of truth for conversations, authorization,
+leases and approvals. OAuth grants live in a different KV namespace. See
+[KV setup](KV-SETUP.md) for provisioning and credentials.
 Invite keys are random, hashed in D1, sent in Authorization headers, and removable
 individually. Invite links carry their key in a fragment, which is removed from
 the address bar immediately. Browser storage remembers that invite and unsent
