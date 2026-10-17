@@ -2,6 +2,7 @@ import { Composer } from './Composer';
 import { Screenshot } from './IdeaScreenshots';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { IdeaActivity } from './IdeaActivity';
+import { IdeaShare } from './IdeaShare';
 import { IdeaPreview, useIdeaPreview } from './IdeaPreview';
 import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
 import { LIVE_PLUNGE, type IdeaCard, type IdeaThread } from './model';
@@ -73,7 +74,7 @@ export function Ideas() {
     <div class="ideas-heading"><p class="eyebrow">Your seat at the drawing table</p><h1>Ideas for Plunge</h1>
       <p>Little fixes. Big ideas. A game that feels more like ours.</p></div>
     {QUESTIONS_LOCAL_ONLY ? <section class="idea-paper"><h2>Keep the conversation going</h2><p>This is a test version of Plunge. Your ideas and replies live together on the main game.</p>
-      <a class="big-btn" href="/?ideas=1&demo=bidding">Try the family ideas demo</a><p><a href={ideasLink(selected ?? undefined)}>Open your live ideas</a></p></section>
+      <a class="big-btn" href="/?ideas=1&demo=sharing">Try sharing an idea · demo</a><p><a href={ideasLink(selected ?? undefined)}>Open your live ideas</a></p></section>
     : !name ? <section class="idea-paper"><h2>Come on in</h2><p>Sign in to use family access Jason has granted you.</p><a class="big-btn" href="/?account=1">Open your account</a><details><summary>Have a personal invite instead?</summary><p>You can still paste your invite here.</p>
       <form onSubmit={enter}><label>Your invite link<input autoComplete="off" type="password" value={invite} onInput={e=>setInvite(e.currentTarget.value)} /></label><button class="big-btn" type="submit">Open my ideas</button></form></details>
       {token && !error && <p role="status">Opening your ideas…</p>}</section>
@@ -83,6 +84,7 @@ export function Ideas() {
         <button class="text-btn" type="button" disabled={busy} onClick={()=>open(null)}>← All ideas</button>
         {thread ? <section class="idea-paper"><div class="idea-meta"><span>{thread.card.name}’s idea</span><span>Idea {thread.card.number}</span></div>
           <h2>{thread.card.title}</h2>
+          <IdeaShare key={thread.card.id} id={thread.card.id} />
           <IdeaActivity card={thread.card} now={now} connected={connected} />
           {thread.card.status==='shipped' && <a class="big-btn" href={LIVE_PLUNGE}>Play the updated game</a>}
           {thread.card.status==='ready' && thread.card.preview && <button class="big-btn" type="button" disabled={busy} onClick={()=>trial.open(thread.card.id)}>Try your change →</button>}
@@ -104,9 +106,13 @@ export function Ideas() {
         </section>
         <h2 class="ideas-board-title">Around the table</h2>
         {!loaded ? <p role="status">Opening the board…</p> : !cards.length ? <p>No ideas yet. Yours can be the first.</p> :
-          <div class="ideas-grid">{cards.map(card=><button type="button" key={card.id} class="idea-paper idea-card" disabled={busy} onClick={()=>open(card.id)}>
+          <div class="ideas-grid">{cards.map(card=><a href={ideasLink(card.id)} key={card.id} class="idea-paper idea-card" aria-disabled={busy || undefined} tabIndex={busy ? -1 : undefined} onClick={event=>{
+            if(busy){event.preventDefault();return;}
+            if(event.button!==0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)return;
+            event.preventDefault();open(card.id);
+          }}>
             <span class="idea-meta">{card.name} · Idea {card.number}</span><h3>{card.title}</h3><IdeaActivity card={card} now={now} connected={connected} compact /><span class="idea-open">Open conversation →</span>
-          </button>)}</div>}
+          </a>)}</div>}
         {next && <button class="big-btn secondary" type="button" onClick={()=>void more()}>Earlier ideas</button>}
       </>}
       <p class="idea-help">Your family can read and reply to these cards. Changes are reviewed before they join everyone’s game.</p>
