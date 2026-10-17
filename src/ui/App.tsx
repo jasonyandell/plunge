@@ -29,8 +29,16 @@ import { syncStats } from '../history/stats-sync';
 import { Questions } from './Questions';
 import { attachGame, syncQuestions } from '../questions/client';
 import { IdentityChip } from '../account/IdentityChip';
+import { BirdwatchDemo } from './BirdwatchDemo';
+import { opensBirdwatchDemo } from './birdwatch-demo';
 
 export function App() {
+  const [demo, setDemo] = useState(() => opensBirdwatchDemo(location));
+  // The normal app (including saves, history, rooms and AI) mounts only on exit.
+  return demo ? <BirdwatchDemo onClose={() => setDemo(false)} /> : <GameApp />;
+}
+
+function GameApp() {
   const [app, reduce] = useReducer((state: AppState, event: AppEvent) => {
     const next = reducer(state, event);
     // A shared table records its own canonical history (see useRoom).

@@ -34,3 +34,20 @@
 @media (prefers-reduced-motion: reduce) {
   .birdwatch svg { animation: none; }
 }
+
+.birdwatch-demo { height: 100%; display: flex; flex-direction: column; overflow-y: auto; }
+.birdwatch-demo-bar { padding: 10px 12px; background: #24170c; border-bottom: 1px solid #e9c07a50; }
+.birdwatch-demo-bar p { margin: 6px 0; font-size: 14px; line-height: 1.4; }
+.birdwatch-demo-bar > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.birdwatch-demo-bar button {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid #a4d9c980;
+  border-radius: 9px;
+  background: #286f65;
+  color: var(--cream);
+  font-size: 14px;
+  cursor: pointer;
+}
+.birdwatch-demo-bar small { display: block; margin-top: 6px; color: var(--butterscotch); }
+.birdwatch-demo-table { flex: 1; min-height: 460px; }
