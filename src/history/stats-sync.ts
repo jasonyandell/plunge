@@ -12,7 +12,9 @@ import { UPLOAD_BATCH } from './hand-record';
 import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
 
 interface SyncMark { readonly key: string; readonly account: string; readonly id: string; readonly uploaded?: string; readonly rejected?: string }
+export interface ModelStats { modelKey: string; label: string; hands: number; finished: number }
 export interface StatsStatus {
+  readonly models?: readonly ModelStats[];
   /** The signed-in account, or null: signed out, or a preview without an account service. */
   readonly account: string | null;
   /** Hands in this device's log. */
@@ -59,7 +61,7 @@ async function status(account: string | null, total: number | null, error?: stri
   const connected = hands.filter((h) => known.get(h.id)?.uploaded).length, rejected = hands.filter((h) => known.get(h.id)?.rejected).length;
   return { account, device: hands.length, connected, rejected, waiting: hands.length - connected - rejected, total, ...(error ? { error } : {}) };
 }
-interface Ack { account?: string; stored?: string[]; rejected?: { id: string; error: string }[]; total?: number; error?: string }
+interface Ack { account?: string; stored?: string[]; rejected?: { id: string; error: string }[]; total?: number; models?: ModelStats[]; error?: string }
 /** Browsers refuse keepalive requests above about 64 KB; a hand is well under this. */
 const KEEPALIVE_BYTES = 48_000;
 async function put(device: string, hands: unknown[]): Promise<Ack & { status: number }> {
@@ -91,6 +93,7 @@ export function syncStats(known?: string): Promise<StatsStatus> {
     const pending = (await listHands()).filter((h) => !acknowledged.get(h.id)?.uploaded && !acknowledged.get(h.id)?.rejected);
     if (!pending.length && !known) return status(account, null);
     let total: number | null = null;
+    let models: ModelStats[] = [];
     try {
       // The account page asks even with nothing pending: an empty upload answers with the account's total.
       for (let i = 0; i < Math.max(1, pending.length); i += UPLOAD_BATCH) {
@@ -102,9 +105,9 @@ export function syncStats(known?: string): Promise<StatsStatus> {
           for (const id of ack.stored ?? []) if (ids.has(id)) s.put({ key: `${account}:${id}`, account, id, uploaded: now } satisfies SyncMark);
           for (const r of ack.rejected ?? []) if (ids.has(r.id)) s.put({ key: `${account}:${r.id}`, account, id: r.id, rejected: r.error } satisfies SyncMark);
         });
-        total = ack.total ?? null;
+        total = ack.total ?? null; models = ack.models ?? [];
       }
-      return status(account, total);
+      return { ...await status(account, total), models };
     } catch (e) { return status(account, total, e instanceof Error ? e.message : 'Stats service unavailable.'); }
   });
   queue = next.catch(() => {});

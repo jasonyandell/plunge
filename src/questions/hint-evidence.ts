@@ -1,21 +1,29 @@
 /** Versioned hint evidence. This module also runs in the Cloudflare Worker. */
+import { validPlayerIdentity, type PlayerIdentity } from '../ai/players';
 import { legalActions, legalDominoes, type GameState } from '../engine';
 import { observe } from '../ai/observation';
 import { playRequestOf, tileOfId, waltContractBid } from '../ai/walt/requests';
 import { decisionStats } from '../ai/decision-stats';
 import type { AnalysisWorlds, NativeEstimate } from '../ai/native';
+import type { ZebSurvey } from '../ai/zeb';
+import type { Action } from '../engine';
 import type { BiddingHint } from '../ai/bidding-hint';
 
 export type BookAdvice = Extract<BiddingHint, { kind: 'book' }>;
 export interface MoveHintEvidence {
+  model?: PlayerIdentity;
   kind: 'move'; requested_worlds: AnalysisWorlds; choice: number; forced: boolean;
   estimate: NativeEstimate | null; explanation: string; context: string;
 }
 export interface BookHintEvidence {
+  source?: never;
   kind: 'bid' | 'trump'; book_id: string; profile: string; policy_bid: 30; threshold: [number, number];
   advice: BookAdvice; explored_target: number; comparison_open: boolean; heading: string; explanation: string;
 }
-export type HintEvidence = MoveHintEvidence | BookHintEvidence;
+export interface ForecastHintEvidence {
+  kind: 'bid' | 'trump'; source: 'zeb'; model: PlayerIdentity; survey: ZebSurvey | null; action: Action; heading: string; explanation: string;
+}
+export type HintEvidence = MoveHintEvidence | BookHintEvidence | ForecastHintEvidence;
 const hash = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
 const text = (v: unknown): v is string => typeof v === 'string' && v.length <= 4000;
 const integer = (v: unknown, low: number, high: number): v is number => Number.isInteger(v) && (v as number) >= low && (v as number) <= high;
@@ -26,7 +34,8 @@ export function validHint(value: unknown, g: GameState, seed: number): HintEvide
   const h = value as HintEvidence;
   if (!h || g.turn !== 0 || !text(h.explanation)) throw new Error('Invalid hint.');
   if (h.kind === 'move') {
-    if (g.phase !== 'playing' || ![40,160,350,500].includes(h.requested_worlds) || !text(h.context)) throw new Error('Invalid move hint.');
+    if (h.model !== undefined && !validPlayerIdentity(h.model)) throw new Error('Invalid hint model.');
+    if (g.phase !== 'playing' || ![40,160,350,500,512].includes(h.requested_worlds) || !text(h.context)) throw new Error('Invalid move hint.');
     const legal = legalDominoes(g).map(tileOfId);
     if (!legal.includes(h.choice) || h.forced !== (legal.length === 1)) throw new Error('Hint names an illegal choice.');
     if (h.forced) {
@@ -43,23 +52,41 @@ export function validHint(value: unknown, g: GameState, seed: number): HintEvide
       const r = e.response;
       if (built.contract && (r.contract !== built.contract || r.inactive !== g.sittingOut)) throw new Error('Hint contract disagrees with the table.');
       if (r.choice !== h.choice || r.leader !== g.leader || !same(r.points, g.points)
-        || !Array.isArray(r.phases) || r.phases.length > 100
-        || !r.phases.every(p => p && typeof p.name === 'string' && typeof p.status === 'string')
+        || (r.route !== 'zeb' && (!Array.isArray(r.phases) || r.phases.length > 100
+        || !r.phases.every(p => p && typeof p.name === 'string' && typeof p.status === 'string')))
         || !Number.isFinite(r.elapsed_us)) throw new Error('Hint scores disagree with the table.');
       const stats = decisionStats(r, expected, legal);
       if (!stats || stats.worlds > h.requested_worlds || !stats.options.some(p => p.tile === h.choice && p.best)) {
         throw new Error('Hint is missing its completed comparison.');
       }
     }
-    return { kind: h.kind, requested_worlds: h.requested_worlds, choice: h.choice, forced: h.forced,
+    return { ...(h.model ? { model: h.model } : {}), kind: h.kind, requested_worlds: h.requested_worlds, choice: h.choice, forced: h.forced,
       estimate: h.estimate, explanation: h.explanation, context: h.context };
+  }
+  if (h.source === 'zeb') {
+    if (!['bid','trump'].includes(h.kind) || !validPlayerIdentity(h.model) || h.model.character !== 'zeb'
+      || g.phase !== (h.kind === 'bid' ? 'bidding' : 'declaring') || !text(h.heading)
+      || !legalActions(g).some(a => same(a, h.action))) throw new Error('Invalid forecast hint.');
+    const s = h.survey;
+    if (s) {
+      if (s.schema !== 'zeb-auction-v1' || s.seat !== 0 || s.seed !== seed
+        || !same(s.hand, g.dealt[0]!.map(tileOfId).sort((a,b) => a-b))
+        || !integer(s.worlds,1,1024) || s.cutoff !== 0.85 || typeof s.version !== 'string' || !hash(s.net)
+        || !Number.isFinite(s.elapsed_us) || !Array.isArray(s.forecast) || !same(s.forecast.map(f => f.decl),[0,1,2,3,4,5,6,7,9])
+        || s.forecast.some(f => !Number.isFinite(f.mean) || !Array.isArray(f.pmake) || f.pmake.length !== 13
+          || f.pmake.some(p => !Number.isFinite(p) || p < 0 || p > 1))) throw new Error('Invalid forecast evidence.');
+    } else {
+      const high = [...g.bids].reverse().find(b => b.bid.kind !== 'pass');
+      if (h.kind !== 'bid' || h.action.type !== 'bid' || h.action.bid.kind !== 'pass' || high?.seat !== 2) throw new Error('Missing forecast.');
+    }
+    return { kind: h.kind, source: 'zeb', model: h.model, survey: s, action: h.action, heading: h.heading, explanation: h.explanation };
   }
   if (!['bid','trump'].includes(h.kind) || g.phase !== (h.kind === 'bid' ? 'bidding' : 'declaring')
     || !hash(h.book_id) || typeof h.profile !== 'string' || h.profile.length > 200 || h.policy_bid !== 30
     || !same(h.threshold, [4,5]) || !integer(h.explored_target,30,42) || typeof h.comparison_open !== 'boolean'
     || !text(h.heading)) throw new Error('Invalid bidding hint.');
   const a = h.advice;
-  if (!a || a.kind !== 'book' || !integer(a.target,30,42)
+  if (!a || a.kind !== 'book' || !integer(a.target,30,42) || (a.book_seat !== undefined && !integer(a.book_seat,0,3))
     || !['bid','pass','partner','forced','declare'].includes(a.reason)
     || (a.ceiling !== null && !integer(a.ceiling,30,42))
     || !legalActions(g).some(action => same(action, a.action))
@@ -76,7 +103,7 @@ export function validHint(value: unknown, g: GameState, seed: number): HintEvide
     throw new Error('Invalid bidding hint comparison.');
   }
   return { kind: h.kind, book_id: h.book_id, profile: h.profile, policy_bid: h.policy_bid, threshold: h.threshold,
-    advice: { kind: a.kind, action: a.action, reason: a.reason, target: a.target, minimum: a.minimum,
+    advice: { kind: a.kind, ...(a.book_seat === undefined ? {} : { book_seat: a.book_seat }), action: a.action, reason: a.reason, target: a.target, minimum: a.minimum,
       panel: a.panel, panels: a.panels, ceiling: a.ceiling },
     explored_target: h.explored_target, comparison_open: h.comparison_open, heading: h.heading, explanation: h.explanation };
 }

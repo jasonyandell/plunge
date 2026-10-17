@@ -20,8 +20,8 @@ import { Table } from './Table';
 import { codeFromHash, decodeHand } from './share';
 import { decodeObservation } from './observation-link';
 import { api, isNative, nativeMove, NATIVE_TABLE, type FlagRecord } from '../ai/native';
-import { anticipatedAuctions, auctionMove } from '../ai/auction';
-import { zebAuctionMove } from '../ai/zeb';
+import { anticipatedAuctions } from '../ai/auction';
+import { computerAuction } from '../ai/computer';
 import { AuctionPreparation } from '../ai/auction-preparation';
 import './app.css';
 import { retryEvidence } from '../ai/phone/records';
@@ -129,9 +129,7 @@ export function App() {
         // Think during the presentation pause, then reveal the bid at its usual pace.
         const started = performance.now();
         setThinking(seat);
-        void (app.settings.difficulty === 'zeb'
-          ? zebAuctionMove(app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal)
-          : auctionMove(app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal,preparation.current?.evaluate)).then(
+        void computerAuction(app.settings.difficulty,app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal,preparation.current?.evaluate).then(
           decision => {
             if (!alive) return;
             t = setTimeout(() => { if (alive) dispatch({type:'auction-ai',decision,epoch}); },

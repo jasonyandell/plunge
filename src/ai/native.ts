@@ -5,19 +5,20 @@ import { playRequestOf } from './walt/requests';
 import { runPlayer } from './phone/client';
 import { digest, getReceipt, putReceipt, putEstimate } from './phone/records';
 import manifest from './phone/manifest.json';
-import { zebMove, ZEB_PLAYER } from './zeb';
+import { zebMove } from './zeb';
+import { effectivePlayer, isPlayer, player, type PlayerId } from './players';
 import { BUILD_ID } from '../ui/update';
 
 export const NATIVE_TABLE = import.meta.env.VITE_NATIVE_TABLE === '1';
 // The Mac research transport still exposes its existing 160-world profile.
 export const DEEP_WORLDS = NATIVE_TABLE ? 160 : 350;
-export type AnalysisWorlds = 40 | 160 | 350 | 500; // retain old saved estimates
-export type NativeDifficulty = 'native-l1' | 'native-partner' | 'zeb';
+export type AnalysisWorlds = 40 | 160 | 350 | 500 | 512; // retain old saved estimates
+export type NativeDifficulty = PlayerId;
 export function isNative(value: string): value is NativeDifficulty {
-  return value === 'native-l1' || value === 'native-partner' || value === 'zeb';
+  return isPlayer(value);
 }
-export const nativeLabel = (d: NativeDifficulty): string => d === 'zeb' ? 'Zeb' : d === 'native-l1' ? 'L1' : 'Walt';
-export const playerName = (difficulty: NativeDifficulty, g: GameState) => difficulty === 'zeb' && g.contract?.kind !== 'nello' ? ZEB_PLAYER : difficulty === 'native-l1' ? 'l1-default' : 'l1-partner-rollout';
+export const nativeLabel = (d: NativeDifficulty): string => player(d).name;
+export const playerName = (difficulty: NativeDifficulty, g: GameState) => player(effectivePlayer(difficulty, g)).receiptName;
 
 export interface NativeRequest {
   contract?: 'nello';
@@ -44,6 +45,7 @@ export interface NativeDecision {
     coverage?: string; values?: [number, number][]; paired?: number[][] } | null;
 }
 export interface NativeReceipt {
+  perspective?: { sourceId: string; viewer: Seat };
   storage?: 'session';
   schema: 'plunge-decision-v1'; id: string; created: string;
   identity: { request: NativeRequest; player: { name: string }; implementation: unknown; game_id: string; hand_number: number };
@@ -51,7 +53,7 @@ export interface NativeReceipt {
 }
 export interface NativeEstimate {
   schema: 'plunge-estimate-v1'; id: string; created: string;
-  identity: { request: NativeRequest; player: { n: number; nello_counterexamples?: boolean }; implementation?: unknown };
+  identity: { request: NativeRequest; player: { n: number; name?: string; nello_counterexamples?: boolean }; implementation?: unknown };
   response: NativeDecision;
 }
 export interface FlagRecord {

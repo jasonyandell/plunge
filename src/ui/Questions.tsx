@@ -105,7 +105,7 @@ export function Questions({ initialId, onClose, dispatch, nelloPreview }: {
         </div>}
         {current.answer ? <section class="question-answer"><h3>A closer look</h3><p>{current.answer.body}</p></section>
           : <p class="setting-hint">{QUESTIONS_LOCAL_ONLY ? 'Previews don’t send questions, so no explanation will arrive here.'
-            : 'Saved for a later explanation. Interesting questions help us learn and improve Walt.'}</p>}
+            : 'Saved for a later explanation. Interesting questions help us learn and improve the computer players.'}</p>}
         {!current.complete && <p class="question-wait">{current.kind === 'play' ? 'Finish the hand to see the hands and move scores.'
           : QUESTIONS_LOCAL_ONLY ? 'Finish the hand to compare the hint with what happened.'
           : 'The hint details stay private until you finish the hand; the short link already shares your note.'} Your question is already safe here.</p>}
@@ -144,7 +144,7 @@ const DETAIL_STATUS = { 'device-only': 'Saved on this device only. This preview 
 function questionTitle(q: PublicQuestion): string {
   if (q.kind === 'bid') return q.question?.hint?.kind === 'bid' ? q.question.hint.heading : 'A question about a bidding hint';
   if (q.kind === 'trump') return 'A question about choosing trump';
-  if (q.kind === 'move') return q.domino ? `Walt suggested ${q.domino.split('').join('–')}` : 'A question about a move hint';
+  if (q.kind === 'move') return q.domino ? `${q.question?.hint?.kind === 'move' ? q.question.hint.model?.name ?? 'Walt' : 'The saved hint'} suggested ${q.domino.split('').join('–')}` : 'A question about a move hint';
   return `${SEAT_NAMES[q.seat]} played ${q.domino?.split('').join('–')}`;
 }
 function QuestionIcon({ question: q }: { question: PublicQuestion }) {

@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'preact/hooks';
-import type { Bid, Declaration, GameState } from '../engine';
+import type { Bid, Declaration, GameState, Seat } from '../engine';
 import { highBid, isForcedBidTurn, legalBids, legalDeclarations } from '../engine';
 import type { AppEvent } from './store';
 import {
@@ -20,9 +20,10 @@ interface SheetProps {
   dispatch: (e: AppEvent) => void;
 }
 
-interface AuctionSheetProps extends SheetProps { player?: 'walt' | 'zeb'; showHints: boolean; sessionId: string; questionGameId?: string; onQuestion: (id: string) => void }
+interface AuctionSheetProps extends SheetProps { player?: 'walt' | 'zeb'; bookSeat?: Seat; showHints: boolean; sessionId: string; questionGameId?: string; onQuestion: (id: string) => void }
 
 interface EndSheetProps extends SheetProps {
+  modelSummary?: string;
   /** Swap to the hand-review card (trick-by-trick history). */
   onReview?: (() => void) | undefined;
   /** Viewing a shared hand (view-only) — no next hand to shake. */
@@ -64,7 +65,7 @@ export function RestartConfirm({ onConfirm, onCancel }: { onConfirm: () => void;
 // Bidding
 // ---------------------------------------------------------------------------
 
-export function BidSheet({ g, dispatch, sessionId, questionGameId, onQuestion, showHints, player = 'walt' }: AuctionSheetProps) {
+export function BidSheet({ g, dispatch, sessionId, questionGameId, onQuestion, showHints, player = 'walt', bookSeat = 0 }: AuctionSheetProps) {
   const bids = legalBids(g);
   const currentBid = highBid(g.bids);
   const canPass = bids.some((b) => b.kind === 'pass');
@@ -90,7 +91,7 @@ export function BidSheet({ g, dispatch, sessionId, questionGameId, onQuestion, s
     <div class="sheet bid-sheet" role="dialog" aria-label="Your bid">
       <h2 class="sheet-title">Your bid</h2>
       <p class="hint">{isForcedBidTurn(g) ? 'Everyone passed. You must bid at least 30.' : !canPass ? 'Choose your bid.' : currentBid ? `The bid is ${bidLabel(currentBid.bid)}. Raise it or pass.` : 'Bidding starts at 30. Bid or pass.'}</p>
-      {showHints && <BiddingHint player={player} g={g} sessionId={sessionId} questionGameId={questionGameId ?? sessionId} onQuestion={onQuestion} />}
+      {showHints && <BiddingHint player={player} bookSeat={bookSeat} g={g} sessionId={sessionId} questionGameId={questionGameId ?? sessionId} onQuestion={onQuestion} />}
       {pt !== null && minPt !== null && maxPt !== null && (
         <div class="bid-stepper">
           <button
@@ -172,7 +173,7 @@ function specialHint(b: Bid & { kind: 'marks' }): string {
 // Declaring trump
 // ---------------------------------------------------------------------------
 
-export function DeclareSheet({ g, dispatch, sessionId, questionGameId, onQuestion, showHints, player = 'walt' }: AuctionSheetProps) {
+export function DeclareSheet({ g, dispatch, sessionId, questionGameId, onQuestion, showHints, player = 'walt', bookSeat = 0 }: AuctionSheetProps) {
   const decls = legalDeclarations(g);
   const forPartner =
     g.contract !== null &&
@@ -188,7 +189,7 @@ export function DeclareSheet({ g, dispatch, sessionId, questionGameId, onQuestio
     <div class="sheet declare-sheet" role="dialog" aria-label="Declare trump">
       <h2 class="sheet-title">{title}</h2>
       {forPartner && <p class="hint">Pick from your own hand — no hints across the table.</p>}
-      {showHints && <BiddingHint player={player} g={g} sessionId={sessionId} questionGameId={questionGameId ?? sessionId} onQuestion={onQuestion} />}
+      {showHints && <BiddingHint player={player} bookSeat={bookSeat} g={g} sessionId={sessionId} questionGameId={questionGameId ?? sessionId} onQuestion={onQuestion} />}
       <div class="decl-grid">
         {decls.map((d) => (
           <button
@@ -222,7 +223,7 @@ function declTitle(d: Declaration): string {
 // Hand over / game over
 // ---------------------------------------------------------------------------
 
-export function HandOverSheet({ g, dispatch, onReview, scenario, practice, onUndo, onRestart }: EndSheetProps) {
+export function HandOverSheet({ g, dispatch, onReview, scenario, practice, onUndo, onRestart, modelSummary }: EndSheetProps) {
   const copy = handOverCopy(g);
   return (
     <div class="overlay">
@@ -230,6 +231,7 @@ export function HandOverSheet({ g, dispatch, onReview, scenario, practice, onUnd
         <p class="eyebrow">Hand {g.handNumber}{practice && ' · Practice'}</p>
         <h2 class="card-title">{copy.title}</h2>
         <p class="card-detail">{copy.detail}</p>
+        {modelSummary && <p class="setting-hint">Computer models in this hand: {modelSummary}</p>}
         <div class="card-tallies">
           <Tally marks={g.marks[0] ?? 0} label="Us" />
           <Tally marks={g.marks[1] ?? 0} label="Them" />
@@ -258,7 +260,7 @@ export function HandOverSheet({ g, dispatch, onReview, scenario, practice, onUnd
   );
 }
 
-export function GameOverSheet({ g, dispatch, onReview, practice, onUndo, onRestart }: EndSheetProps) {
+export function GameOverSheet({ g, dispatch, onReview, practice, onUndo, onRestart, modelSummary }: EndSheetProps) {
   const copy = gameOverCopy(g);
   const won = g.winner === 0;
   return (
@@ -267,6 +269,7 @@ export function GameOverSheet({ g, dispatch, onReview, practice, onUndo, onResta
         <p class="eyebrow">{won ? 'A good game' : 'Until the next hand'}{practice && ' · Practice'}</p>
         <h2 class="card-title">{copy.title}</h2>
         <p class="card-detail">{copy.detail}</p>
+        {modelSummary && <p class="setting-hint">Computer models in this hand: {modelSummary}</p>}
         <div class="card-tallies">
           <Tally marks={g.marks[0] ?? 0} label="Us" />
           <Tally marks={g.marks[1] ?? 0} label="Them" />

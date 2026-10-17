@@ -7,6 +7,7 @@
  * worker on localhost, so the check must look like the real site.
  */
 import { chromium } from 'playwright';
+import zebPackage from '@jasonyandell/zeb/package.json' with { type: 'json' };
 import { createServer } from 'node:http';
 import { readFile, writeFile, mkdtemp, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -78,7 +79,7 @@ try {
   await page.getByRole('button', { name: 'Deal me in', exact: true }).click();
   stage='play offline';
   const end = Date.now() + 120000;
-  let moves = 0, hintChecked = false;
+  let moves = 0, hintChecked = false, moveHintChecked = false;
   while (Date.now() < end) {
     if (await page.getByRole('dialog', { name: 'Hand over' }).count()) break;
     const bid = page.getByRole('dialog', { name: 'Your bid' });
@@ -87,7 +88,9 @@ try {
         await bid.getByRole('button',{name:'Help me bid',exact:true}).click();
         await page.getByRole('heading',{name:/Zeb suggests/}).waitFor({timeout:30000});
         await page.screenshot({path:join(out,'zeb-bid-hint.png')});
-        await page.getByRole('button',{name:'Back to my bid',exact:true}).click();
+        await page.getByRole('button',{name:'Why this hint?',exact:true}).click();
+        await page.getByRole('dialog',{name:'Saved question',exact:true}).waitFor();
+        await page.getByRole('button',{name:'Close questions',exact:true}).click();
         hintChecked=true;
       }
       const pass = bid.getByRole('button', { name: 'Pass', exact: true });
@@ -95,6 +98,17 @@ try {
     }
     const declare = page.getByRole('dialog', { name: 'Declare trump' });
     if (await declare.count()) { await declare.getByRole('button', { name: 'Blanks', exact: true }).click().catch(() => {}); moves++; continue; }
+    const hintButton = page.getByRole('button', { name: 'Get a hint', exact: true });
+    if (player === 'Zeb' && !moveHintChecked && await hintButton.count()) {
+      await hintButton.click();
+      await page.getByRole('heading', { name: 'A hint from Zeb', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Why this hint?', exact: true }).waitFor({ timeout: 30000 });
+      await page.screenshot({ path: join(out, 'zeb-move-hint.png') });
+      await page.getByRole('button', { name: 'Why this hint?', exact: true }).click();
+      await page.getByRole('dialog', { name: 'Saved question', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Close questions', exact: true }).click();
+      moveHintChecked = true;
+    }
     const playable = page.getByLabel('Your hand').getByRole('button');
     if (await playable.count()) { await playable.first().click().catch(() => {}); moves++; continue; }
     await page.waitForTimeout(150);
@@ -110,9 +124,12 @@ try {
       opened.onsuccess=()=>{const db=opened.result,r=db.transaction('receipts').objectStore('receipts').getAll();
         r.onsuccess=()=>{resolve(r.result);db.close();};r.onerror=()=>reject(r.error);};
     }));
-    if(!records.length || records.some(r=>r.identity.player.name!=='zeb-0.4.1' || !r.response.zeb_result))throw new Error('Computer moves did not retain Zeb receipts.');
+    if(!records.length || records.some(r=>r.identity.player.name!==`zeb-${zebPackage.version}` || !r.response.zeb_result))throw new Error('Computer moves did not retain Zeb receipts.');
     if(!hintChecked)throw new Error('The test did not exercise the Zeb bidding hint.');
-    check('Zeb selection survived reload and its live bidding hint worked offline.');
+    if(!moveHintChecked)throw new Error('The test did not exercise the Zeb move hint.');
+    const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('plunge:save:v1')));
+    if(!saved.playerEvents?.length || saved.playerEvents.some(e=>e.model.character!=='zeb'))throw new Error('Missing Zeb action attribution.');
+    check('Zeb selection, action identities, bidding hints and move hints survive offline, and both hint types save to the notebook.');
   }
 
   // A new version ships: only changed files download; Walt's copy carries over.

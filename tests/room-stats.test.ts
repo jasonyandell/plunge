@@ -98,9 +98,9 @@ it('records a finished family-table hand with every human seat, the branch a tak
   const [handId] = await handsSettle(1);
   expect(handId).toBe(`room:${momSeat.roomId}:${state.sessionId}:1`);
   const [hand] = await rows('SELECT * FROM hands WHERE id=?', handId);
-  expect(hand).toMatchObject({ room_id: momSeat.roomId, walt: null, finished: 1 });
+  expect(hand).toMatchObject({ room_id: momSeat.roomId, walt: 'native-partner', finished: 1 });
   expect(String(hand!.deal)).toHaveLength(57);
-  expect(JSON.parse(String(hand!.payload))).toMatchObject({ schema: 'plunge-hand-v1', gameId: state.sessionId, handNumber: 1, player: 'room', marksAfter: state.game!.marks });
+  expect(JSON.parse(String(hand!.payload))).toMatchObject({ schema: 'plunge-hand-v1', gameId: state.sessionId, handNumber: 1, player: 'native-partner', marksAfter: state.game!.marks });
   expect(await rows('SELECT seat,account_id,device_id,name FROM hand_players WHERE hand_id=? ORDER BY seat', handId)).toEqual([
     { seat: 0, account_id: mom, device_id: null, name: 'Mom' }, { seat: 2, account_id: dad, device_id: null, name: 'Dad' }]);
   // Mom's account counts the room hand as its own.
@@ -146,7 +146,7 @@ it('records each attempt once: a finished hand, a branch left part-way, a retry 
   const game: GameState = finishedHand('room-unit');
   room.state = { ...room.state, sessionId: 'abcd', game };
   const entry = roomHandEntry(room);
-  expect(entry).toMatchObject({ roomId: '1'.repeat(32), record: { id: 'abcd:1', player: 'room' } });
+  expect(entry).toMatchObject({ roomId: '1'.repeat(32), record: { id: 'abcd:1', player: 'native-partner' } });
   expect(entry!.players).toEqual([{ seat: 0, name: 'Host', account: mom }, { seat: 2, name: 'Dad', account: null }]);
   expect(roomHandEntry(room)).toBeNull();
   const partial = finishedHand('room-unit', true, 6);

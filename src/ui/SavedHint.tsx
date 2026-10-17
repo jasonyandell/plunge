@@ -18,7 +18,7 @@ export function SavedHint({ question, complete }: { question: Question; complete
     ? decisionStats(h.estimate.response, h.estimate.identity.request, legalDominoes(snapshot).map(tileOfId)) : null;
   const later = game ? h.kind === 'move' ? allPlays(game)[question.ply] : null : null;
   return <section class="saved-hint">
-    <p class="setting-hint">The original hint, saved before you chose. These results haven’t been recalculated.</p>
+    <p class="setting-hint">{h.kind === 'move' ? h.model ? `${h.model.name} · ${h.model.version}. ` : 'Walt · version not recorded. ' : ''}The original hint, saved before you chose. These results haven’t been recalculated.</p>
     <div class="saved-hint-hand" aria-label="Your hand when the hint was saved">
       {snapshot.hands[0]!.map(id => <Domino key={id} id={id} orientation="v" />)}
     </div>
@@ -26,7 +26,7 @@ export function SavedHint({ question, complete }: { question: Question; complete
       <p class="hint-position">{trumpChip(snapshot)}{ledChip(snapshot,snapshot.currentTrick) ? ` · Led: ${ledChip(snapshot,snapshot.currentTrick)}` : ''}</p>
       <p>{h.explanation}</p><p class="hint-fact">{h.context}</p>
       {stats && <>
-        <p class="setting-hint">{stats.worlds} sampled deals{stats.worlds < h.requested_worlds ? ` · ${h.requested_worlds} requested` : ''}. Baseline advice, without the separate partner check.</p>
+        <p class="setting-hint">{stats.worlds} sampled deals{stats.worlds < h.requested_worlds ? ` · ${h.requested_worlds} requested` : ''}. {stats.sampleBudget ? 'Weighted model estimates.' : 'Baseline advice, without the separate partner check.'}</p>
         <MoveScores stats={stats} selected={h.choice} selectionLabel="Suggested" />
       </>}
       {later && <p class="hint-fact">You later played {later.domino.split('').join('–')}{later.domino === idOfTile(h.choice) ? ', as suggested.' : ', instead of the suggested move.'}</p>}
@@ -37,6 +37,9 @@ export function SavedHint({ question, complete }: { question: Question; complete
           </div>)}
         </div>}
         <TrickHistory g={snapshot} /></details>}
+    </> : h.source === 'zeb' ? <>
+      <h3>{h.heading}</h3><p>{h.model.name} · {h.model.version}</p><p>{h.explanation}</p>
+      {h.survey && <p>{h.survey.worlds} sampled deals · forecast model {h.survey.version}</p>}
     </> : <>
       <BookDetails hint={h.advice} g={snapshot} captured={h} />
       {game && <p class="hint-fact">{h.kind === 'bid' ? `Your actual bid: ${bidLabel(game.bids.find(b => b.seat === 0)!.bid)}.`
