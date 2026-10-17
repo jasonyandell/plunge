@@ -218,8 +218,8 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
       {saved && <div class="question-toast" role="status"><span>{saved.text}</span>{saved.id && <button class="text-btn" onClick={() => { onQuestion(saved.id); setSaved(null); }}>Add note</button>}</div>}
       {question && <MoveQuestionPrompt key={`${question.sessionId}:${question.game.handNumber}:${question.ply}`}
         target={question.target} label={question.label} onSave={() => bookmark(question)} onClose={() => setQuestion(null)} />}
-      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
-      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
+      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet player={!app.room && app.settings.difficulty==='zeb' ? 'zeb' : 'walt'} key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
+      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet player={!app.room && app.settings.difficulty==='zeb' ? 'zeb' : 'walt'} key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
       {g.phase === 'hand-over' && !showingLast && !review && (
         <HandOverSheet
           g={g}

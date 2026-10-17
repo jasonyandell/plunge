@@ -14,6 +14,7 @@
     "test:watch": "vitest",
     "test:rooms:browser": "node scripts/test-rooms-browser.mjs",
     "test:offline:browser": "node scripts/test-offline-browser.mjs",
+    "test:zeb:browser": "PLUNGE_TEST_PLAYER=Zeb node scripts/test-offline-browser.mjs",
     "typecheck": "tsc --noEmit",
     "prebuild": "node scripts/verify-walt.mjs",
     "ideas:build": "node scripts/ideas/builder.mjs",
@@ -24,6 +25,7 @@
     "deploy:dry-run": "wrangler deploy --dry-run"
   },
   "dependencies": {
+    "@jasonyandell/zeb": "0.4.1",
     "@cloudflare/workers-oauth-provider": "1.2.3",
     "@modelcontextprotocol/server": "2.3.1",
     "@simplewebauthn/browser": "^14.0.0",
