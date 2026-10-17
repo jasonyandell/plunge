@@ -20,8 +20,22 @@ for(const engine of [chromium,webkit]) {
     });
     await page.goto(`${origin}/?ideas=1#invite=${'a'.repeat(64)}&idea=${id}`);
     await page.getByRole('heading',{name:thread.card.title,exact:true}).waitFor();
+    assert.equal(await page.getByRole('link',{name:'Link to this idea',exact:true}).getAttribute('href'),`/?ideas=1#idea=${id}`);
+    assert.equal(await page.getByRole('link',{name:'Try your change'}).getAttribute('href'),`/?ideas=1#idea=${id}&try=1`);
+    await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.copiedIdeaLink=value;}}}));
+    await page.getByRole('button',{name:'Copy idea link',exact:true}).click();
+    await page.getByText('Idea link copied.',{exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>window.copiedIdeaLink),`https://plunge.texas42.workers.dev/?ideas=1#idea=${id}`);
+    await page.getByRole('button',{name:'Copy demo link',exact:true}).click();
+    await page.getByText('Demo link copied.',{exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>window.copiedIdeaLink),`https://plunge.texas42.workers.dev/?ideas=1#idea=${id}&try=1`);
+    // Browsers that deny clipboard access still provide a selectable address.
+    await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw new Error('Clipboard denied');}}}));
+    await page.getByRole('button',{name:'Copy demo link',exact:true}).click();
+    await page.getByLabel('Demo link',{exact:true}).waitFor();
+    assert.equal(await page.getByLabel('Demo link',{exact:true}).inputValue(),`https://plunge.texas42.workers.dev/?ideas=1#idea=${id}&try=1`);
     await page.getByLabel('Keep the conversation going').fill('Make my bid bigger, please.');
-    await page.getByRole('button',{name:'Try your change'}).click();
+    await page.getByRole('link',{name:'Try your change'}).click();
     const frame=page.frameLocator('iframe');
     await frame.getByRole('button',{name:'Deal me in',exact:true}).click();
     await frame.getByRole('dialog',{name:'Your bid',exact:true}).waitFor({timeout:60000});
@@ -35,14 +49,14 @@ for(const engine of [chromium,webkit]) {
     await frame.locator('body').evaluate(()=>history.pushState(null,'','#inside-game'));
     await page.getByRole('button',{name:'Back to your idea'}).click();
     assert.equal(await page.getByLabel('Keep the conversation going').inputValue(),'Make my bid bigger, please.');
-    await page.getByRole('button',{name:'Try your change'}).click();
+    await page.getByRole('link',{name:'Try your change'}).click();
     await page.goBack();await page.getByRole('heading',{name:thread.card.title,exact:true}).waitFor();
     await page.goForward();await page.locator('iframe').waitFor();
     await page.reload();await page.locator('iframe').waitFor();
     await page.getByRole('button',{name:'Back to your idea'}).click();
     await page.getByRole('button',{name:'Send reply'}).click();
     await page.getByText('Make my bid bigger, please.',{exact:true}).waitFor();
-    await page.getByRole('button',{name:'Try your change'}).click();await page.goBack();
+    await page.getByRole('link',{name:'Try your change'}).click();await page.goBack();
     await page.getByRole('heading',{name:thread.card.title,exact:true}).waitFor();
     // A directly opened preview link has no local Back entry, so the button replaces its hash.
     const direct=await context.newPage();
@@ -53,6 +67,8 @@ for(const engine of [chromium,webkit]) {
     thread.card.status='checking';await direct.goto(`${origin}/?ideas=1#idea=${id}&try=1`);
     await direct.getByRole('alert').waitFor();assert.equal(await direct.locator('iframe').count(),0);
     await direct.getByRole('button',{name:'Back to your idea'}).click();await direct.getByRole('heading',{name:thread.card.title,exact:true}).waitFor();
+    assert.equal(await direct.getByRole('link',{name:'Try your change'}).count(),0);
+    assert.equal(await direct.getByRole('button',{name:'Copy demo link'}).count(),0);
     console.log(`${engine.name()}: PASS same-app play, compact phone controls, drafts, reply, Back/Forward/reload/direct links, stale preview guard`);
   }finally{await browser.close();}
 }
