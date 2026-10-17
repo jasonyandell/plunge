@@ -18,8 +18,9 @@ reviewer to keep the page open and copy the notes. No cross-device sync is claim
 
 The tour mounts a separate component before GameApp. It uses an actual legal
 engine hand and a local reducer, without saves, history, stats uploads, room
-connections or evidence capture. Visitors can play a sample hand, replay an
-effect, pause the shuffle, compare blossoms and switch the winning team. Browser
+connections or evidence capture. Visitors can play a sample hand with lightweight
+practice opponents (the existing easy policy), replay an effect, pause the shuffle,
+compare blossoms and switch the winning team. Browser
 Back and direct links select the named step. The normal game includes the four
 implemented decorations together, with the existing reduced-motion behavior.
 

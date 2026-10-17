@@ -1,4 +1,15 @@
 import { birdwatchDemoApp } from './birdwatch-demo';
+import { legalActions } from '../engine';
+import { easyAction } from '../ai/easy';
+import { observe } from '../ai/observation';
+import { pendingAiSeat, type AppState, type AppEvent, type ChooseFn } from './store';
+
+/** Lightweight practice opponents; no regular-player receipts or storage effects. */
+const practiceOpponent:ChooseFn=(game,seat,_difficulty,random)=>easyAction(observe(game,seat),legalActions(game),random);
+export function showcaseEvent(app:AppState):AppEvent|null {
+  if(app.showTrick)return {type:'trick-shown',epoch:app.epoch};
+  return pendingAiSeat(app)!==null ? {type:'ai',choose:practiceOpponent,epoch:app.epoch} : null;
+}
 
 export const SHOWCASE_ID='f98536466db4422aa0af37418476d46a';
 export const TOUR_STEPS=[

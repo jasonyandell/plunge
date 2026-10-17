@@ -1,6 +1,7 @@
 import { expect,it } from 'vitest';
 import { applyAction,legalDominoes } from '../src/engine';
-import { SHOWCASE_ID,opensShowcase,showcaseGame,showcaseLink,tourStep } from '../src/ui/scifigoofy-tour';
+import { SHOWCASE_ID,opensShowcase,showcaseEvent,showcaseGame,showcaseLink,tourStep } from '../src/ui/scifigoofy-tour';
+import { reducer } from '../src/ui/store';
 
 it('opens the combined tour directly while preserving room and shared-hand links',()=>{
   expect(opensShowcase({search:'?demo=scifigoofy',hash:''})).toBe(true);
@@ -23,4 +24,19 @@ it('starts a legal disposable human turn and never needs the saved game',()=>{
   const next=applyAction(a.game!,action);
   expect(next.currentTrick).toHaveLength(1);
   expect(b.game?.currentTrick).toHaveLength(0);
+});
+it('finishes the practice hand with computer replies and trick pauses without regular-player receipts',()=>{
+  let app=showcaseGame();
+  let moves=0;
+  while(app.game!.phase==='playing' || app.showTrick){
+    const event=showcaseEvent(app)??{type:'human' as const,action:{type:'play' as const,domino:legalDominoes(app.game!)[0]!},epoch:app.epoch};
+    const next=reducer(app,event);
+    expect(next).not.toBe(app);
+    app=next;
+    expect(++moves).toBeLessThan(40);
+  }
+  expect(app.game!.tricks.length).toBeGreaterThan(0);
+  expect(app.game!.phase).toBe('hand-over');
+  expect(app.aiMoves).toBe(app.game!.tricks.length*3);
+  expect(app.nativeReceipts).toEqual({});
 });

@@ -4,8 +4,8 @@ import { Table } from './Table';
 import { VictoryPicture } from './VictoryPicture';
 import { BramConcept } from './BramConcept';
 import { useDealFlourish } from './Shuffle';
-import { pendingAiSeat, reducer, type AppEvent } from './store';
-import { SHOWCASE_ID, TOUR_STEPS, showcaseGame, showcaseLink, tourStep } from './scifigoofy-tour';
+import { reducer, type AppEvent } from './store';
+import { SHOWCASE_ID, TOUR_STEPS, showcaseEvent, showcaseGame, showcaseLink, tourStep } from './scifigoofy-tour';
 import { NOTES_KEY, NOTE_LIMIT, parseNotes, feedbackText } from './showcase-notes';
 import './showcase.css';
 
@@ -43,8 +43,7 @@ export function ScifigoofyShowcase({onClose}:{onClose:()=>void}) {
   },[]);
   useEffect(()=>{
     if(!playing || paused)return;
-    const event:AppEvent|null=app.showTrick ? {type:'trick-shown',epoch:app.epoch}
-      : pendingAiSeat(app)!==null ? {type:'ai',epoch:app.epoch} : null;
+    const event=showcaseEvent(app);
     if(!event)return;
     const timer=setTimeout(()=>setApp(current=>reducer(current,event)),app.showTrick?1100:550);
     return()=>clearTimeout(timer);
@@ -69,7 +68,7 @@ export function ScifigoofyShowcase({onClose}:{onClose:()=>void}) {
       <section class="showcase-guide" aria-label="Feature tour">
         <p class="showcase-eyebrow">Scifigoofy’s playground · {playing?'Sample game':`${step+1} of ${TOUR_STEPS.length}`}</p>
         <h1>{playing?'Try them together':feature.title}</h1>
-        <p class="showcase-description">{playing?'Play a sample hand with the blossoms and pause visitors. Your regular game and stats stay untouched. The Bram sketch is still a proposal.':feature.text}</p>
+        <p class="showcase-description">{playing?'Play a sample hand with friendly practice opponents, blossoms and pause visitors. Your regular game and stats stay untouched. The Bram sketch is still a proposal.':feature.text}</p>
         <nav class="showcase-steps" aria-label="Choose a tour step">{TOUR_STEPS.map((item,index)=><button aria-label={`${index+1}. ${item.short}`} aria-current={!playing && index===step?'step':undefined} onClick={()=>move(index)}>{index+1}</button>)}</nav>
         <div class="showcase-actions">
           {!playing && feature.key==='blossoms' && <button onClick={()=>setBlossoms(value=>!value)}>{blossoms?'Hide blossoms':'Show blossoms'}</button>}
