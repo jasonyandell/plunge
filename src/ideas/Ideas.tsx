@@ -2,6 +2,7 @@ import { Composer } from './Composer';
 import { Screenshot } from './IdeaScreenshots';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { IdeaActivity } from './IdeaActivity';
+import { IdeaShare } from './IdeaShare';
 import { IdeaPreview, useIdeaPreview } from './IdeaPreview';
 import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
 import { LIVE_PLUNGE, type IdeaCard, type IdeaThread } from './model';
@@ -83,6 +84,7 @@ export function Ideas() {
         <button class="text-btn" type="button" disabled={busy} onClick={()=>open(null)}>← All ideas</button>
         {thread ? <section class="idea-paper"><div class="idea-meta"><span>{thread.card.name}’s idea</span><span>Idea {thread.card.number}</span></div>
           <h2>{thread.card.title}</h2>
+          <IdeaShare key={thread.card.id} id={thread.card.id} />
           <IdeaActivity card={thread.card} now={now} connected={connected} />
           {thread.card.status==='shipped' && <a class="big-btn" href={LIVE_PLUNGE}>Play the updated game</a>}
           {thread.card.status==='ready' && thread.card.preview && <button class="big-btn" type="button" disabled={busy} onClick={()=>trial.open(thread.card.id)}>Try your change →</button>}
@@ -104,9 +106,13 @@ export function Ideas() {
         </section>
         <h2 class="ideas-board-title">Around the table</h2>
         {!loaded ? <p role="status">Opening the board…</p> : !cards.length ? <p>No ideas yet. Yours can be the first.</p> :
-          <div class="ideas-grid">{cards.map(card=><button type="button" key={card.id} class="idea-paper idea-card" disabled={busy} onClick={()=>open(card.id)}>
+          <div class="ideas-grid">{cards.map(card=><a href={ideasLink(card.id)} key={card.id} class="idea-paper idea-card" aria-disabled={busy || undefined} tabIndex={busy ? -1 : undefined} onClick={event=>{
+            if(busy){event.preventDefault();return;}
+            if(event.button!==0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)return;
+            event.preventDefault();open(card.id);
+          }}>
             <span class="idea-meta">{card.name} · Idea {card.number}</span><h3>{card.title}</h3><IdeaActivity card={card} now={now} connected={connected} compact /><span class="idea-open">Open conversation →</span>
-          </button>)}</div>}
+          </a>)}</div>}
         {next && <button class="big-btn secondary" type="button" onClick={()=>void more()}>Earlier ideas</button>}
       </>}
       <p class="idea-help">Your family can read and reply to these cards. Changes are reviewed before they join everyone’s game.</p>
