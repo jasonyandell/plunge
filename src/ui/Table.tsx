@@ -16,6 +16,7 @@ import type { CompletedTrick, GameState, PlayRecord, Seat } from '../engine';
 import { legalDominoes } from '../engine';
 import { Domino } from './Domino';
 import { Tally } from './Tally';
+import { Shuffle } from './Shuffle';
 import type { AppEvent, AppState } from './store';
 import {
   HUMAN_SEAT, SEAT_NAMES, nelloAvailable, TRICK_HOLD_MS, bidLabel, contractLabel, declLabel, ledChip, trumpChip,
@@ -48,6 +49,7 @@ interface QuestionSelection {
 export const UNDO_REST_MS = 700;
 
 interface TableProps {
+  shuffling?: boolean;
   app: AppState;
   dispatch: (e: AppEvent) => void;
   /** Seat whose slow AI think is in flight (walt solving) — shows a note. */
@@ -59,7 +61,7 @@ interface TableProps {
   menuExtra?: ComponentChildren;
 }
 
-export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion, seatNote = () => null, menuExtra = null }: TableProps) {
+export function Table({ app, dispatch: rawDispatch, shuffling = false, thinking = null, onQuestion, seatNote = () => null, menuExtra = null }: TableProps) {
   // Every human decision below — tiles, bid/trump sheets, end cards — is
   // stamped with the generation this render shows (see liveDispatch).
   const dispatch = liveDispatch(rawDispatch, app.epoch);
@@ -153,6 +155,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
           </button>}
         </div>
       )}
+      {shuffling && !scenario && <Shuffle key={`${app.sessionId}:${g.handNumber}`} />}
       {(g.phase === 'playing' || showingLast) && (
         <InfoBar
           g={g}
