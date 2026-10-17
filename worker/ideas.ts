@@ -13,6 +13,7 @@ interface Member { id: string; name: string }
 interface Run { id: string; idea_id: string; revision: number; through_seq: number; state: string }
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 const BUILD_LEASE_MS=180000;
+const watchable = "(status IN ('checking','ready') OR (status='failed' AND (lane='hand' OR preview_revision=revision)))";
 const cards = `SELECT i.number,i.id,m.name,i.title,i.context,i.created,i.updated,i.revision,i.status,i.pr,i.sha,i.preview,i.lane,CASE WHEN i.status='building' AND i.run_id IS NOT NULL THEN i.lease_until-${BUILD_LEASE_MS} ELSE NULL END heartbeat_at FROM ideas i JOIN idea_members m ON m.id=i.member_id`;
 type CardRow=IdeaCard & {heartbeat_at:number|null};
 function activityCard(row:CardRow):IdeaCard {
@@ -154,14 +155,48 @@ async function screenshotResponse(db:IdeasDatabase,imageId:string,runId?:string)
     'X-Content-Type-Options':'nosniff','Content-Disposition':'inline; filename="screenshot.jpg"'}});
 }
 async function adminRequest(request: Request, path: string, db: IdeasDatabase): Promise<Response> {
+  if (path === '/admin/cards' && request.method === 'GET') {
+    return json((await db.prepare(`${cards} ORDER BY i.number`).all<CardRow>()).results.map(activityCard));
+  }
+  const cardMatch=/^\/admin\/cards\/([a-f0-9]{32})$/.exec(path);
+  if(cardMatch && request.method==='GET') {
+    const found=await thread(db,cardMatch[1]!);
+    return found ? json(found) : json({error:'Idea not found.'},404);
+  }
   const imageMatch=/^\/admin\/runs\/([a-f0-9]{32})\/attachments\/([a-f0-9]{32})$/.exec(path);
   if(imageMatch && request.method==='GET')return await screenshotResponse(db,imageMatch[2]!,imageMatch[1]!);
   if (path === '/admin/tracked' && request.method === 'GET') {
-    // A hand-built PR that failed its checks is still watched: the next push brings it back to checking.
-    return json((await db.prepare(`${cards} WHERE i.pr IS NOT NULL AND (i.status IN ('checking','ready') OR (i.lane='hand' AND i.status='failed')) ORDER BY i.number`).all<CardRow>()).results.map(activityCard));
+    return json((await db.prepare(`${cards} WHERE i.pr IS NOT NULL AND ${watchable} ORDER BY i.number`).all<CardRow>()).results.map(activityCard));
   }
   if (request.method !== 'POST') return json({error:'Method not allowed.'},405);
   const data = await body(request), now = new Date().toISOString();
+  if (path === '/admin/triage') {
+    const idea=id(data.id), action=data.action, message=field(data.message,3000);
+    const title=data.title===undefined ? null : field(data.title,100);
+    if(!['note','close'].includes(String(action)) || !Number.isSafeInteger(data.revision) || Number(data.revision)<1)
+      return json({error:'Use note or close with the current request revision.'},400);
+    // Exact retries reuse an immutable operator note. Notes never pretend to be a
+    // family request or grant access. Closing retains all messages and run archives.
+    const note=(await hash(JSON.stringify(['triage',idea,data.revision,action,title,message]))).slice(0,32);
+    const previous=await db.prepare('SELECT id FROM idea_messages WHERE id=? AND idea_id=?').bind(note,idea).first();
+    if(previous)return json(await thread(db,idea));
+    await db.batch([
+      db.prepare(`INSERT OR IGNORE INTO idea_messages(id,idea_id,role,body,created)
+        SELECT ?,id,'builder',?,? FROM ideas WHERE id=? AND revision=? AND status!='building'`)
+        .bind(note,message,now,idea,data.revision),
+      db.prepare(`UPDATE ideas SET title=COALESCE(?,title),updated=?,
+        status=CASE WHEN ? THEN 'closed' ELSE status END,
+        lane=CASE WHEN ? THEN 'hand' ELSE lane END,
+        preview=CASE WHEN ? THEN NULL ELSE preview END,
+        preview_revision=CASE WHEN ? THEN NULL ELSE preview_revision END
+        WHERE id=? AND revision=? AND status!='building'
+        AND EXISTS(SELECT 1 FROM idea_messages WHERE id=? AND idea_id=ideas.id)`)
+        .bind(title,now,...Array(4).fill(action==='close'?1:0),idea,data.revision,note),
+    ]);
+    const saved=await db.prepare('SELECT id FROM idea_messages WHERE id=?').bind(note).first();
+    if(!saved)return json({error:'This idea changed, is building, or no longer exists. Inspect it again.'},409);
+    return json(await thread(db,idea));
+  }
   if (path === '/admin/retry') {
     const retried = await db.prepare("UPDATE ideas SET status='queued',updated=? WHERE id=? AND lane='builder' AND status IN ('question','failed','queued') RETURNING id")
       .bind(now,id(data.id)).first();
@@ -230,8 +265,8 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
         SELECT ?,id,'builder',?,? FROM ideas WHERE run_id=? AND lease_until>?`).bind(run.id,message,now,run.id,finishedAt),
       db.prepare(`UPDATE idea_runs SET state='done' WHERE id=? AND EXISTS(SELECT 1 FROM ideas WHERE run_id=? AND lease_until>?)`).bind(run.id,run.id,finishedAt),
       db.prepare(`UPDATE ideas SET status=CASE WHEN revision>? THEN 'queued' ELSE ? END,
-        pr=COALESCE(?,pr),sha=COALESCE(?,sha),preview=NULL,updated=?,run_id=NULL,lease_until=NULL WHERE run_id=? AND lease_until>?`)
-        .bind(run.revision,status,status==='checking'?pr:null,status==='checking'?sha:null,now,run.id,finishedAt),
+        pr=COALESCE(?,pr),sha=COALESCE(?,sha),preview_revision=?,preview=NULL,updated=?,run_id=NULL,lease_until=NULL WHERE run_id=? AND lease_until>?`)
+        .bind(run.revision,status,status==='checking'?pr:null,status==='checking'?sha:null,status==='checking'?run.revision:null,now,run.id,finishedAt),
     ]);
     return json({ok:true});
   }
@@ -258,7 +293,7 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
         db.prepare("INSERT INTO idea_messages(id,idea_id,member_id,role,body,created) VALUES(?,?,?,'family',?,?)").bind(idea, idea, owner.member_id, body, now),
       ]);
     }
-    const adopted = await db.prepare(`UPDATE ideas SET lane='hand',status='checking',pr=?,sha=?,preview=NULL,run_id=NULL,lease_until=NULL,updated=?
+    const adopted = await db.prepare(`UPDATE ideas SET lane='hand',status='checking',pr=?,sha=?,preview_revision=revision,preview=NULL,run_id=NULL,lease_until=NULL,updated=?
       WHERE id=? AND status!='building' RETURNING id`).bind(pr, sha, now, idea).first();
     if (!adopted) return json({error:'The builder is working on this idea. Try again when it finishes.'},409);
     await db.prepare("INSERT OR IGNORE INTO idea_messages(id,idea_id,member_id,role,body,created) VALUES(?,?,?,'builder',?,?)")
@@ -268,7 +303,7 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
   if (path === '/admin/refresh') {
     const idea=id(data.id);
     if(typeof data.nextSha!=='string'||!/^[a-f0-9]{40}$/.test(data.nextSha))return json({error:'Invalid build.'},400);
-    await db.prepare("UPDATE ideas SET status='checking',sha=?,preview=NULL,updated=? WHERE id=? AND sha=? AND (status IN ('checking','ready') OR (lane='hand' AND status='failed'))")
+    await db.prepare(`UPDATE ideas SET status='checking',sha=?,preview=NULL,updated=? WHERE id=? AND sha=? AND ${watchable}`)
       .bind(data.nextSha,now,idea,data.sha).run();
     return json({ok:true});
   }
@@ -283,8 +318,15 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
       const version = await response.json() as {build?:string;preview_pr?:number};
       if (!response.ok || version.build!==card.sha || version.preview_pr!==card.pr) return json({error:'Preview is not ready.'},409);
     }
-    await db.prepare(`UPDATE ideas SET status=?,preview=?,updated=? WHERE id=? AND sha=? AND (status IN ('checking','ready') OR (lane='hand' AND status='failed'))`)
-      .bind(status,status==='ready'?previewFor(card.pr):null,now,idea,card.sha).run();
+    const note=status==='failed' ? 'The preview did not pass its final checks. Your request is saved; you do not need to submit it again. I will keep watching this build and restore the preview when its checks pass.'
+      : status==='ready' ? 'Your preview passed its checks and is ready to try.' : null;
+    const statements=[];
+    if(note) statements.push(db.prepare(`INSERT OR IGNORE INTO idea_messages(id,idea_id,role,body,created)
+      SELECT ?,id,'builder',?,? FROM ideas WHERE id=? AND sha=? AND status!=? AND ${watchable}`)
+      .bind((await hash(`${idea}:preview:${card.revision}:${card.sha}:${status}`)).slice(0,32),note,now,idea,card.sha,status));
+    statements.push(db.prepare(`UPDATE ideas SET status=?,preview=?,updated=? WHERE id=? AND sha=? AND ${watchable}`)
+      .bind(status,status==='ready'?previewFor(card.pr):null,now,idea,card.sha));
+    await db.batch(statements);
     return json({ok:true});
   }
   return json({error:'Not found.'},404);
