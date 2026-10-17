@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
-      - run: node --test scripts/test-preview.mjs
+      - run: node --test scripts/test-preview.mjs scripts/test-prepare-mcp.mjs
       - run: python3 scripts/test-update-walt.py
       - run: npm run typecheck
       - run: npm test
@@ -28,6 +28,7 @@ jobs:
           PLUNGE_IDEAS_ADMIN_TOKEN: ${{ secrets.PLUNGE_IDEAS_ADMIN_TOKEN }}
         run: |
           node scripts/prepare-questions.mjs
+          node scripts/prepare-mcp.mjs
           npx wrangler d1 migrations apply QUESTIONS --remote
           node scripts/ideas/install-secret.mjs
           npx wrangler deploy

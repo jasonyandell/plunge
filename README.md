@@ -36,6 +36,10 @@ family also always have their own chair at the standing **Family table** from an
 device, and can invite more family with a link.
 [The family table](docs/FAMILY-TABLE.md) describes the design.
 
+[Chat companions](docs/CHAT-COMPANIONS.md) documents the first Texas 42 MCP
+connection: passkey-approved OAuth and a separate named companion identity.
+Game actions through chat are a following milestone.
+
 The live table plays **straight 42** with regular bidding: 30–41, then marks.
 Each player bids once or passes, starting left of the shaker; the winner calls
 trump and leads. Four passes throw the hand in. First team to seven marks wins.
