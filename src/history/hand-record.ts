@@ -2,6 +2,8 @@
  * The hand record as it travels: validated identically on the device and in
  * the worker, so a record the device wrote is a record the account keeps.
  */
+import { validPlayerIdentity, validPlayerEvents } from '../ai/players';
+import type { PlayerIdentity, PlayerEvent } from '../ai/players';
 import { decodeReplay } from '../engine/replay-code';
 import type { GameState } from '../engine';
 import type { HandRecord } from './legacy';
@@ -40,7 +42,11 @@ export function validHandRecord(value: unknown): { record: HandRecord; game: Gam
   if (typeof r.player !== 'string' || !r.player || r.player.length > 40) throw new Error('Invalid computer player.');
   if (r.practiceHands !== undefined && (!Array.isArray(r.practiceHands) || r.practiceHands.length > 1000
     || !r.practiceHands.every((n) => Number.isSafeInteger(n) && (n as number) >= 1))) throw new Error('Invalid practice hands.');
+  if (r.models !== undefined && (!Array.isArray(r.models) || r.models.length > 40 || !r.models.every(validPlayerIdentity))) throw new Error('Invalid model identities.');
+  if (r.playerEvents !== undefined && (!validPlayerEvents(r.playerEvents) || r.playerEvents.some(e => e.handNumber !== r.handNumber))) throw new Error('Invalid model decision log.');
   return { game, record: {
+    ...(r.models ? { models: r.models as PlayerIdentity[] } : {}),
+    ...(r.playerEvents ? { playerEvents: r.playerEvents as PlayerEvent[] } : {}),
     schema: 'plunge-hand-v1', id: r.id, gameId: r.gameId, handNumber: r.handNumber as number, code: r.code, endedAt: r.endedAt,
     marksBefore: [r.marksBefore[0], r.marksBefore[1]], marksAfter: [r.marksAfter[0], r.marksAfter[1]],
     gameOver: r.gameOver, thrownIn: r.thrownIn, player: r.player,

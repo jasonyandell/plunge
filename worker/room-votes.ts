@@ -8,6 +8,7 @@ export interface VoteRule { mode: ProposalMode; needs: 'all' | 'two' | 'majority
  * reading it. A kick takes most of the table. (A knock is not a vote: see knockRoom.)
  * Tune here, nowhere else. */
 export const VOTE_RULES: Record<ProposalKind, VoteRule> = {
+  player: { mode: 'veto', needs: 'all', window: 5000 },
   start: { mode: 'veto', needs: 'all', window: 5000 },
   restart: { mode: 'veto', needs: 'all', window: 5000 },
   'next-hand': { mode: 'allow', needs: 'two', window: 90000 },
@@ -19,7 +20,7 @@ export const VOTE_RULES: Record<ProposalKind, VoteRule> = {
 export const PROPOSAL_KINDS = Object.keys(VOTE_RULES) as ProposalKind[];
 
 export function newProposal(id: string, kind: ProposalKind, by: Seat, byName: string, now: number,
-  extra: { target?: Seat } = {}): Proposal {
+  extra: { target?: Seat; player?: import('../src/ai/players').PlayerId } = {}): Proposal {
   const rule = VOTE_RULES[kind];
   return { id, kind, mode: rule.mode, needs: rule.needs, by, byName, ...extra, at: now, deadline: now + rule.window,
     votes: { [by]: 'yes' } };

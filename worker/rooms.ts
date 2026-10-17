@@ -1,7 +1,11 @@
 /** One authoritative, trusted-family table. Nobody hosts: whoever is present runs
  * Walt, and anything done to the table is a short vote. */
-import { applyAction, legalActions, newGame, PLUNGE_CONFIG, type Action, type GameState, type Seat } from '../src/engine';
+import { playRequestOf, tileOfId } from '../src/ai/walt/requests';
+import { observe } from '../src/ai/observation';
+import type { NativeReceipt } from '../src/ai/native';
+import { applyAction, toSeed, legalActions, newGame, PLUNGE_CONFIG, type Action, type GameState, type Seat } from '../src/engine';
 import { handSteps } from '../src/engine/hand-history';
+import { playerId, playerKey, playerLabel, playerEvent, handPlayers, effectivePlayer, isPlayer, player, type PlayerId } from '../src/ai/players';
 import { catalogueDeal } from '../src/ai/catalogue';
 import type { AuctionEvidence } from '../src/ai/auction';
 import type { Knock, ListedTable, Proposal, ProposalKind, RoomCommand, RoomCredentials, RoomState, VoteResult } from '../src/room/protocol';
@@ -81,8 +85,8 @@ export function createRoom(roomId: string, name: string, token = randomKey(32), 
   options: { standing?: boolean; account?: string; listed?: boolean } = {}): SavedRoom {
   return { state: { type: 'state', roomId, revision: 0, seed: '', sessionId: '', game: null,
     seats: [null, null, null, null], runner: null, open: !(options.listed ?? !!options.account), visitors: 0, proposal: null, lastVote: null,
-    started: false, holdUntil: 0, thinkingSeat: null,
-    nativeReceipts: {}, auctionSurveys: {}, retry: null, practiceHands: [], lastUndo: null },
+    started: false, holdUntil: 0, thinkingSeat: null, player: 'native-partner', modelKey: playerKey('native-partner'), playerEvents: [],
+    nativeReceipts: {}, decisionReceipts: {}, auctionSurveys: {}, retry: null, practiceHands: [], lastUndo: null },
     players: [{ name: cleanName(name), token, seen: now, ...(options.account ? { account: options.account } : {}) }, null, null, null],
     accepted: [], updated: now, admitted: [], former: [], ...(options.standing ? { standing: true } : {}) };
 }
@@ -105,7 +109,8 @@ export function roomHandEntry(room: SavedRoom, state: RoomState = room.state): H
   const game = state.game;
   if (!game) return null;
   const branch = state.retry?.handNumber === game.handNumber ? `${state.sessionId}-r${state.retry.attempt}` : state.sessionId;
-  const record = handRecordOf(game, branch, 'room', state.practiceHands ?? []);
+  const record = handRecordOf(game, branch, state.player ?? 'room', state.practiceHands ?? [],
+    { models: handPlayers(state.playerEvents, game.handNumber), playerEvents: (state.playerEvents ?? []).filter(e => e.handNumber === game.handNumber) });
   if (!record || room.recordedHands?.includes(record.id)) return null;
   room.recordedHands = [...(room.recordedHands ?? []).slice(-199), record.id];
   return { record, roomId: state.roomId, players: room.players.flatMap((p, seat) => p ? [{ seat, name: p.name, account: p.account ?? null }] : []) };
@@ -114,7 +119,7 @@ export function runnerOf(room: SavedRoom, connected: ReadonlySet<Seat>): Seat | 
   return ([0, 1, 2, 3] as const).find(seat => room.players[seat] && connected.has(seat)) ?? null;
 }
 const seatName = (room: SavedRoom, seat: Seat | null | undefined): string =>
-  seat === null || seat === undefined ? 'Walt' : room.players[seat]?.name ?? `Walt ${seat + 1}`;
+  seat === null || seat === undefined ? playerLabel(room.state.player, room.state.game) : room.players[seat]?.name ?? `${playerLabel(room.state.player, room.state.game)} ${seat + 1}`;
 
 export function roomSnapshot(room: SavedRoom, connected: ReadonlySet<Seat>, now = Date.now(), visitors = 0): RoomState {
   return { ...room.state, canUndo: roomUndoTarget(room) !== null, runner: runnerOf(room, connected), visitors,
@@ -123,7 +128,7 @@ export function roomSnapshot(room: SavedRoom, connected: ReadonlySet<Seat>, now 
 }
 /** What the home screen shows about a table: who is here and whether the door is open. */
 export function roomListing(room: SavedRoom, connected: ReadonlySet<Seat>, now = Date.now()): ListedTable {
-  return { roomId: room.state.roomId, standing: !!room.standing, open: room.state.open, started: room.state.started, updated: room.updated,
+  return { roomId: room.state.roomId, standing: !!room.standing, player: playerId(room.state.player), open: room.state.open, started: room.state.started, updated: room.updated,
     seats: room.players.map((player, seat) => player ? { name: player.name, connected: connected.has(seat as Seat) && !isAway(room, seat as Seat, connected, now) } : null) };
 }
 /** Someone who sat down by name and then signed in: their seat takes their account and
@@ -164,33 +169,39 @@ export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), n
 // --- Effects: the same code whether a person taps or a vote passes ----------
 function startGame(room: SavedRoom): void {
   const seed = randomKey(16), sessionId = randomKey(16);
-  room.state = { ...room.state, seed, sessionId, game: catalogueDeal(newGame(PLUNGE_CONFIG, seed), seed),
-    started: true, holdUntil: 0, thinkingSeat: null, nativeReceipts: {}, auctionSurveys: {},
+  room.state = { ...room.state, seed, sessionId, game: player(room.state.player).deal === 'shuffle' ? newGame(PLUNGE_CONFIG, seed) : catalogueDeal(newGame(PLUNGE_CONFIG, seed), seed),
+    started: true, holdUntil: 0, thinkingSeat: null, nativeReceipts: {}, decisionReceipts: {}, playerEvents: [], modelKey: playerKey(room.state.player), auctionSurveys: {},
     retry: null, practiceHands: [], lastUndo: null };
   room.humanSteps = { handNumber: 1, indices: [] };
 }
-function advance(room: SavedRoom, legal: Action, now: number, human: boolean, receiptId?: string, auction?: AuctionEvidence): void {
+function advance(room: SavedRoom, legal: Action, now: number, human: boolean, receiptId?: string, auction?: AuctionEvidence, receipt?: NativeReceipt, modelVerified = false): void {
   const game = room.state.game!;
   let next = applyAction(game, legal);
   if (legal.type === 'next-hand') {
-    next = catalogueDeal(roomAuctionConfig(next), room.state.seed);
+    next = roomAuctionConfig(next);
+    if (player(room.state.player).deal === 'catalogue') next = catalogueDeal(next, room.state.seed);
     room.humanSteps = { handNumber: next.handNumber, indices: [] };
   } else if (human) {
     room.humanSteps!.indices = [...room.humanSteps!.indices, handSteps(game).length];
   }
   const receipts = { ...room.state.nativeReceipts }, surveys = { ...room.state.auctionSurveys };
   const ply = game.tricks.reduce((sum, trick) => sum + trick.plays.length, 0) + game.currentTrick.length;
+  const decisions = legal.type === 'next-hand' ? {} : { ...room.state.decisionReceipts };
+  if (receipt) decisions[`${game.handNumber}:${ply}`] = receipt;
   if (receiptId && legal.type === 'play') receipts[`${game.handNumber}:${ply}`] = receiptId;
   if (auction) surveys[`${game.handNumber}:${game.turn}`] = auction;
   room.state = { ...room.state, game: next, thinkingSeat: null,
+    playerEvents: !human && modelVerified && legal.type !== 'next-hand' ? [...(room.state.playerEvents ?? []), playerEvent(game, room.state.player)] : room.state.playerEvents ?? [],
     holdUntil: next.tricks.length > game.tricks.length ? now + 2000 : 0,
-    nativeReceipts: receipts, auctionSurveys: surveys };
+    decisionReceipts: decisions, nativeReceipts: receipts, auctionSurveys: surveys };
   if (legal.type === 'next-hand') room.state = { ...room.state, retry: null, lastUndo: null };
 }
 function undoLastHuman(room: SavedRoom): boolean {
   const target = roomUndoTarget(room);
   if (!target) return false;
   room.state = { ...room.state, game: target.game, retry: target.retry, practiceHands: target.practiceHands,
+    playerEvents: (room.state.playerEvents ?? []).filter(e => e.handNumber !== target.game.handNumber || e.step < target.kept),
+    decisionReceipts: Object.fromEntries(Object.entries(room.state.decisionReceipts ?? {}).filter(([key, r]) => target.nativeReceipts[key] === r.id)),
     nativeReceipts: target.nativeReceipts, auctionSurveys: target.auctionSurveys, holdUntil: 0, thinkingSeat: null,
     lastUndo: { revision: room.state.revision + 1, seat: target.seat, name: room.players[target.seat]?.name ?? 'Player' } };
   room.humanSteps = { handNumber: target.game.handNumber, indices: room.humanSteps!.indices.filter(index => index < target.kept) };
@@ -208,13 +219,16 @@ function checkProposal(room: SavedRoom, kind: ProposalKind, by: Seat, target: Se
   if (kind === 'open' && room.state.open) throw new Error('The table is already open.');
   if (kind === 'close' && !room.state.open) throw new Error('The table is already closed.');
   if (kind === 'kick') {
-    if (target === undefined || !room.players[target]) throw new Error('That chair is already Walt’s.');
+    if (target === undefined || !room.players[target]) throw new Error('That chair already has a computer player.');
     if (target === by) throw new Error('Use Leave to step out yourself.');
   }
 }
 function applyProposal(room: SavedRoom, proposal: Proposal, now: number): boolean {
   checkProposal(room, proposal.kind, proposal.by, proposal.target, now);
   switch (proposal.kind) {
+    case 'player':
+      if (!isPlayer(proposal.player)) throw new Error('Choose an available computer player.');
+      room.state = { ...room.state, player: proposal.player, modelKey: playerKey(proposal.player), thinkingSeat: null }; return true;
     case 'start': case 'restart': startGame(room); return true;
     case 'next-hand': {
       const legal = legalActions(room.state.game!).find(action => action.type === 'next-hand');
@@ -245,7 +259,7 @@ export function settleRoom(room: SavedRoom, connected: ReadonlySet<Seat>, now = 
   if (!proposal) return false;
   const present = seated(room, connected), status = proposalStatus(proposal, present, now);
   if (status === 'open') return false;
-  const result: VoteResult = { revision: room.state.revision + 1, kind: proposal.kind, byName: proposal.byName, outcome: status,
+  const result: VoteResult = { revision: room.state.revision + 1, kind: proposal.kind, ...(proposal.player ? { player: proposal.player } : {}), byName: proposal.byName, outcome: status,
     ...(proposal.target !== undefined ? { targetName: seatName(room, proposal.target) } : {}) };
   if (status === 'failed') { const who = objector(proposal, present); if (who !== undefined) result.noFrom = seatName(room, who); }
   room.state = { ...room.state, proposal: null };
@@ -333,14 +347,15 @@ export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
       if (!PROPOSAL_KINDS.includes(command.kind)) throw new Error('Invalid room command.');
       if (command.target !== undefined && ![0, 1, 2, 3].includes(command.target)) throw new Error('Invalid room command.');
       if (room.state.proposal) throw new Error('The table is already deciding something. One moment.');
+      if (command.kind === 'player' && !isPlayer(command.player)) throw new Error('Choose an available computer player.');
       checkProposal(room, command.kind, seat, command.target, now);
       const player = room.players[seat]!;
       room.state = { ...room.state, proposal: newProposal(command.id, command.kind, seat, player.name, now,
-        command.kind === 'kick' && command.target !== undefined ? { target: command.target } : {}) };
+        command.kind === 'player' ? { player: command.player! } : command.kind === 'kick' && command.target !== undefined ? { target: command.target } : {}) };
     } else if (command.type === 'thinking') {
       const game = room.state.game;
       if (seat !== runner || (command.seat !== null && (!game || command.seat !== game.turn || !waltDrives(room, command.seat, connected, now))))
-        throw new Error('Only the person running Walt can think for an empty seat.');
+        throw new Error('Only the computer runner can think for an empty seat.');
       room.state = { ...room.state, thinkingSeat: command.seat ?? null };
       return 'thinking';
     } else {
@@ -354,13 +369,28 @@ export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
         if (!waltDrives(room, game.turn, connected, now)) throw new Error(connected.has(game.turn)
           ? 'It is not your turn.' : `Waiting for ${seatName(room, game.turn)} to come back.`);
       }
+      const computer = seat !== game.turn;
+      if (computer && (command.modelKey !== undefined || playerId(room.state.player) !== 'native-partner')
+        && command.modelKey !== (room.state.modelKey ?? playerKey(room.state.player)))
+        throw new Error('The computer player version differs. Refresh Plunge before running this table.');
+      if (!computer && (command.modelKey || command.receiptId || command.receipt || command.auction)) throw new Error('Human moves cannot carry computer evidence.');
       // Select the engine's canonical action, dropping unknown client properties.
       const legal = legalActions(game).find(candidate => JSON.stringify(candidate) === JSON.stringify(action));
       if (!legal) throw new Error('That move is not legal at this table.');
-      if (command.receiptId !== undefined && !/^[a-f0-9]{64}$/.test(command.receiptId)) throw new Error('Invalid Walt receipt.');
-      if (command.auction !== undefined && (!['plunge-played-auction-v1', 'walt-auction-v1'].includes(command.auction.schema)
-        || command.auction.seat !== game.turn)) throw new Error('Invalid Walt auction evidence.');
-      advance(room, legal, now, seat === game.turn, command.receiptId, command.auction);
+      if (command.receiptId !== undefined && !/^[a-f0-9]{64}$/.test(command.receiptId)) throw new Error('Invalid computer receipt.');
+      if (command.auction !== undefined && ((effectivePlayer(room.state.player, game) === 'zeb' ? command.auction.schema !== 'zeb-auction-v1' : !['plunge-played-auction-v1', 'walt-auction-v1'].includes(command.auction.schema))
+        || command.auction.seat !== game.turn)) throw new Error('Invalid computer auction evidence.');
+      if (command.receipt) {
+        const r = command.receipt, expected = playRequestOf(observe(game, game.turn), { n: 40, n0: 8 });
+        if (!computer || legal.type !== 'play' || !expected || r.schema !== 'plunge-decision-v1' || r.id !== command.receiptId
+          || r.perspective || r.identity?.game_id !== room.state.sessionId || r.identity.hand_number !== game.handNumber
+          || r.identity.player?.name !== player(effectivePlayer(room.state.player, game)).receiptName
+          || r.identity.request?.seed !== toSeed(`sunshine/${room.state.sessionId}/${game.handNumber}`)
+          || !['contract','decl','bid','bidder','seat','hand','plays'].every(k => JSON.stringify(r.identity.request[k as keyof typeof r.identity.request]) === JSON.stringify(expected[k as keyof typeof expected]))
+          || r.response?.choice !== tileOfId(legal.domino) || r.response.leader !== game.leader
+          || JSON.stringify(r.response.points) !== JSON.stringify(game.points)) throw new Error('Computer scores do not match this move.');
+      }
+      advance(room, legal, now, seat === game.turn, command.receiptId, command.auction, command.receipt, command.modelKey !== undefined);
     }
   }
   if (!settleRoom(room, connected, now)) room.state = { ...room.state, revision: room.state.revision + 1 };

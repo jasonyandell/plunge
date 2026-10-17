@@ -1,13 +1,14 @@
 import { chooseBid, type Forecast, type PositionRequest } from '@jasonyandell/zeb';
 import { legalActions, type Action, type GameState, type Seat } from '../../engine';
 import { auctionKey, auctionRequest, partnerAuctionPass, type AuctionDecision, type AuctionEvidence, type AuctionRequest } from '../auction';
-import { checkedAction, requestOf, type NativeReceipt, type NativeRequest } from '../native';
+import { checkedAction, requestOf, type NativeReceipt, type NativeRequest, type NativeEstimate } from '../native';
 import { waltDeclarationOf, waltDeclId } from '../walt/requests';
-import { digest, putReceipt } from '../phone/records';
+import { digest, putReceipt, putEstimate } from '../phone/records';
 import { BUILD_ID } from '../../ui/update';
 import { runZeb, type ZebForecast, type ZebPlay } from './client';
 
-export const ZEB_PLAYER = 'zeb-0.4.1';
+import { PLAYERS } from '../players';
+export const ZEB_PLAYER = PLAYERS.zeb.receiptName;
 export const ZEB_WORLDS = 160;
 // Mobile forecasts are noisier than the published 512-world calibration.
 export const ZEB_CUTOFF = 0.85;
@@ -58,9 +59,10 @@ export async function zebAuctionMove(g: GameState, seat: Seat, gameId: string, p
   const key = auctionKey(g, gameId), pass = partnerAuctionPass(g);
   if (pass) return { key, action: pass, survey: null };
   const request = auctionRequest(g, gameId);
-  const reused = previous?.schema === 'zeb-auction-v1' && previous.seed === request.seed && previous.seat === seat
+  const reused = previous?.schema === 'zeb-auction-v1' && previous.version === PLAYERS.zeb.version && previous.seed === request.seed && previous.seat === seat
     && JSON.stringify(previous.hand) === JSON.stringify(request.hand) ? previous : null;
   const result = reused ? null : await evaluate(request);
+  if (result && result.version !== PLAYERS.zeb.version) throw new Error('Zeb package and worker versions differ. Refresh Plunge.');
   const survey: ZebSurvey = reused ? { ...reused, bid: request.bid } : { ...request, schema:'zeb-auction-v1', decl:0, worlds:ZEB_WORLDS,
     cutoff:ZEB_CUTOFF, forecast:result!.value, version:result!.version, net:result!.net, elapsed_us:result!.elapsed_us };
   const action = zebAuctionAction(g, survey.forecast);
@@ -73,6 +75,7 @@ export async function zebMove(g: GameState, seat: Seat, gameId: string, signal?:
   const request = requestOf(g, seat, gameId), worlds = deeper ? 512 : ZEB_WORLDS;
   const position = zebPosition(request, worlds);
   const result = await runZeb({kind:'play',request:position},signal) as ZebPlay;
+  if (result.version !== PLAYERS.zeb.version) throw new Error('Zeb package and worker versions differ. Refresh Plunge.');
   const identity = { request, player:{name:ZEB_PLAYER}, game_id:gameId, hand_number:g.handNumber,
     implementation:{package:'@jasonyandell/zeb',version:result.version,net:result.net,worlds,reading:true,app:BUILD_ID} };
   const response = { choice:result.value.tile, legal:result.value.forced ? [result.value.tile] : result.value.q.map(([tile])=>tile),
@@ -82,4 +85,19 @@ export async function zebMove(g: GameState, seat: Seat, gameId: string, signal?:
   checkedAction(g,request,receipt);
   if (!await putReceipt(receipt)) { receipt.storage='session'; if(typeof window!=='undefined')window.dispatchEvent(new Event('plunge-history-storage-error')); }
   return receipt;
+}
+
+/** Advice is stored as an estimate; it never masquerades as an executed move. */
+export async function zebEstimate(g: GameState, gameId: string, worlds: number, signal?: AbortSignal): Promise<NativeEstimate> {
+  const request = requestOf(g, g.turn!, gameId);
+  const result = await runZeb({ kind: 'play', request: zebPosition(request, worlds) }, signal) as ZebPlay;
+  if (result.version !== PLAYERS.zeb.version) throw new Error('Zeb package and worker versions differ. Refresh Plunge.');
+  const identity = { request, player: { name: ZEB_PLAYER, n: worlds },
+    implementation: { package: PLAYERS.zeb.package, version: result.version, net: result.net, worlds, reading: true, app: BUILD_ID } };
+  const response = { choice: result.value.tile, legal: result.value.q.map(([tile]) => tile), leader: g.leader!, points: [...g.points],
+    elapsed_us: result.elapsed_us, route: result.value.forced ? 'forced' : 'zeb', n: worlds, zeb_result: result.value };
+  const estimate: NativeEstimate = { schema: 'plunge-estimate-v1', id: await digest({ identity, response }),
+    created: new Date().toISOString(), identity, response };
+  if (!await putEstimate(estimate) && typeof window !== 'undefined') window.dispatchEvent(new Event('plunge-history-storage-error'));
+  return estimate;
 }

@@ -4,7 +4,7 @@ import { encodeReplay } from '../engine/replay-code';
 import { BUILD_ID } from '../ui/update';
 import { digest, listEstimates, sessionEstimates, sessionReceipts } from '../ai/phone/records';
 import { recordHand, listHands } from './legacy';
-import manifest from '../ai/phone/manifest.json';
+import { handPlayers } from '../ai/players';
 
 export function snapshotOf(app: AppState) {
   const g = app.game;
@@ -19,6 +19,8 @@ export function snapshotOf(app: AppState) {
     ...(code ? {} : { engineState: g }),
     receipts: Object.fromEntries(Object.entries(app.nativeReceipts).filter(([k]) => k.startsWith(`${g.handNumber}:`))),
     auctionSurveys: app.auctionSurveys,
+    models: handPlayers(app.playerEvents, g.handNumber),
+    playerEvents: (app.playerEvents ?? []).filter(e => e.handNumber === g.handNumber),
     ...(app.room ? { room: { mode: app.room.mode, localSeat: app.room.localSeat, revision: app.room.revision, humans: app.room.humans } } : {}),
     // Added only when present, so ordinary snapshots keep their earlier content ids.
     ...retryProvenance(app) };
@@ -82,7 +84,7 @@ export async function recordHistory(app: AppState, leaving = false): Promise<voi
   // Every attempt gets its own record under its branch id; the first attempt's record is left as written.
   const g = app.game!, done = g.phase === 'hand-over' || g.phase === 'game-over';
   if (!snapshot.room && (done || leaving)) await recordHand(g, questionGameId(app), app.settings.difficulty, app.practiceHands ?? [],
-    { build: BUILD_ID, walt: { player: manifest.player, source_commit: manifest.source_commit, wasm_sha256: manifest.wasm_sha256 } });
+    { build: BUILD_ID, models: snapshot.models, playerEvents: snapshot.playerEvents });
   pending.delete(key);
   const entry = staged.get(key);
   if (entry && typeof localStorage !== 'undefined') localStorage.removeItem(entry);

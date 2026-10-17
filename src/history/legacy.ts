@@ -13,6 +13,7 @@
  * Rescued from PR #7, commit 03970be4. The original analysis store is
  * preserved for compatibility; the current recorder does not run reviews.
  */
+import type { PlayerIdentity, PlayerEvent } from '../ai/players';
 import type { GameState } from '../engine';
 import { encodeReplay } from '../engine/replay-code';
 import { GAME_ID } from './hand-record';
@@ -34,6 +35,8 @@ export interface HandRecord {
   readonly thrownIn: boolean;
   /** Computer-player setting when the hand was played. */
   readonly player: string;
+  readonly models?: readonly PlayerIdentity[];
+  readonly playerEvents?: readonly PlayerEvent[];
   /**
    * Earlier hands of this game that were undone or replayed. Present only when
    * there were some: the marks and game result then include practice.
@@ -47,7 +50,7 @@ export interface HandRecord {
 
 /** The hand as a log record, or null when nothing has been played or it cannot be replayed. `details` are kept verbatim. */
 export function handRecordOf(g: GameState, gameId: string, player: string, practiceHands: readonly number[] = [],
-  details: Pick<HandRecord, 'build' | 'walt'> = {}): HandRecord | null {
+  details: Pick<HandRecord, 'build' | 'walt' | 'models' | 'playerEvents'> = {}): HandRecord | null {
   if (!g.bids.length || !GAME_ID.test(gameId)) return null;
   const code = encodeReplay(g);
   if (!code) return null;
@@ -121,7 +124,7 @@ export async function listHands(): Promise<HandRecord[]> {
 }
 
 export async function recordHand(g: GameState, gameId: string, player: string, practiceHands: readonly number[] = [],
-  details: Pick<HandRecord, 'build' | 'walt'> = {}): Promise<void> {
+  details: Pick<HandRecord, 'build' | 'walt' | 'models' | 'playerEvents'> = {}): Promise<void> {
   const record = handRecordOf(g, gameId, player, practiceHands, details);
   if (record) await appendHand(record);
 }

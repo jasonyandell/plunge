@@ -423,7 +423,8 @@ describe('append-only history', () => {
     const [hand] = (await listHands()).filter((h) => h.gameId === 'undo-history-c');
     expect(hand && 'practiceHands' in hand).toBe(false);
     // The exact Walt at the table travels with the record, so a later job can compare the human's play with it.
-    expect(hand!.walt).toEqual({ player: 'walt-table-v2', source_commit: expect.stringMatching(/^[a-f0-9]{40}$/), wasm_sha256: expect.stringMatching(/^[a-f0-9]{64}$/) });
+    expect(hand!.walt).toBeUndefined(); // Never stamp today's Walt onto an unversioned/test-generated hand.
+    expect(hand!.models).toEqual([]);
     expect(hand!.build).toMatch(/^(dev|[a-f0-9]{40})$/); // 'dev' locally, the commit SHA in CI builds
   });
 });

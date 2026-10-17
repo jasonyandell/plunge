@@ -1,3 +1,4 @@
+import { playerLabel } from '../ai/players';
 import { useEffect, useState } from 'preact/hooks';
 import type { Seat } from '../engine';
 import type { Knock, Proposal, RoomSeat, Vote, VoteResult } from './protocol';
@@ -5,6 +6,7 @@ import { neededYes } from '../../worker/room-votes';
 
 export function describeProposal(p: Proposal): string {
   switch (p.kind) {
+    case 'player': return `${p.byName} wants ${playerLabel(p.player)} to play the computer seats`;
     case 'start': return `${p.byName} wants to start the game`;
     case 'restart': return `${p.byName} wants to start over`;
     case 'next-hand': return `${p.byName} is ready for the next hand`;
@@ -14,12 +16,12 @@ export function describeProposal(p: Proposal): string {
     case 'kick': return `${p.byName} asks someone to step out`;
   }
 }
-const DONE: Record<VoteResult['kind'], string> = { start: 'New game', restart: 'Starting over', 'next-hand': 'Next hand',
+const DONE: Record<VoteResult['kind'], string> = { player: 'Computer player changed', start: 'New game', restart: 'Starting over', 'next-hand': 'Next hand',
   undo: 'Takeback', open: 'Table open', close: 'Table closed', kick: 'Chair freed' };
-const ASK: Record<VoteResult['kind'], string> = { start: 'starting', restart: 'starting over', 'next-hand': 'the next hand',
+const ASK: Record<VoteResult['kind'], string> = { player: 'changing the computer player', start: 'starting', restart: 'starting over', 'next-hand': 'the next hand',
   undo: 'the takeback', open: 'opening the table', close: 'closing the table', kick: 'that' };
-export function describeResult(r: VoteResult): string {
-  if (r.outcome === 'passed') return r.kind === 'kick' ? `${r.targetName ?? 'A chair'} stepped out · Walt plays that seat` : `${DONE[r.kind]} · ${r.byName} asked, the table agreed`;
+export function describeResult(r: VoteResult, model = 'Walt'): string {
+  if (r.outcome === 'passed') return r.kind === 'kick' ? `${r.targetName ?? 'A chair'} stepped out · ${model} plays that seat` : `${DONE[r.kind]} · ${r.byName} asked, the table agreed`;
   if (r.outcome === 'failed') return r.noFrom ? `${r.noFrom} said no to ${ASK[r.kind]}` : `Nobody answered ${r.byName} about ${ASK[r.kind]}`;
   return `Nothing left for ${ASK[r.kind]}`;
 }

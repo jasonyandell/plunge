@@ -552,3 +552,6 @@
 .game-menu-overlay { z-index: 45; }
 .game-menu { text-align: left; }
 .game-menu .setting { margin: 0 0 18px; }
+
+.table-player { text-align:center; padding:2px 8px; font-size:12px; color:var(--muted, #706657); }
+.player-badge { overflow-wrap:anywhere; }
