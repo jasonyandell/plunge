@@ -31,15 +31,16 @@ import { Questions } from './Questions';
 import { attachGame, syncQuestions } from '../questions/client';
 import { IdentityChip } from '../account/IdentityChip';
 import { VictoryPreview } from './VictoryPreview';
+import { BirdwatchDemo } from './BirdwatchDemo';
+import { opensBirdwatchDemo } from './birdwatch-demo';
 
 export function App() {
+  const [demo, setDemo] = useState(() => opensBirdwatchDemo(location));
   const [preview, setPreview] = useState(() => new URLSearchParams(location.search).get('preview') === 'congrats');
-  // Open the picture without mounting the game, its room connection or save effects.
+  if (demo) return <BirdwatchDemo onClose={() => setDemo(false)} />;
   if (preview) return <VictoryPreview onClose={() => {
-    const url = new URL(location.href);
-    url.searchParams.delete('preview');
-    history.replaceState(null, '', url);
-    setPreview(false);
+    const url = new URL(location.href); url.searchParams.delete('preview');
+    history.replaceState(null, '', url); setPreview(false);
   }} />;
   return <GameApp />;
 }

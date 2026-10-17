@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import './birdwatch.css';
 
 /** Table keys this decoration by the current play, so any move cancels the visit. */
-export function Birdwatch() {
+export function Birdwatch({ delayMs = 20_000 }: { delayMs?: number }) {
   const [visiting, setVisiting] = useState(false);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -10,7 +10,7 @@ export function Birdwatch() {
       clearTimeout(timer);
       setVisiting(false);
       // Returning to the app starts a fresh pause, not a surprise entrance.
-      if (!document.hidden) timer = setTimeout(() => setVisiting(true), 20_000);
+      if (!document.hidden) timer = setTimeout(() => setVisiting(true), delayMs);
     };
     restart();
     document.addEventListener('visibilitychange', restart);
@@ -18,7 +18,7 @@ export function Birdwatch() {
       clearTimeout(timer);
       document.removeEventListener('visibilitychange', restart);
     };
-  }, []);
+  }, [delayMs]);
 
   if (!visiting) return null;
   return (
