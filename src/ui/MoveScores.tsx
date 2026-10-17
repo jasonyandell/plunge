@@ -13,9 +13,9 @@ export function MoveScores({ stats, selected, selectionLabel }: { stats: MoveSta
     </div>)}</div>
     <details class="disclosure sample-details">
       <summary>Sample details</summary>
-      <p>{stats.worlds} sampled worlds: possible deals based on this player’s own hand and the public plays.
+      <p>{stats.sampleBudget ? `A budget of up to ${stats.worlds} possible deals` : `${stats.worlds} sampled worlds`}, based on this player’s own hand and the public plays.
         {stats.fallback ? ' A smaller fallback comparison was used.' : ''}
-        {' '}The fractions show successful outcomes out of the deals compared.</p>
+        {' '}{stats.sampleBudget ? 'Zeb can weight these deals using the public play. These estimates are not raw success counts.' : 'The fractions show successful outcomes out of the deals compared.'}</p>
     </details>
   </>;
 }

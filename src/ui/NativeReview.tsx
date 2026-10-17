@@ -17,8 +17,8 @@ export { reviewLegal } from '../ai/native-analysis';
 type Selection = { trick: number; play: number };
 const pips = (tile: number): string => requestTile(tile).split('').join('–');
 
-export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQuestion, nelloPreview }: {
-  nelloPreview: boolean; g: GameState; onBack: () => void; sessionId: string; receipts: Record<string,string>; initialFlag: FlagRecord | null; onQuestion: (id: string) => void;
+export function NativeReview({ g, onBack, sessionId, questionGameId = sessionId, receipts, initialFlag, onQuestion, nelloPreview }: {
+  nelloPreview: boolean; g: GameState; onBack: () => void; sessionId: string; questionGameId?: string; receipts: Record<string,string>; initialFlag: FlagRecord | null; onQuestion: (id: string) => void;
 }) {
   const [sel, setSel] = useState<Selection | null>(initialFlag ? playLocation(g, initialFlag.ply) : null);
   const [receipt, setReceipt] = useState<NativeReceipt | null>(initialFlag?.original_receipt ?? null);
@@ -127,7 +127,7 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQu
         {position && <NativeStats key={`${ply}:${requestKey(position.request)}`} g={g} sel={sel} position={position}
           receipt={matchedReceipt} loading={receiptLoading} nelloPreview={nelloPreview} />}
         {matchedReceipt ? <details class="disclosure native-receipt"><summary>Decision details</summary>
-          <p>Original decision: {(matchedReceipt.response.n ?? 0) > 40
+          <p>Original decision: {matchedReceipt.response.zeb_result ? `Zeb · ${matchedReceipt.response.n} sampled deals` : (matchedReceipt.response.n ?? 0) > 40
             ? `Deeper L1 comparison · requested ${matchedReceipt.response.n} worlds`
             : matchedReceipt.identity.player.name === 'l1-default' ? 'L1' : 'L1 + partner check'} · {(matchedReceipt.response.elapsed_us / 1e6).toFixed(2)} s</p>
           <p>{matchedReceipt.response.counterexample_result?.status === 'completed' ? 'The Nel-O counterexample pass selected the move; its stress scores are shown above.' : review?.status === 'changed' ? `The check changed ${pips(review.baseline)} to ${pips(review.choice)}.`
@@ -136,7 +136,7 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQu
             : review ? 'The check was unresolved; L1’s move was kept.' : matchedReceipt.response.route === 'forced' ? 'Only one legal move.' : 'The baseline player chose this move.'}</p>
           {review && (review.samples ?? 0) > 0 && <p>{review.samples} of {review.support} compatible hands compared
             {review.coverage === 'census' ? ' · full census' : ' · sampled guess'}.</p>}
-          {(matchedReceipt.response.n ?? 0) > 40 && <p>This move requested {matchedReceipt.response.n} worlds; the scores show the largest comparison that finished.</p>}
+          {!matchedReceipt.response.zeb_result && (matchedReceipt.response.n ?? 0) > 40 && <p>This move requested {matchedReceipt.response.n} worlds; the scores show the largest comparison that finished.</p>}
         </details> : null}
         <details class="disclosure observation-tools" open={Boolean(initialFlag)}>
         <summary>Save or share this move</summary>
@@ -154,7 +154,7 @@ export function NativeReview({ g, onBack, sessionId, receipts, initialFlag, onQu
           if (ply === null || !position) return;
           setBusy(true);
           void saveQuestion(g, ply, sessionId, matchedReceipt?.id ?? rid ?? null, note,
-            alternative === '' ? null : Number(alternative), matchedReceipt, position.request.seed)
+            alternative === '' ? null : Number(alternative), matchedReceipt, position.request.seed, questionGameId)
             .then(item => onQuestion(item.question.id)).catch(e => setError(String(e))).finally(() => setBusy(false));
         }}>{busy ? 'Saving…' : 'Save this question'}</button>
         {NATIVE_TABLE && <button type="button" class="big-btn" disabled={locked || Boolean(flag && !flag.portable) || (Boolean(rid) && matchedReceipt === null)} onClick={() => void save()}>

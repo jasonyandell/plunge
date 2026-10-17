@@ -6,6 +6,40 @@ best of luck to the both of you.
 **Play it: https://plunge.texas42.workers.dev** — works in any phone browser,
 installable as an app, plays offline.
 
+**Play with family · Experimental** opens a shared family table on the same
+felt as solo play: hints, legal-domino highlighting, mid-hand questions, trick
+history, the post-hand review and the Menu all work there, and your seat is
+always at the bottom.
+Open a table and send its invite or room code. Family can open their existing
+Plunge app, choose **Play with family**, and paste the code or invite; no second
+install or account is needed. Nobody hosts: people sit down or leave any time,
+even mid-hand, and Walt plays every chair without a person in it. Whoever is
+present and lowest at the table runs Walt in their browser; if they drop, the
+next person takes over without a pause. Someone who drops keeps their seat for
+twenty seconds, then Walt covers it until they return. Refresh rejoins your seat.
+Anything done to the table is a quick vote: starting, shaking the next hand,
+undoing the last human move, starting over, opening or closing the table, and
+asking someone to step out. Low-stakes votes go ahead after five seconds unless
+anyone says no; alone with Walt they go ahead at once. Shaking the next hand
+waits for a second person to tap it, so nobody loses the result card while
+they are still reading it. A closed table lets
+newcomers knock, and one yes from anyone present lets them in. Asking someone to
+step out needs most of the table. Earlier attempts stay in history. For Nel-O,
+win a bid of one mark or more and choose Nel-O; your partner sits out. Your solo
+game stays saved. The home screen lists the tables that are live: who is at
+each, and whether to sit right down or knock. Anyone can knock, account or not.
+A table opened by a signed-in family member is listed; one opened without
+signing in stays private to its link. Listed tables start closed, and the table
+votes itself open when it wants walk-ins. Anyone signed in (see **Your
+account**) sits under their account name and skips the name prompt; signed-in
+family also always have their own chair at the standing **Family table** from any
+device, and can invite more family with a link.
+[The family table](docs/FAMILY-TABLE.md) describes the design.
+
+[Chat companions](docs/CHAT-COMPANIONS.md) documents the first Texas 42 MCP
+connection: passkey-approved OAuth and a separate named companion identity.
+Game actions through chat are a following milestone.
+
 The live table plays **straight 42** with regular bidding: 30–41, then marks.
 Each player bids once or passes, starting left of the shaker; the winner calls
 trump and leads. Four passes throw the hand in. First team to seven marks wins.
@@ -26,6 +60,15 @@ actual computer decisions; the text remains visible with reduced motion enabled.
 legal-domino highlighting. It defaults to on and is saved on this device across
 new games and reloads. With hints off, every tile in your hand has the same play
 styling; an illegal attempt gives a follow-suit reminder without changing the game.
+
+**Undo** (under the score bar) takes back your most recent bid, trump call or play
+in the current hand, together with the computer replies that followed; tap again
+to step back further. A double tap takes back one move. **Play this hand again**
+asks first, then replays the same deal and shaker with the marks the hand began
+with. Both are also on the end-of-hand and game-over cards, and stop at the
+start of the hand: once the next hand is shaken, earlier hands stay as played.
+Retried hands count as practice and show a small **Practice** label: the first attempt's finished record and saved
+moves stay as written, and the retry is kept as its own attempt in history and stats.
 
 Completed tricks stay visible for two seconds before gathering toward the winner,
 including tricks that end the hand or match. The result card waits until the trick
@@ -102,7 +145,7 @@ never label an unscored emergency fallback as a measured recommendation.
 ## How it ships
 
 Every same-repository pull request, including drafts, gets a stable phone-accessible
-preview link and an isolated question database. Pushes update that preview; closing
+preview link. Previews have no database: questions stay on the device. Pushes update that preview; closing
 the PR cleans it up. Open **View deployment** on the PR. [Preview guide](docs-previews.md).
 
 Every push to `main` runs the full suite (engine invariants, AI legality + strength
@@ -150,5 +193,40 @@ Public domain under [CC0 1.0](LICENSE). Steal anything. Built for the love of th
 
 ## Instant bidding from recorded games
 
-New Walt matches use the audited 125-deal catalogue and empirical score tails
-from 305,440 complete games. [Bid-book behavior, evidence and updates](docs-bid-book.md).
+New Walt matches use the audited 130-deal catalogue and empirical score tails
+from 318,472 complete games. [Bid-book behavior, evidence and updates](docs-bid-book.md).
+
+## Local history recorder
+
+Every live hand transition is saved on the device, including unfinished hands,
+replayable bids/trump/plays, marks and outcomes, settings, auction evidence and
+links to actual Walt move receipts. Hint/deeper run responses are also kept.
+Home → **Export history** downloads a JSON backup with those receipts and results.
+History is never uploaded or automatically evicted. Clearing browser data still
+removes local history; export a backup first. A storage failure displays a warning
+and retains pending captures in the tab; a localStorage outbox recovers unfinished
+IndexedDB writes after reload when storage is available. Simultaneous tabs append
+content-addressed captures without overwriting each other's branches; the existing
+single resume slot still belongs to the last tab that saved it.
+
+## Stats and your account
+
+Every hand attempt is recorded: solo hands on the device, including the moves a
+takeback undid, and family-room hands by the room itself. Signing in with the
+optional passkey account uploads the device's hands once each (never duplicated,
+never changed) and ties room hands to your seat, so one account's record spans
+every device and every table. The game only uploads when there is a new hand to
+send; an idle tab makes no requests. Full game history and Walt results stay on
+the device. See [optional accounts](docs/OPTIONAL-ACCOUNTS.md#stats).
+
+The finished-hand store was rescued from PR #7 / commit
+`03970be4ae9888e8e36b1ced6a2b9bca5cd4fb9a`. The staged-outbox design was checked
+against Claude's richer journal on `claude/in-flight-prs-planning-vlkhi2`
+(`f2b8fb02f1f8fde152f07803069d5d45593b6100`). Dashboard, derived reviews and remote
+hand synchronization remain deferred. Existing databases are preserved.
+
+## Family ideas
+
+**Ideas for Plunge** gives invited family members simple idea cards, lasting
+conversations, and individual previews. A local Codex builder turns queued ideas
+and replies into tested draft PRs. See [setup and operation](docs/FAMILY-IDEAS.md).

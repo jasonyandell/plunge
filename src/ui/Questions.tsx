@@ -5,6 +5,7 @@ import { decodeReplay } from '../engine/replay-code';
 import { type AppEvent, SEAT_NAMES, contractLabel, declLabel } from './store';
 import { editNote, getPublicQuestion, listQuestions, questionLink, refreshQuestions } from '../questions/client';
 import { ownerQuestion, type LocalQuestion, type PublicQuestion } from '../questions/model';
+import { QUESTIONS_LOCAL_ONLY, delivery } from '../questions/mode';
 import { NativeStats } from './NativeStats';
 import { reviewPosition } from '../ai/native-analysis';
 import { TrickHistory } from './TrickHistory';
@@ -46,7 +47,8 @@ export function Questions({ initialId, onClose, dispatch, nelloPreview }: {
   useEffect(()=>{
     let live=true;setShared(null);setCopied(false);setEditing(false);
     if(id && !owned)void getPublicQuestion(id).then(q=>{if(live)setShared(q);})
-      .catch(()=>{if(live)setNotice('A shared question needs a connection and a completed upload. Saved copies still work here.');});
+      .catch(()=>{if(live)setNotice(QUESTIONS_LOCAL_ONLY ? 'Shared question links don’t open in this preview. Saved copies still work here.'
+        : 'A shared question needs a connection and a completed upload. Saved copies still work here.');});
     return()=>{live=false;};
   },[id,Boolean(owned)]);
   const current=owned ? ownerQuestion(owned.question,owned.answer) : shared;
@@ -73,7 +75,8 @@ export function Questions({ initialId, onClose, dispatch, nelloPreview }: {
     <div class="questions-body">
       {!id ? <>
         <p class="question-intro">Something catch your eye? Tap a played domino, then <strong>Why this move?</strong> For advice, tap <strong>Why this hint?</strong> inside a hint. We’ll keep the moment here for later.</p>
-        <p class="setting-hint">Saved on this device and sent anonymously for review. No account needed.</p>
+        <p class="setting-hint">{QUESTIONS_LOCAL_ONLY ? 'This preview keeps questions on this device only. Nothing is sent for review.'
+          : 'Saved on this device and sent anonymously for review. No account needed.'}</p>
         {loading && !items.length && <p role="status">Opening your notebook…</p>}
         {!loading && !items.length && <p class="questions-empty">No questions yet. There’s a whole table of possibilities.</p>}
         <div class="questions-list">{items.map(item=>{
@@ -82,7 +85,7 @@ export function Questions({ initialId, onClose, dispatch, nelloPreview }: {
             <QuestionIcon question={p} />
             <span><strong>{questionTitle(p)}</strong>
               <span>{p.note || 'What was the thinking here?'}</span>
-              <small>{item.answer ? 'Explanation ready' : item.revision>item.syncedRevision ? 'Saved here · waiting to send' : 'Sent for later'}
+              <small>{item.answer ? 'Explanation ready' : LIST_STATUS[delivery(item)]}
                 {' · '}{new Date(p.created).toLocaleDateString()}</small></span>
             <span aria-hidden="true">›</span>
           </button>;
@@ -91,7 +94,7 @@ export function Questions({ initialId, onClose, dispatch, nelloPreview }: {
         <div class="question-move"><QuestionIcon question={current} />
           <div><h3>{questionTitle(current)}</h3>
             <p>{questionPosition(current)}</p></div></div>
-        {owned && <p class="question-status" role="status">{owned.revision>owned.syncedRevision ? 'Saved on this device. Sending when connected.' : 'Saved here and sent anonymously for review.'}</p>}
+        {owned && <p class="question-status" role="status">{DETAIL_STATUS[delivery(owned)]}</p>}
         {editing ? <label class="native-label">What caught your eye?
           <textarea autoFocus maxLength={4000} value={note} onInput={e=>setNote(e.currentTarget.value)} />
           <button class="big-btn" disabled={saving} onClick={()=>void save()}>{saving ? 'Saving…' : 'Save note'}</button>
@@ -101,8 +104,11 @@ export function Questions({ initialId, onClose, dispatch, nelloPreview }: {
           {owned && <button class="text-btn" onClick={()=>{setNote(current.note);setEditing(true);}}>{current.note ? 'Edit note' : 'Add a note'}</button>}
         </div>}
         {current.answer ? <section class="question-answer"><h3>A closer look</h3><p>{current.answer.body}</p></section>
-          : <p class="setting-hint">Saved for a later explanation. Interesting questions help us learn and improve Walt.</p>}
-        {!current.complete && <p class="question-wait">{current.kind === 'play' ? 'Finish the hand to see the hands and move scores.' : 'The hint details stay private until you finish the hand; the short link already shares your note.'} Your question is already safe here.</p>}
+          : <p class="setting-hint">{QUESTIONS_LOCAL_ONLY ? 'Previews don’t send questions, so no explanation will arrive here.'
+            : 'Saved for a later explanation. Interesting questions help us learn and improve Walt.'}</p>}
+        {!current.complete && <p class="question-wait">{current.kind === 'play' ? 'Finish the hand to see the hands and move scores.'
+          : QUESTIONS_LOCAL_ONLY ? 'Finish the hand to compare the hint with what happened.'
+          : 'The hint details stay private until you finish the hand; the short link already shares your note.'} Your question is already safe here.</p>}
         {q?.schema === 'plunge-question-v2' && <>
           <SavedHint key={q.id} question={q} complete={current.complete} />
           {game && <button class="text-btn" onClick={() => { dispatch({ type: 'view-scenario', game }); onClose(); }}>Explore the whole hand</button>}
@@ -124,12 +130,16 @@ export function Questions({ initialId, onClose, dispatch, nelloPreview }: {
     <footer class="questions-footer">
       {id ? <>
         <button class="text-btn" onClick={()=>choose(null)}>All your questions</button>
-        <button class="big-btn secondary" disabled={Boolean(owned && owned.syncedRevision===0) || !current} onClick={()=>void copy()}>
-          {copied ? 'Link copied!' : 'Copy short link'}</button>
+        {!QUESTIONS_LOCAL_ONLY && <button class="big-btn secondary" disabled={Boolean(owned && owned.syncedRevision===0) || !current} onClick={()=>void copy()}>
+          {copied ? 'Link copied!' : 'Copy short link'}</button>}
       </> : <button class="big-btn" onClick={onClose}>Back to the game</button>}
     </footer>
   </dialog>;
 }
+
+const LIST_STATUS = { 'device-only': 'Saved on this device only', waiting: 'Saved here · waiting to send', sent: 'Sent for later' };
+const DETAIL_STATUS = { 'device-only': 'Saved on this device only. This preview doesn’t send questions.',
+  waiting: 'Saved on this device. Sending when connected.', sent: 'Saved here and sent anonymously for review.' };
 
 function questionTitle(q: PublicQuestion): string {
   if (q.kind === 'bid') return q.question?.hint?.kind === 'bid' ? q.question.hint.heading : 'A question about a bidding hint';

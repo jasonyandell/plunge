@@ -12,8 +12,8 @@ const ceiling=(h: PlayedHand)=>Math.max(0,...h.panels.flatMap(p=>p.tails.flatMap
 beforeEach(()=>vi.clearAllMocks());
 
 describe('empirical bid book',()=>{
- it('covers every seat in all 125 engine-generated catalogue deals',()=>{
-  expect(BID_BOOK.games).toBe(305440);expect(BID_BOOK.hands).toHaveLength(500);
+ it('covers every seat in all 130 engine-generated catalogue deals',()=>{
+  expect(BID_BOOK.games).toBe(318472);expect(BID_BOOK.seeds).toEqual(Array.from({length:130},(_,i)=>420600+i));expect(BID_BOOK.hands).toHaveLength(520);
   for(const seed of BID_BOOK.seeds){
    const g=newGame(TOURNAMENT_CONFIG,seed);
    for(let seat=0;seat<4;seat++){
@@ -29,7 +29,7 @@ describe('empirical bid book',()=>{
    const b=structuredClone(BID_BOOK);damage(b);expect(()=>validateBook(b)).toThrow();
   }
  });
- it('takes the highest empirical supported bid, or passes, across all 500 hands without a worker',async()=>{
+ it('takes the highest empirical supported bid, or passes, across all 520 hands without a worker',async()=>{
   for(const h of BID_BOOK.hands){
    const g=gameFor(h),d=await auctionMove(g,h.seat as Seat,'book-test');const max=ceiling(h);
    expect(legalActions(g)).toContainEqual(d.action);
@@ -64,8 +64,8 @@ describe('empirical bid book',()=>{
   expect(f.survey).toMatchObject({forced:true,eligible:false});expect(runAuction).not.toHaveBeenCalled();
  });
  it('selects no-repeat catalogue deals and preserves match state, reloads and next-hand rotation',()=>{
-  const seeds=Array.from({length:125},(_,i)=>catalogueSeed('match',i+1));expect(new Set(seeds).size).toBe(125);
-  expect(seeds).toEqual(Array.from({length:125},(_,i)=>catalogueSeed('match',i+1)));
+  const seeds=Array.from({length:BID_BOOK.seeds.length},(_,i)=>catalogueSeed('match',i+1));expect(new Set(seeds).size).toBe(BID_BOOK.seeds.length);
+  expect(seeds).toEqual(Array.from({length:BID_BOOK.seeds.length},(_,i)=>catalogueSeed('match',i+1)));
   let s=reducer(initialApp(),{type:'new-game',seed:'catalogue',sessionId:'catalogue'});
   for(let i=0;i<6;i++){
    const g=s.game!;for(let seat=0;seat<4;seat++)expect(playedHand(g.hands[seat]!.map(tileOfId),seat)).toBeDefined();

@@ -3,19 +3,21 @@ import { type GameState, type Seat, type Action, legalActions, toSeed } from '..
 import { observe } from './observation';
 import { playRequestOf } from './walt/requests';
 import { runPlayer } from './phone/client';
-import { digest, getReceipt, putReceipt } from './phone/records';
+import { digest, getReceipt, putReceipt, putEstimate } from './phone/records';
 import manifest from './phone/manifest.json';
+import { zebMove, ZEB_PLAYER } from './zeb';
 import { BUILD_ID } from '../ui/update';
 
 export const NATIVE_TABLE = import.meta.env.VITE_NATIVE_TABLE === '1';
 // The Mac research transport still exposes its existing 160-world profile.
 export const DEEP_WORLDS = NATIVE_TABLE ? 160 : 350;
 export type AnalysisWorlds = 40 | 160 | 350 | 500; // retain old saved estimates
-export type NativeDifficulty = 'native-l1' | 'native-partner';
+export type NativeDifficulty = 'native-l1' | 'native-partner' | 'zeb';
 export function isNative(value: string): value is NativeDifficulty {
-  return value === 'native-l1' || value === 'native-partner';
+  return value === 'native-l1' || value === 'native-partner' || value === 'zeb';
 }
-export const nativeLabel = (d: NativeDifficulty): string => d === 'native-l1' ? 'L1' : 'L1 + partner check';
+export const nativeLabel = (d: NativeDifficulty): string => d === 'zeb' ? 'Zeb' : d === 'native-l1' ? 'L1' : 'Walt';
+export const playerName = (difficulty: NativeDifficulty, g: GameState) => difficulty === 'zeb' && g.contract?.kind !== 'nello' ? ZEB_PLAYER : difficulty === 'native-l1' ? 'l1-default' : 'l1-partner-rollout';
 
 export interface NativeRequest {
   contract?: 'nello';
@@ -30,6 +32,7 @@ export interface CounterexampleReview {
   score_kind: 'witness-mixture'; options: [number, string, string][];
 }
 export interface NativeDecision {
+  zeb_result?: import('@jasonyandell/zeb').Move;
   counterexample_result?: CounterexampleReview;
 
   contract?: 'nello'; inactive?: number;
@@ -84,8 +87,10 @@ export async function api<T>(path: string, body?: unknown, milliseconds = 18000,
       const response = await runPlayer({ request, worlds, partner: false,
         ...(nello_counterexamples ? { nello_counterexamples: true } : {}),
         ...(worlds > 40 ? { budget_ms: 20000 } : {}) }, signal);
-      return { schema: 'plunge-estimate-v1', id: await digest({ request, worlds, response }),
-        created: new Date().toISOString(), identity: { request, player: { n: worlds, ...(nello_counterexamples ? { nello_counterexamples: true } : {}) }, implementation: { ...manifest, app: BUILD_ID } }, response } as T;
+      const estimate: NativeEstimate = { schema: 'plunge-estimate-v1', id: await digest({ request, worlds, response }),
+        created: new Date().toISOString(), identity: { request, player: { n: worlds, ...(nello_counterexamples ? { nello_counterexamples: true } : {}) }, implementation: { ...manifest, app: BUILD_ID } }, response };
+      if (!await putEstimate(estimate)) typeof window !== 'undefined' && window.dispatchEvent(new Event('plunge-history-storage-error'));
+      return estimate as T;
     }
     throw new Error('This operation needs the Mac gym. Copy an observation link to bring the hand back.');
   }
@@ -139,9 +144,10 @@ export function livePlayerCall(request: NativeRequest, difficulty: NativeDifficu
 }
 
 export async function nativeMove(g: GameState, seat: Seat, difficulty: NativeDifficulty, gameId: string, signal?: AbortSignal, thinkDeeper = false): Promise<NativeReceipt> {
+  if(difficulty === 'zeb' && g.contract?.kind !== 'nello') return zebMove(g,seat,gameId,signal,thinkDeeper);
   const request = requestOf(g, seat, gameId);
   const player = difficulty === 'native-l1' ? 'l1-default' : 'l1-partner-rollout';
-  const call = livePlayerCall(request, difficulty, thinkDeeper);
+  const call = livePlayerCall(request, difficulty === 'zeb' ? 'native-partner' : difficulty, thinkDeeper);
   const deeper = call.worlds > 40;
   let receipt: NativeReceipt;
   if (NATIVE_TABLE) {
@@ -152,7 +158,7 @@ export async function nativeMove(g: GameState, seat: Seat, difficulty: NativeDif
     const identity = { request, player: { name: player }, implementation: { ...manifest, app: BUILD_ID }, game_id: gameId, hand_number: g.handNumber };
     receipt = { schema: 'plunge-decision-v1', id: await digest({ identity, response }), created: new Date().toISOString(), identity, response };
     checkedAction(g, request, receipt);
-    if (!await putReceipt(receipt)) receipt.storage = 'session';
+    if (!await putReceipt(receipt)) { receipt.storage = 'session'; typeof window !== 'undefined' && window.dispatchEvent(new Event('plunge-history-storage-error')); }
   }
   if (receipt.identity.player.name !== player || receipt.identity.game_id !== gameId || receipt.identity.hand_number !== g.handNumber) {
     throw new Error('The native player returned a receipt for a different game.');

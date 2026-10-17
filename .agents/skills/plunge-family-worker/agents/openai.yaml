@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plunge Family Worker"
+  short_description: "Keep the local Astra family idea worker running"
+  default_prompt: "Use $plunge-family-worker to check the family idea worker and keep it available on this Mac."

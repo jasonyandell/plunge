@@ -24,7 +24,7 @@ export function hintTrickEffect(g: GameState, tile: number): string {
 }
 
 /** Parent keys this component by position. Closing or leaving cancels its worker. */
-export function MoveHint({ g, sessionId, onQuestion }: { g: GameState; sessionId: string; onQuestion: (id: string) => void }) {
+export function MoveHint({ g, sessionId, questionGameId = sessionId, onQuestion }: { g: GameState; sessionId: string; questionGameId?: string; onQuestion: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const [hint, setHint] = useState<Hint | null>(null);
   const [busy, setBusy] = useState(false);
@@ -80,7 +80,7 @@ export function MoveHint({ g, sessionId, onQuestion }: { g: GameState; sessionId
             <p class="setting-hint">Hints use your hand and public plays. They compare the baseline player’s outcomes without the separate partner check.</p>
           </details>
         </>}
-        {hint && <SaveHint g={g} sessionId={sessionId} disabled={busy} evidence={{ kind: 'move',
+        {hint && <SaveHint g={g} sessionId={sessionId} questionGameId={questionGameId} disabled={busy} evidence={{ kind: 'move',
           requested_worlds: hint.requestedWorlds, choice: tile, forced: hint.forced, estimate: hint.estimate,
           explanation: hintExplanation(hint), context: hintTrickEffect(g, tile) }}
           onSaved={id => { close(); onQuestion(id); }} />}
