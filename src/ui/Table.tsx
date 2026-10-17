@@ -31,6 +31,7 @@ import './table.css';
 import './questions.css';
 import { saveQuestion } from '../questions/client';
 import { MoveQuestionPrompt } from './MoveQuestionPrompt';
+import { Birdwatch } from './Birdwatch';
 
 const POS: readonly string[] = ['bottom', 'left', 'top', 'right'];
 
@@ -57,9 +58,11 @@ interface TableProps {
   seatNote?: (seat: Seat) => string | null;
   /** A shared table's extra menu entry. */
   menuExtra?: ComponentChildren;
+  /** Isolated idea demonstration: immediate visit, no saved move questions. */
+  birdwatchDemo?: boolean;
 }
 
-export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion, seatNote = () => null, menuExtra = null }: TableProps) {
+export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion, seatNote = () => null, menuExtra = null, birdwatchDemo = false }: TableProps) {
   // Every human decision below — tiles, bid/trump sheets, end cards — is
   // stamped with the generation this render shows (see liveDispatch).
   const dispatch = liveDispatch(rawDispatch, app.epoch);
@@ -85,6 +88,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
   useEffect(() => setPlayError(null), [g, app.settings.showHints]);
   const [histOpen, setHistOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [dominoPicks, setDominoPicks] = useState(0);
   // A shared hand from a link is shown instead of the player's own game,
   // view-only, and opens straight into review.
   const scenario = app.scenarioGame !== null;
@@ -141,9 +145,9 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
   const humanSitsOut = g.sittingOut === HUMAN_SEAT;
 
   return (
-    <div class="table-screen" style={{ '--trick-hold-ms': `${TRICK_HOLD_MS}ms` }}>
+    <div class={`table-screen${!scenario && g.phase === 'playing' ? ' birdwatch-table' : ''}`} style={{ '--trick-hold-ms': `${TRICK_HOLD_MS}ms` }}>
       <StatusStrip g={g} onMenu={() => setMenuOpen(true)} />
-      {!scenario && !review && (
+      {!scenario && !review && !birdwatchDemo && (
         <div class="hand-tools">
           {practice && <span class="practice-chip" title="Undone or replayed: kept as practice, not counted in stats">Practice</span>}
           <button type="button" class="hand-tool" disabled={!undoReady} onClick={undo}
@@ -159,11 +163,18 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
           plays={trickPlays}
           open={histOpen}
           onToggle={() => setHistOpen((o) => !o)}
-          onQuestion={scenario ? undefined : selectQuestion}
+          onQuestion={scenario || birdwatchDemo ? undefined : selectQuestion}
         />
       )}
       <div class="felt">
-        <OpponentTop g={g} thinking={thinking} note={seatNote(2)} />
+        <div class="birdwatch-perch">
+          <OpponentTop g={g} thinking={thinking} note={seatNote(2)} />
+          {!scenario && g.phase === 'playing' && !showingLast && !review && !menuOpen &&
+            (!birdwatchDemo || g.currentTrick.length === 0) &&
+            !histOpen && !question && confirmRestart === null && !app.room?.table?.proposal && (
+            <Birdwatch delayMs={birdwatchDemo ? 0 : 20_000} key={`${app.sessionId}:${app.epoch}:${g.handNumber}:${g.tricks.length}:${g.currentTrick.length}:${g.turn}:${dominoPicks}`} />
+          )}
+        </div>
         <div class="middle">
           <OpponentSide g={g} seat={1} thinking={thinking} note={seatNote(1)} />
           <TrickArea
@@ -172,7 +183,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
             winner={trickWinner}
             gathering={showingLast}
             thinking={thinking}
-            onQuestion={scenario ? undefined : (i, target) => selectQuestion(playIndex(g,showingLast ? g.tricks.length - 1 : g.tricks.length,i), target)}
+            onQuestion={scenario || birdwatchDemo ? undefined : (i, target) => selectQuestion(playIndex(g,showingLast ? g.tricks.length - 1 : g.tricks.length,i), target)}
           />
           <OpponentSide g={g} seat={3} thinking={thinking} note={seatNote(3)} />
         </div>
@@ -204,6 +215,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
                   state={humanTurn && app.settings.showHints ? (legal.has(id) ? 'legal' : 'illegal') : 'idle'}
                   interactive={humanTurn && !app.settings.showHints}
                   onTap={() => {
+                    setDominoPicks(picks => picks + 1);
                     if (!legal.has(id)) { setPlayError('You must follow suit when you can.'); return; }
                     dispatch({ type: 'human', action: { type: 'play', domino: id } });
                   }}
