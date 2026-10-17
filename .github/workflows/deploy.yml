@@ -10,12 +10,14 @@ jobs:
   deploy:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    env:
+      PLUNGE_DEPLOY_PROFILE: ${{ vars.PLUNGE_DEPLOY_PROFILE || 'core' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
-      - run: node --test scripts/test-preview.mjs scripts/test-prepare-mcp.mjs
+      - run: node --test scripts/test-preview.mjs scripts/test-prepare-mcp.mjs scripts/test-production-profile.mjs
       - run: python3 scripts/test-update-walt.py
       - run: npm run typecheck
       - run: npm test
@@ -28,7 +30,10 @@ jobs:
           PLUNGE_IDEAS_ADMIN_TOKEN: ${{ secrets.PLUNGE_IDEAS_ADMIN_TOKEN }}
         run: |
           node scripts/prepare-questions.mjs
-          node scripts/prepare-mcp.mjs
+          node scripts/production-profile.mjs
+          if [ "$PLUNGE_DEPLOY_PROFILE" = companions ]; then
+            node scripts/prepare-mcp.mjs
+          fi
           npx wrangler d1 migrations apply QUESTIONS --remote
           node scripts/ideas/install-secret.mjs
           npx wrangler deploy

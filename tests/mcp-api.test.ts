@@ -28,7 +28,7 @@ beforeAll(async () => {
     outboundService: async (request: { url: string }) => request.url === metadataClient ? Response.json({
       client_id: metadataClient, client_name: 'Metadata chat', redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
     }) : new Response('No external network in this test.', { status: 404 }) });
-  unconfigured = new Miniflare(options);
+  unconfigured = new Miniflare({ ...options, d1Databases: ['QUESTIONS'], bindings: { IDEAS_ADMIN_TOKEN: 'd'.repeat(64) } });
   const db = await mf.getD1Database('QUESTIONS');
   const sql = await readFile(new URL('../migrations/0002_family_ideas.sql', import.meta.url), 'utf8');
   const [tables, trigger] = sql.split('CREATE TRIGGER');
@@ -101,6 +101,14 @@ it('advertises OAuth discovery, protects MCP, and leaves ordinary play available
   expect((await unconfigured.dispatchFetch(resource)).status).toBe(503);
   expect((await mf.dispatchFetch('https://plunge-pr-1.texas42.workers.dev/api/mcp')).status).toBe(503);
   expect((await request('/api/mcp', { headers: { Origin: 'https://evil.test' } })).status).toBe(403);
+});
+
+it('keeps core play and board authentication intact without companion storage', async () => {
+  expect(await (await unconfigured.dispatchFetch(`${origin}/`)).text()).toBe('Game works');
+  expect((await unconfigured.dispatchFetch(`${origin}/api/ideas`)).status).toBe(401);
+  expect((await unconfigured.dispatchFetch(`${origin}/api/ideas/admin/cards`)).status).toBe(403);
+  for (const path of ['/api/mcp', '/oauth/register', '/oauth/authorize', '/.well-known/oauth-authorization-server'])
+    expect((await unconfigured.dispatchFetch(`${origin}${path}`)).status).toBe(503);
 });
 
 it('routes sign-in back only to a local consent or management page', async () => {
