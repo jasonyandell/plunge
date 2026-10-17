@@ -12,6 +12,7 @@ import { ClosedTableError, familyProbe, familyTable, lastRoom, liveTables, ROOMS
 import { tableNote, tableTitle } from '../room/view';
 import type { ListedTable } from '../room/protocol';
 import type { ComponentChildren } from 'preact';
+import { openScreenIdea } from '../ideas/QuickIdea';
 
 interface HomeProps {
   app: AppState;
@@ -125,6 +126,7 @@ export function Home({ app, dispatch, identity }: HomeProps) {
         {ROOMS_ENABLED && <FamilyEntry />}
 
         <div class="link-row home-links">
+          <button type="button" class="text-btn" onClick={openScreenIdea}>Share an idea</button>
           <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'how' })}>
             How to play
           </button>
@@ -213,6 +215,8 @@ export function More({ app, dispatch, onQuestions, onHistory }: MoreProps) {
         <section class="more-section" aria-labelledby="more-plunge">
           <h2 id="more-plunge">Plunge</h2>
           <a class="more-row" href="?ideas=1">Ideas for Plunge</a>
+          <button type="button" class="more-row" onClick={openScreenIdea}>Share an idea about this screen</button>
+          <p class="setting-hint">You can also long-press the screen, mark what you mean, and add a note.</p>
           <button type="button" class="more-row" onClick={() => dispatch({ type: 'go', screen: 'about' })}>About</button>
         </section>
       </div>

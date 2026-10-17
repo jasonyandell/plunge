@@ -37,11 +37,15 @@ const browser = await chromium.launch({ headless: true, ...(process.env.PLUNGE_C
 const checks = [];
 const check = m => { checks.push(m); console.log('OK', m); };
 const faults = [];
+let page, stage='install';
 const deadline = setTimeout(() => { console.error('Offline browser check exceeded 180 seconds'); process.exit(1); }, 180000);
 const cached = page => page.evaluate(async () => { const all = []; for (const k of await caches.keys()) all.push([k, (await (await caches.open(k)).keys()).map(r => new URL(r.url).pathname)]); return all; });
 try {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-  const page = await ctx.newPage();
+  page = await ctx.newPage();
+  // A reproducible hand, with real clocks for workers, pacing, and timeouts.
+  await page.clock.setFixedTime(new Date('2026-10-17T12:00:00Z'));
+  page.setDefaultTimeout(5000);
   page.on('pageerror', e => faults.push(String(e)));
 
   // First launch: nothing played yet, Walt never asked for a move.
@@ -55,10 +59,12 @@ try {
   check(`Install saved the whole game before any play (${first[0][1].length} files, Walt included).`);
 
   // No connection at all: the server is gone, not just throttled.
-  await new Promise(r => server.close(r)); server.closeAllConnections();
+  stage='disconnect';
+  const closed = new Promise(r => server.close(r)); server.closeAllConnections(); await closed;
   await ctx.setOffline(true);
   await page.reload();
   await page.getByRole('button', { name: 'Deal me in', exact: true }).click();
+  stage='play offline';
   const end = Date.now() + 120000;
   let moves = 0;
   while (Date.now() < end) {
@@ -69,7 +75,7 @@ try {
       await ((await pass.count()) ? pass : bid.getByRole('button', { name: /^Bid \d+$/ })).first().click().catch(() => {}); moves++; continue;
     }
     const declare = page.getByRole('dialog', { name: 'Declare trump' });
-    if (await declare.count()) { await declare.getByRole('button').first().click().catch(() => {}); moves++; continue; }
+    if (await declare.count()) { await declare.getByRole('button', { name: 'Blanks', exact: true }).click().catch(() => {}); moves++; continue; }
     const playable = page.getByLabel('Your hand').getByRole('button');
     if (await playable.count()) { await playable.first().click().catch(() => {}); moves++; continue; }
     await page.waitForTimeout(150);
@@ -79,6 +85,7 @@ try {
   check(`Played a whole hand against Walt with no connection (${moves} of our moves).`);
 
   // A new version ships: only changed files download; Walt's copy carries over.
+  stage='update';
   const sw = join(root, 'sw.js');
   await writeFile(sw, (await readFile(sw, 'utf8')).replace(/const BUILD = "[^"]*";/, 'const BUILD = "next";'));
   served.length = 0;
@@ -95,7 +102,12 @@ try {
   if (faults.length) throw new Error('Browser faults: ' + JSON.stringify(faults));
   console.log(`\n${checks.length} checks passed. Screenshot: ${out}`);
 } catch (e) {
-  console.error(e); console.error('Faults:', faults); process.exitCode = 1;
+  console.error(`Offline check failed during ${stage}:`, e); console.error('Faults:', faults);
+  if(page) {
+    console.error('Visible state:', await page.locator('body').innerText({timeout:2000}).catch(()=>'(unavailable)'));
+    await page.screenshot({path:join(out,'failure.png'),timeout:2000}).catch(()=>{});
+  }
+  process.exitCode = 1;
 } finally {
   clearTimeout(deadline); await browser.close(); server.close();
 }
