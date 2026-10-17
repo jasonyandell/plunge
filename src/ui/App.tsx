@@ -17,6 +17,7 @@ import {
 } from './update';
 import { Home, HowTo, About, More } from './Home';
 import { Table } from './Table';
+import { useDealFlourish } from './Shuffle';
 import { codeFromHash, decodeHand } from './share';
 import { decodeObservation } from './observation-link';
 import { api, isNative, nativeMove, NATIVE_TABLE, type FlagRecord } from '../ai/native';
@@ -50,6 +51,7 @@ export function App() {
   // A family table lives in this same app: your moves go to the room, the rest stays local.
   const room = useRoom(app, reduce);
   const dispatch = room.dispatch;
+  const shuffling = useDealFlourish(app);
 
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
@@ -253,7 +255,7 @@ export function App() {
     if (room.active && (room.screen || app.screen === 'table' || app.screen === 'home')) return <>
       {room.chrome}
       {room.screen ?? (app.game || app.scenarioGame
-        ? <Table app={app} dispatch={dispatch} thinking={room.thinking} onQuestion={openQuestion} seatNote={room.seatNote} menuExtra={room.menu} />
+        ? <Table app={app} dispatch={dispatch} shuffling={shuffling} thinking={room.thinking} onQuestion={openQuestion} seatNote={room.seatNote} menuExtra={room.menu} />
         : <div class="room-wait" role="status">Connecting to the table…</div>)}
     </>;
     switch (app.screen) {
@@ -267,7 +269,7 @@ export function App() {
         return <More app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} />;
       case 'table':
         return app.game || app.scenarioGame ? (
-          <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} />
+          <Table app={app} dispatch={dispatch} shuffling={shuffling} thinking={thinking} onQuestion={openQuestion} />
         ) : (
           <Home app={app} dispatch={dispatch} identity={<IdentityChip />} />
         );
