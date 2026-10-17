@@ -21,3 +21,4 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:offline:browser
+      - run: npm run test:zeb:browser
