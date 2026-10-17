@@ -1,0 +1,18 @@
+walt:n=48,n0=6,h=4,r=rule vs rule 1v3 seed=11 deals=100: B-A = 1.415 [0.752, 2.078]  A better/worse/tied 72/24/4  moons 11  A ms/move 32.3 max 604  wall 166s
+walt:n=48,n0=6,h=4,r=rule vs random 1v3 seed=11 deals=50: B-A = 3.570 [2.856, 4.284]  A better/worse/tied 46/4/0  moons 3  A ms/move 26.5 max 574  wall 68s
+rule vs random 1v3 seed=11 deals=50: B-A = 3.505 [2.910, 4.100]  A better/worse/tied 46/3/1  moons 0  A ms/move 0.0 max 0  wall 0s
+mc:n=24 vs random 1v3 seed=11 deals=50: B-A = 3.185 [2.413, 3.957]  A better/worse/tied 43/5/2  moons 6  A ms/move 0.4 max 25  wall 1s
+mc:n=200 vs random 1v3 seed=11 deals=50: B-A = 3.715 [3.106, 4.324]  A better/worse/tied 48/2/0  moons 1  A ms/move 2.5 max 106  wall 6s
+mcr:n=48 vs random 1v3 seed=11 deals=50: B-A = 3.990 [3.412, 4.568]  A better/worse/tied 47/2/1  moons 2  A ms/move 0.7 max 133  wall 2s
+mcr:n=200 vs random 1v3 seed=11 deals=50: B-A = 4.275 [3.747, 4.803]  A better/worse/tied 48/1/1  moons 3  A ms/move 1.9 max 59  wall 5s
+mc:n=24 vs rule 1v3 seed=11 deals=100: B-A = -0.710 [-1.377, -0.043]  A better/worse/tied 36/59/5  moons 18  A ms/move 0.3 max 27  wall 2s
+mc:n=200 vs rule 1v3 seed=11 deals=100: B-A = -0.460 [-1.181, 0.261]  A better/worse/tied 41/51/8  moons 15  A ms/move 2.7 max 35  wall 14s
+mcr:n=48 vs rule 1v3 seed=11 deals=100: B-A = 2.315 [1.672, 2.958]  A better/worse/tied 77/17/6  moons 11  A ms/move 0.6 max 32  wall 3s
+mcr:n=200 vs rule 1v3 seed=11 deals=100: B-A = 2.587 [1.981, 3.194]  A better/worse/tied 82/14/4  moons 9  A ms/move 2.3 max 45  wall 12s
+walt:n=48,n0=6,h=4,r=rule vs mcr:n=200 1v3 seed=11 deals=100: B-A = -0.627 [-1.267, 0.012]  A better/worse/tied 36/55/9  moons 11  A ms/move 30.3 max 868  wall 193s
+walt:n=48,n0=6,h=4,r=rule vs rule 3v1 seed=11 deals=36: B-A = 1.431 [0.165, 2.696]  A better/worse/tied 26/10/0  moons 10  A ms/move 27.1 max 509  wall 202s
+mcr:n=200 vs rule 3v1 seed=11 deals=36: B-A = 2.035 [0.705, 3.364]  A better/worse/tied 30/6/0  moons 8  A ms/move 1.7 max 52  wall 13s
+walt:n=24,n0=4,h=8,r=random vs rule 1v3 seed=11 deals=60: B-A = 0.471 [-0.233, 1.175]  A better/worse/tied 29/28/3  moons 13  A ms/move 51.3 max 873  wall 157s
+walt:n=24,n0=4,h=8,r=random vs mc:n=24 1v3 seed=11 deals=60: B-A = 0.679 [-0.170, 1.528]  A better/worse/tied 30/26/4  moons 11  A ms/move 39.3 max 600  wall 124s
+walt:n=48,n0=6,h=4,r=rule vs rule 1v3 pass seed=11 deals=50: B-A = 0.640 [-0.078, 1.358]  A better/worse/tied 29/15/6  moons 7  A ms/move 27.6 max 319  wall 70s
+mcr:n=200 vs rule 1v3 pass seed=11 deals=50: B-A = 1.545 [0.819, 2.271]  A better/worse/tied 37/12/1  moons 5  A ms/move 1.6 max 38  wall 4s

@@ -1,0 +1,5 @@
+deals 0..29 294.8 s | B/bid: 135 moves, mean 0.0 ms, max 0 ms; A/bid: 136 moves, mean 1672.0 ms, max 4236 ms; B/play: 345 moves, mean 0.0 ms, max 0 ms; A/play: 352 moves, mean 191.4 ms, max 1335 ms
+deals 30..74 368.2 s | B/bid: 199 moves, mean 0.0 ms, max 0 ms; A/bid: 199 moves, mean 1430.8 ms, max 4491 ms; B/play: 502 moves, mean 0.0 ms, max 2 ms; A/play: 508 moves, mean 164.3 ms, max 1549 ms
+deals 75..129 461.7 s | A/bid: 239 moves, mean 1479.4 ms, max 4941 ms; B/bid: 228 moves, mean 0.0 ms, max 4 ms; A/play: 667 moves, mean 161.9 ms, max 1257 ms; B/play: 643 moves, mean 0.0 ms, max 2 ms
+deals 130..184 476.3 s | B/bid: 241 moves, mean 0.0 ms, max 0 ms; A/bid: 251 moves, mean 1460.4 ms, max 4789 ms; B/play: 636 moves, mean 0.0 ms, max 4 ms; A/play: 670 moves, mean 163.6 ms, max 1683 ms
+deals 185..199 104.9 s | A/bid: 65 moves, mean 1262.6 ms, max 2436 ms; B/bid: 64 moves, mean 0.0 ms, max 0 ms; A/play: 175 moves, mean 130.3 ms, max 732 ms; B/play: 169 moves, mean 0.0 ms, max 0 ms

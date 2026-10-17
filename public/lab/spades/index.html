@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spades vs Walt</title>
+<style>
+  :root {
+    --felt: #1f5f3f; --felt-dark: #174a31; --ink: #f4f1e8; --muted: #b9cbbd;
+    --card: #fffdf7; --card-ink: #1b1b1b; --red: #c0262d; --accent: #f2c14e;
+    --us: #8fd3ff; --them: #ffb38f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: radial-gradient(ellipse at center, var(--felt) 0%, var(--felt-dark) 100%);
+    color: var(--ink); font: 15px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; align-items: center; min-height: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  header { width: 100%; max-width: 720px; padding: 10px 16px 4px; display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 17px; margin: 0; letter-spacing: .02em; }
+  header a { color: var(--muted); font-size: 13px; }
+  .score { width: 100%; max-width: 720px; padding: 0 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .team { background: rgba(0,0,0,.22); border-radius: 10px; padding: 6px 10px; }
+  .team b { font-size: 20px; font-variant-numeric: tabular-nums; }
+  .team .lbl { font-size: 12px; color: var(--muted); }
+  .team.us { border-left: 4px solid var(--us); } .team.them { border-left: 4px solid var(--them); }
+  .table { position: relative; width: 100%; max-width: 720px; flex: 1; min-height: 330px; padding: 0 16px; display: grid;
+    grid-template-columns: 1fr 1.4fr 1fr; grid-template-rows: auto 1fr auto; gap: 4px; margin-top: 6px; }
+  .seat { display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 13px; text-align: center; }
+  .seat .name { font-weight: 600; }
+  .seat .info { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .seat.turn .name { color: var(--accent); }
+  .seat.turn .name::after { content: " •"; }
+  .backs { display: flex; margin-top: 3px; }
+  .backs i { width: 9px; height: 16px; border-radius: 2px; background: #6b3a8a; border: 1px solid #d9c4e8; margin-right: -3px; }
+  #seat2 { grid-column: 2; grid-row: 1; } #seat1 { grid-column: 1; grid-row: 2; } #seat3 { grid-column: 3; grid-row: 2; }
+  #seat0 { grid-column: 2; grid-row: 3; }
+  .trick { grid-column: 2; grid-row: 2; position: relative; min-height: 180px; }
+  .trick .slot { position: absolute; transform: translate(-50%, -50%); }
+  .trick .s0 { left: 50%; top: 78%; } .trick .s1 { left: 20%; top: 50%; } .trick .s2 { left: 50%; top: 22%; } .trick .s3 { left: 80%; top: 50%; }
+  .card { width: 52px; height: 74px; border-radius: 6px; background: var(--card); color: var(--card-ink); border: 1px solid #999;
+    box-shadow: 0 1px 3px rgba(0,0,0,.35); display: flex; flex-direction: column; align-items: flex-start; padding: 3px 5px;
+    font-weight: 700; font-size: 17px; line-height: 1; user-select: none; }
+  .card .su { font-size: 20px; }
+  button.card, button.card:hover { background: var(--card); color: var(--card-ink); border: 1px solid #999; }
+  .card.red, button.card.red { color: var(--red); }
+  .card.win { outline: 3px solid var(--accent); }
+  .hand { width: 100%; max-width: 720px; padding: 8px 16px 6px; display: flex; justify-content: center; min-height: 92px; }
+  .hand .card { margin-right: -24px; transition: transform .1s; cursor: default; }
+  .hand .card:last-child { margin-right: 0; }
+  .hand .card.legal { cursor: pointer; }
+  .hand .card.legal:hover, .hand .card.legal:focus-visible { transform: translateY(-8px); }
+  .hand .card.dim { filter: brightness(.62); }
+  .bar { width: 100%; max-width: 720px; padding: 4px 16px 14px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: center; min-height: 52px; }
+  .msg { width: 100%; text-align: center; color: var(--ink); min-height: 20px; }
+  button { font: inherit; border-radius: 8px; border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.28); color: var(--ink);
+    padding: 7px 11px; cursor: pointer; min-width: 40px; }
+  button:hover { background: rgba(0,0,0,.4); }
+  button.sugg { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); color: #222; border-color: var(--accent); font-weight: 600; }
+  select { font: inherit; background: rgba(0,0,0,.28); color: var(--ink); border-radius: 6px; border: 1px solid rgba(255,255,255,.35); padding: 3px; }
+  select option { color: #111; }
+  .foot { font-size: 12px; color: var(--muted); padding: 0 16px 12px; max-width: 720px; text-align: center; }
+  @media (max-width: 420px) {
+    .card { width: 44px; height: 64px; font-size: 15px; } .card .su { font-size: 17px; }
+    .hand .card { margin-right: -21px; }
+    .trick { min-height: 160px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Spades vs Walt</h1>
+  <label style="font-size:13px">Walt <select id="strength">
+    <option value="fast">fast</option>
+    <option value="normal" selected>normal</option>
+  </select></label>
+</header>
+<div class="score">
+  <div class="team us"><div class="lbl">You + North (Walt)</div><b id="sc0">0</b> <span class="lbl" id="bg0">bags 0</span></div>
+  <div class="team them"><div class="lbl">West + East (Walt)</div><b id="sc1">0</b> <span class="lbl" id="bg1">bags 0</span></div>
+</div>
+<div class="table">
+  <div class="seat" id="seat2"><div class="name">North · Walt</div><div class="info"></div><div class="backs"></div></div>
+  <div class="seat" id="seat1"><div class="name">West · Walt</div><div class="info"></div><div class="backs"></div></div>
+  <div class="trick" id="trick"></div>
+  <div class="seat" id="seat3"><div class="name">East · Walt</div><div class="info"></div><div class="backs"></div></div>
+  <div class="seat" id="seat0"><div class="name">You</div><div class="info"></div></div>
+</div>
+<div class="hand" id="hand"></div>
+<div class="bar" id="bar"><div class="msg" id="msg">Loading…</div></div>
+<div class="foot">Standard spades, nil disabled, game to 500 (10 bags = −100). All three other seats are
+  Walt: a ladder of best responses sampled from each seat's own chair. <span id="perf"></span></div>
+<script type="module" src="./ui.js"></script>
+</body>
+</html>
