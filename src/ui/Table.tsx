@@ -62,9 +62,12 @@ interface TableProps {
   menuExtra?: ComponentChildren;
   /** Isolated idea demonstration: immediate visit, no saved move questions. */
   birdwatchDemo?: boolean;
+  birdwatchEnabled?: boolean;
+  /** Disposable showcase: no question capture, hints, or ordinary game menu. */
+  demo?: boolean;
 }
 
-export function Table({ app, dispatch: rawDispatch, shuffling = false, thinking = null, onQuestion, seatNote = () => null, menuExtra = null, birdwatchDemo = false }: TableProps) {
+export function Table({ app, dispatch: rawDispatch, shuffling = false, thinking = null, onQuestion, seatNote = () => null, menuExtra = null, birdwatchDemo = false, birdwatchEnabled = true, demo = false }: TableProps) {
   // Every human decision below — tiles, bid/trump sheets, end cards — is
   // stamped with the generation this render shows (see liveDispatch).
   const dispatch = liveDispatch(rawDispatch, app.epoch);
@@ -148,8 +151,8 @@ export function Table({ app, dispatch: rawDispatch, shuffling = false, thinking 
 
   return (
     <div class={`table-screen${!scenario && g.phase === 'playing' ? ' birdwatch-table' : ''}`} style={{ '--trick-hold-ms': `${TRICK_HOLD_MS}ms` }}>
-      <StatusStrip g={g} onMenu={() => setMenuOpen(true)} />
-      {!scenario && !review && !birdwatchDemo && (
+      <StatusStrip g={g} onMenu={() => setMenuOpen(true)} hideMenu={demo} />
+      {!scenario && !review && !birdwatchDemo && !demo && (
         <div class="hand-tools">
           {practice && <span class="practice-chip" title="Undone or replayed: kept as practice, not counted in stats">Practice</span>}
           <button type="button" class="hand-tool" disabled={!undoReady} onClick={undo}
@@ -166,13 +169,13 @@ export function Table({ app, dispatch: rawDispatch, shuffling = false, thinking 
           plays={trickPlays}
           open={histOpen}
           onToggle={() => setHistOpen((o) => !o)}
-          onQuestion={scenario || birdwatchDemo ? undefined : selectQuestion}
+          onQuestion={scenario || birdwatchDemo || demo ? undefined : selectQuestion}
         />
       )}
       <div class="felt">
         <div class="birdwatch-perch">
           <OpponentTop g={g} thinking={thinking} note={seatNote(2)} />
-          {!scenario && g.phase === 'playing' && !showingLast && !review && !menuOpen &&
+          {birdwatchEnabled && !scenario && g.phase === 'playing' && !showingLast && !review && !menuOpen &&
             (!birdwatchDemo || g.currentTrick.length === 0) &&
             !histOpen && !question && confirmRestart === null && !app.room?.table?.proposal && (
             <Birdwatch delayMs={birdwatchDemo ? 0 : 20_000} key={`${app.sessionId}:${app.epoch}:${g.handNumber}:${g.tricks.length}:${g.currentTrick.length}:${g.turn}:${dominoPicks}`} />
@@ -186,7 +189,7 @@ export function Table({ app, dispatch: rawDispatch, shuffling = false, thinking 
             winner={trickWinner}
             gathering={showingLast}
             thinking={thinking}
-            onQuestion={scenario || birdwatchDemo ? undefined : (i, target) => selectQuestion(playIndex(g,showingLast ? g.tricks.length - 1 : g.tricks.length,i), target)}
+            onQuestion={scenario || birdwatchDemo || demo ? undefined : (i, target) => selectQuestion(playIndex(g,showingLast ? g.tricks.length - 1 : g.tricks.length,i), target)}
           />
           <OpponentSide g={g} seat={3} thinking={thinking} note={seatNote(3)} />
         </div>
@@ -198,7 +201,7 @@ export function Table({ app, dispatch: rawDispatch, shuffling = false, thinking 
                 ? g.currentTrick.length === 0 ? 'Your turn to lead' : 'Your turn to play'
                 : 'Your hand'}</span>
             </p>
-            {app.settings.showHints && humanTurn && !showingLast && !scenario && explainScope(g) && isNative(app.settings.difficulty) &&
+            {!demo && app.settings.showHints && humanTurn && !showingLast && !scenario && explainScope(g) && isNative(app.settings.difficulty) &&
               <MoveHint key={`${app.sessionId}:${app.epoch}:${g.handNumber}:${g.tricks.length}:${g.currentTrick.length}`} g={g} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
           </div>
           {humanSitsOut ? (
@@ -233,13 +236,13 @@ export function Table({ app, dispatch: rawDispatch, shuffling = false, thinking 
       {saved && <div class="question-toast" role="status"><span>{saved.text}</span>{saved.id && <button class="text-btn" onClick={() => { onQuestion(saved.id); setSaved(null); }}>Add note</button>}</div>}
       {question && <MoveQuestionPrompt key={`${question.sessionId}:${question.game.handNumber}:${question.ply}`}
         target={question.target} label={question.label} onSave={() => bookmark(question)} onClose={() => setQuestion(null)} />}
-      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
-      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
+      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet key={app.epoch} showHints={app.settings.showHints && !demo} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
+      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet key={app.epoch} showHints={app.settings.showHints && !demo} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
       {g.phase === 'hand-over' && !showingLast && !review && (
         <HandOverSheet
           g={g}
           dispatch={dispatch}
-          onReview={g.tricks.length > 0 ? () => setReview(true) : undefined}
+          onReview={!demo && g.tricks.length > 0 ? () => setReview(true) : undefined}
           scenario={scenario}
           practice={practice}
           onUndo={undoReady ? undo : undefined}
@@ -250,7 +253,7 @@ export function Table({ app, dispatch: rawDispatch, shuffling = false, thinking 
         <GameOverSheet
           g={g}
           dispatch={dispatch}
-          onReview={g.tricks.length > 0 ? () => setReview(true) : undefined}
+          onReview={!demo && g.tricks.length > 0 ? () => setReview(true) : undefined}
           practice={practice}
           onUndo={undoReady ? undo : undefined}
           onRestart={restartReady ? askRestart : undefined}
@@ -300,10 +303,10 @@ function GameMenu({ app, dispatch, onClose, onHome, extra }: {
   );
 }
 
-function StatusStrip({ g, onMenu }: { g: GameState; onMenu: () => void }) {
+function StatusStrip({ g, onMenu, hideMenu=false }: { g: GameState; onMenu: () => void; hideMenu?:boolean }) {
   return (
     <header class="status">
-      <button
+      {!hideMenu && <button
         type="button"
         class="menu-btn"
         aria-label="Menu"
@@ -311,7 +314,7 @@ function StatusStrip({ g, onMenu }: { g: GameState; onMenu: () => void }) {
         onClick={onMenu}
       >
         &#9776;
-      </button>
+      </button>}
       <div class="status-mid">
         <div class="status-line">{statusLine(g)}</div>
         {g.phase === 'bidding' && <div class="status-sub">{g.shaker === HUMAN_SEAT ? 'You' : SEAT_NAMES[g.shaker]} shook</div>}

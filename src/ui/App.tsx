@@ -33,10 +33,19 @@ import { IdentityChip } from '../account/IdentityChip';
 import { VictoryPreview } from './VictoryPreview';
 import { BirdwatchDemo } from './BirdwatchDemo';
 import { opensBirdwatchDemo } from './birdwatch-demo';
+import { ScifigoofyShowcase } from './ScifigoofyShowcase';
+import { opensShowcase } from './scifigoofy-tour';
 
 export function App() {
+  const [showcase,setShowcase]=useState(()=>opensShowcase(location));
+  useEffect(()=>{const changed=()=>setShowcase(opensShowcase(location));
+    window.addEventListener('popstate',changed);return()=>window.removeEventListener('popstate',changed);},[]);
   const [demo, setDemo] = useState(() => opensBirdwatchDemo(location));
   const [preview, setPreview] = useState(() => new URLSearchParams(location.search).get('preview') === 'congrats');
+  if(showcase)return <ScifigoofyShowcase onClose={()=>{
+    const url=new URL(location.href);for(const key of ['demo','step','idea'])url.searchParams.delete(key);
+    url.searchParams.set('play','1');history.replaceState(null,'',url);setShowcase(false);
+  }}/>;
   if (demo) return <BirdwatchDemo onClose={() => setDemo(false)} />;
   if (preview) return <VictoryPreview onClose={() => {
     const url = new URL(location.href); url.searchParams.delete('preview');
