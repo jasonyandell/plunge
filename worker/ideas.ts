@@ -1,6 +1,7 @@
 import { screenshotBytes, validateScreenshots, type StoredScreenshot } from '../src/ideas/screenshots';
 import { accountSession } from './accounts';
 import { IDEA_ID, IDEA_TOKEN, previewFor, type IdeaCard } from '../src/ideas/model';
+import type { KVNamespace } from '@cloudflare/workers-types';
 interface Statement {
   bind(...values: unknown[]): Statement;
   first<T>(): Promise<T | null>;
@@ -8,7 +9,7 @@ interface Statement {
   run(): Promise<unknown>;
 }
 export interface IdeasDatabase { prepare(sql: string): Statement; batch(statements: Statement[]): Promise<unknown[]> }
-export interface IdeasEnv { QUESTIONS?: IdeasDatabase; IDEAS_ADMIN_TOKEN?: string }
+export interface IdeasEnv { QUESTIONS?: IdeasDatabase; IDEAS_ADMIN_TOKEN?: string; IDEAS_CACHE?: KVNamespace }
 interface Member { id: string; name: string }
 interface Run { id: string; idea_id: string; revision: number; through_seq: number; state: string }
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });

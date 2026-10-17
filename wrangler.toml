@@ -16,9 +16,14 @@ database_name = "plunge-questions"
 database_id = "98730843-94b0-4507-b3c1-91fb12f0702a"
 migrations_dir = "migrations"
 
-# Resolved by scripts/prepare-mcp.mjs during production deployment.
+# Resolved by scripts/prepare-kv.mjs during production deployment.
 [[kv_namespaces]]
 binding = "OAUTH_KV"
+id = "00000000000000000000000000000000"
+
+# Disposable ideas cache; OAuth grants always use the separate namespace above.
+[[kv_namespaces]]
+binding = "IDEAS_CACHE"
 id = "00000000000000000000000000000000"
 
 [[durable_objects.bindings]]

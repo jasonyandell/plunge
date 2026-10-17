@@ -10,8 +10,8 @@ storage is configured. `/version.json` reports `companions: false`.
 After the companion task installs and verifies the KV credential, set the variable
 to `companions` and deploy. That profile requires KV provisioning to succeed;
 permission errors never silently downgrade a companion release. Keep the variable
-set for subsequent releases. The scoped-token setup in PR #63 must preserve this
-profile gate when adding its separate OAuth/cache provisioning step.
+set for subsequent releases. Profile selection runs before provisioning, and only
+companion releases load the dedicated KV credential and prepare both namespaces.
 
 The Texas 42 MCP endpoint is `https://plunge.texas42.workers.dev/api/mcp`.
 This first milestone authenticates a named companion and exposes **`get_player`**.
@@ -77,17 +77,21 @@ full state; that protocol is not suitable as the companion observation API.
 
 ## Deployment and validation
 
-Production deployment runs `scripts/prepare-mcp.mjs` to find or create the
-`plunge-oauth` KV namespace and resolve its `OAUTH_KV` binding. The GitHub
-Cloudflare token needs **Workers KV Storage: Edit** on the existing account in
-addition to the project's existing permissions. Namespace setup failure stops
-deployment. Never delete this namespace to repair a connection.
+Companion-profile deployment runs `scripts/prepare-kv.mjs` to find or create the
+`plunge-oauth` KV namespace and resolve its `OAUTH_KV` binding. The same step
+resolves a separate `plunge-ideas-cache` namespace as `IDEAS_CACHE`. It uses the
+dedicated GitHub secret `CLOUDFLARE_KV_API_TOKEN`. A missing or invalid KV token
+stops the companion release. KV setup needs **Workers KV Storage: Edit** on the
+existing account. The subsequent Worker deployment keeps its existing credential.
+Namespace setup failure stops deployment. Never delete OAuth storage to repair
+a connection or clear the ideas cache. See [KV setup](KV-SETUP.md) for the local
+admin-key bootstrap and its verification boundaries.
 
 PR previews continue using the database-free `worker/index.ts` entry and cannot
 authenticate companions. Production routes also fail closed without both account
 storage and OAuth storage, or on an origin other than the existing passkey RP.
 
-Run `npm run typecheck`, `npm test`, `node --test scripts/test-prepare-mcp.mjs`,
+Run `npm run typecheck`, `npm test`, `node --test scripts/test-prepare-kv.mjs`,
 `npm run build`, `node scripts/test-mcp-browser.mjs` and `npm run deploy:dry-run`. `tests/mcp-api.test.ts` exercises
 the actual bundled Worker in Miniflare with D1/KV: discovery, registration,
 consent, PKCE, MCP calls, identity isolation, refresh, revocation and rejected
