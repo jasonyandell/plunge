@@ -20,6 +20,8 @@
 .showcase .showcase-text { background:transparent; padding-inline:0; border:0; text-decoration:underline; }
 .showcase-share-label { display:block; font-size:12px; }
 .showcase-share-label input { width:100%; padding:10px; margin-top:5px; border:1px solid #bce5d06b; border-radius:8px; background:#171714; color:#fff7e9; }
+.showcase-note-label { display:block; font-size:13px; margin-top:14px; }
+.showcase-note-label textarea { display:block; width:100%; min-height:95px; margin-top:7px; padding:11px; font:inherit; line-height:1.45; resize:vertical; border:1px solid #bce5d06b; border-radius:10px; background:#171714; color:#fff7e9; }
 .showcase-feedback-panel { grid-area:feedback; min-width:0; }
 .showcase-stage { grid-area:stage; position:relative; min-width:0; height:700px; border:1px solid #e8c99b30; border-radius:18px; overflow:hidden; background:radial-gradient(ellipse at top,#644331,#35271f 70%); }
 .showcase-scene-label { position:absolute; z-index:30; top:0; left:0; right:0; height:24px; text-align:center; background:#3b574f; color:#f4ead4; padding:5px; font-size:10px; letter-spacing:.04em; pointer-events:none; }

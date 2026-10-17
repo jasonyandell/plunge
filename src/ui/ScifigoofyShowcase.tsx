@@ -6,6 +6,7 @@ import { BramConcept } from './BramConcept';
 import { useDealFlourish } from './Shuffle';
 import { pendingAiSeat, reducer, type AppEvent } from './store';
 import { SHOWCASE_ID, TOUR_STEPS, showcaseGame, showcaseLink, tourStep } from './scifigoofy-tour';
+import { NOTES_KEY, NOTE_LIMIT, parseNotes, feedbackText } from './showcase-notes';
 import './showcase.css';
 
 /** A real, disposable table: no GameApp, save, history, account or room effects. */
@@ -14,8 +15,23 @@ export function ScifigoofyShowcase({onClose}:{onClose:()=>void}) {
   const [app,setApp]=useState(showcaseGame),[replay,setReplay]=useState(0);
   const [playing,setPlaying]=useState(false),[paused,setPaused]=useState(false),[blossoms,setBlossoms]=useState(true);
   const [won,setWon]=useState(true),[notice,setNotice]=useState(''),[shareUrl,setShareUrl]=useState('');
+  const [notes,setNotes]=useState(()=>{try{return parseNotes(localStorage.getItem(NOTES_KEY));}catch{return {};}});
+  const [noteStatus,setNoteStatus]=useState('Notes stay in this browser until you copy them.');
+  const [copiedNotes,setCopiedNotes]=useState('');
   const feature=TOUR_STEPS[step]!;
+  const noteKey=playing?'sample':feature.key;
+  const hasNotes=Object.values(notes).some(text=>text.trim());
   const shuffling=useDealFlourish(app);
+  const editNote=(body:string)=>{
+    const next={...notes,[noteKey]:body.slice(0,NOTE_LIMIT)};setNotes(next);setCopiedNotes('');
+    try{localStorage.setItem(NOTES_KEY,JSON.stringify(next));setNoteStatus('Saved on this device. Nothing has been sent.');}
+    catch{setNoteStatus('Not saved: browser storage is unavailable. Keep this page open and copy your notes.');}
+  };
+  const copyNotes=async()=>{
+    const text=feedbackText(notes,showcaseLink(location.origin));setCopiedNotes(text);
+    try{await navigator.clipboard.writeText(text);setNoteStatus('All notes copied. Paste them into our idea conversation when you’re ready.');}
+    catch{setNoteStatus('Select and copy the notes below. They have not been sent.');}
+  };
   const reset=()=>{setApp(showcaseGame());setReplay(n=>n+1);setPaused(false);};
   const move=(next:number)=>{
     setStep(next);setPlaying(false);setBlossoms(true);setWon(true);setNotice('');reset();
@@ -79,8 +95,14 @@ export function ScifigoofyShowcase({onClose}:{onClose:()=>void}) {
         {!playing && feature.key==='bram' && <div class="showcase-scene-overlay"><div class="showcase-bram"><span>Concept · awaiting your feedback</span><BramConcept/><p>A friendly face at the table.</p></div></div>}
       </section>
       <section class="showcase-feedback-panel" aria-label="Share and discuss">
+        <label class="showcase-note-label">Your notes · {playing?'Sample game':feature.short}
+          <textarea value={notes[noteKey]??''} maxLength={NOTE_LIMIT} placeholder="What do you like? What would you change?" onInput={event=>editNote(event.currentTarget.value)}/>
+        </label>
+        <p class="showcase-small" role="status">{noteStatus}</p>
+        <button disabled={!hasNotes} onClick={()=>void copyNotes()}>Copy all feedback</button>
+        {copiedNotes && <label class="showcase-note-label">Feedback to copy<textarea aria-label="Feedback to copy" value={copiedNotes} readOnly onFocus={event=>event.currentTarget.select()}/></label>}
         <a class="showcase-feedback" href={ideasLink(SHOWCASE_ID)}>Suggest a change to this collection →</a>
-        <p class="showcase-small">One conversation for all five ideas. Mention “{playing?'sample game':feature.short}” in your reply. Family sign-in is needed to post.</p>
+        <p class="showcase-small">One conversation for all five ideas. Paste your feedback there, or send the copied notes to Jason. Family sign-in is needed to post on the board.</p>
         <button class="showcase-text" onClick={()=>void share(true)}>Share this step</button>
         {notice && <p role="status" class="showcase-small">{notice}</p>}
         {shareUrl && <label class="showcase-share-label">Link to share<input aria-label="Link to share" type="url" value={shareUrl} readOnly onFocus={event=>event.currentTarget.select()}/></label>}
