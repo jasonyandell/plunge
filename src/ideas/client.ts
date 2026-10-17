@@ -1,5 +1,7 @@
 import { IDEA_ID, IDEA_TOKEN, LIVE_PLUNGE } from './model';
 import { BUILD_ID } from '../ui/update';
+import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
+import { previewSession } from './preview-access';
 export const newId = () => crypto.randomUUID().replaceAll('-', '');
 export const TOKEN_KEY = 'plunge:ideas-invite';
 export function inviteToken(value: string): string | null {
@@ -8,6 +10,7 @@ export function inviteToken(value: string): string | null {
   try { const url = new URL(raw); const token = new URLSearchParams(url.hash.slice(1)).get('invite'); return token && IDEA_TOKEN.test(token) ? token : null; } catch { return null; }
 }
 export function initialToken(): string {
+  if (QUESTIONS_LOCAL_ONLY) return previewSession();
   const params = new URLSearchParams(location.hash.slice(1));
   const incoming = params.get('invite');
   if (incoming && IDEA_TOKEN.test(incoming)) {
@@ -22,9 +25,18 @@ export function cardFromHash(): string | null { const id = new URLSearchParams(l
 export function ideasLink(id?: string): string { return `${LIVE_PLUNGE}/?ideas=1${id ? `#idea=${id}` : ''}`; }
 export function deviceContext(): string { return `${navigator.userAgent.slice(0,300)}; ${innerWidth}×${innerHeight}; build ${BUILD_ID}`; }
 export class InviteError extends Error {}
+export function ideasFetch(token: string, path: string, options: RequestInit = {}) {
+  if (QUESTIONS_LOCAL_ONLY && !token) return Promise.reject(new InviteError('Sign in with Plunge to open your family ideas.'));
+  const headers = new Headers(options.headers);
+  if (token) headers.set('Authorization',`${QUESTIONS_LOCAL_ONLY ? 'Preview' : 'Bearer'} ${token}`);
+  return fetch(`${QUESTIONS_LOCAL_ONLY ? `${LIVE_PLUNGE}/api/ideas-preview` : '/api/ideas'}${path}`,{
+    ...options,headers,credentials:QUESTIONS_LOCAL_ONLY?'omit':'same-origin',cache:'no-store',
+  });
+}
 export async function ideasApi<T>(token: string, path = '', data?: unknown, method = 'PUT'): Promise<T> {
-  const response = await fetch(`/api/ideas${path}`, { method: data === undefined ? 'GET' : method,
-    credentials:'same-origin', headers: { ...(token ? {Authorization: `Bearer ${token}`} : {}), ...(data === undefined ? {} : {'Content-Type':'application/json'}) },
+  const route = QUESTIONS_LOCAL_ONLY && (!path || path.startsWith('?')) ? `/board${path}` : path;
+  const response = await ideasFetch(token,route, { method: data === undefined ? 'GET' : method,
+    headers: { ...(data === undefined ? {} : {'Content-Type':'application/json'}) },
     ...(data === undefined ? {} : {body:JSON.stringify(data)}), cache:'no-store', signal:AbortSignal.timeout(20000) });
   const result = await response.json() as T & {error?:string};
   if (response.status === 401 || response.status === 403) throw new InviteError(result.error);
