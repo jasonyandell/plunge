@@ -1,3 +1,4 @@
+import { playerId, playerLabel } from '../ai/players';
 import type { GameState, Seat } from '../engine';
 import type { ListedTable, RoomState } from './protocol';
 import { DEFAULT_SETTINGS, initialApp } from '../ui/store';
@@ -18,7 +19,7 @@ export function rotateGame(g: GameState, viewer: Seat): GameState {
 
 /** What the recorder keeps for a shared table: canonical seats, hints off, the table's Nel-O rule. */
 export function roomHistory(room: RoomState, localSeat: Seat) {
-  return { ...initialApp(), screen: 'table' as const, settings: { ...DEFAULT_SETTINGS, showHints: false, nelloPreview: room.game?.config.nello === 'open' },
+  return { ...initialApp(), screen: 'table' as const, playerEvents: room.playerEvents ?? [], settings: { ...DEFAULT_SETTINGS, difficulty: playerId(room.player), showHints: false, nelloPreview: room.game?.config.nello === 'open' },
     seed: room.seed, game: room.game, sessionId: room.sessionId, nativeReceipts: room.nativeReceipts, auctionSurveys: room.auctionSurveys,
     epoch: room.revision, retry: room.retry ?? null, practiceHands: room.practiceHands ?? [],
     room: { mode: 'shared-room' as const, localSeat, revision: room.revision,
@@ -32,5 +33,5 @@ export const tableTitle = (table: ListedTable): string =>
 export function tableNote(table: ListedTable): string {
   const here = table.seats.flatMap(seat => seat?.connected ? [seat.name] : []);
   const who = here.length === 0 ? 'Nobody here right now' : `${here.join(', ')} here`;
-  return `${who} · ${table.open ? 'Open, sit right down' : 'Closed, knock to come in'}`;
+  return `${who} · ${playerLabel(table.player)} · ${table.open ? 'Open, sit right down' : 'Closed, knock to come in'}`;
 }

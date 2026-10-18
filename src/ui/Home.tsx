@@ -2,8 +2,9 @@
  * Home, More, How-to-play, and About screens.
  */
 
-import type { Difficulty } from '../ai';
-import { DEEP_WORLDS, NATIVE_TABLE, isNative, nativeLabel } from '../ai/native';
+import { playerVersion } from '../ai/players';
+import { PlayerPicker } from './PlayerPicker';
+import { DEEP_WORLDS, NATIVE_TABLE } from '../ai/native';
 import { canRestart, canUndo, nelloAvailable, nelloPaused, type AppEvent, type AppState } from './store';
 import { Domino } from './Domino';
 import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
@@ -26,8 +27,6 @@ interface MoreProps extends HomeProps {
   onQuestions?: () => void;
   onHistory?: () => void;
 }
-
-const DIFFS: readonly Difficulty[] = ['native-partner', 'zeb'];
 
 const openRooms = () => { const url = new URL(location.href); url.searchParams.set('rooms', '1'); location.assign(url.href); };
 /** The home screen asks who is playing this often while it is on screen. */
@@ -124,6 +123,7 @@ export function Home({ app, dispatch, onPriorHands, identity }: HomeProps) {
         >
           Deal me in
         </button>
+        <button class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'more' })}>Playing with {playerVersion(app.settings.difficulty)} · Change</button>
         {ROOMS_ENABLED && <FamilyEntry />}
         {app.game && onPriorHands && <button type="button" class="text-btn" aria-haspopup="dialog" onClick={onPriorHands}>Prior hands</button>}
 
@@ -156,22 +156,9 @@ export function More({ app, dispatch, onQuestions, onHistory }: MoreProps) {
           <HintsSwitch app={app} dispatch={dispatch} />
           <div class="setting">
             <span class="setting-label">Computer player</span>
-            <p class="setting-hint">Choose who plays the three computer seats in your solo game. Family tables use Walt.</p>
-            {app.settings.difficulty === 'zeb' && <p class="setting-hint">Zeb forecasts bids from the hand. New hands are freshly shuffled. Nel-O uses Walt.</p>}
-            <div class="seg" role="radiogroup" aria-label="Computer player">
-              {DIFFS.map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  role="radio"
-                  aria-checked={app.settings.difficulty === d || (d === 'native-partner' && app.settings.difficulty === 'native-l1')}
-                  class={`seg-btn${app.settings.difficulty === d || (d === 'native-partner' && app.settings.difficulty === 'native-l1') ? ' on' : ''}`}
-                  onClick={() => dispatch({ type: 'set-difficulty', difficulty: d })}
-                >
-                  {isNative(d) ? nativeLabel(d) : d}
-                </button>
-              ))}
-            </div>
+            <p class="setting-hint">Changing players ends any game in progress. You’ll confirm before switching.</p>
+            <PlayerPicker selected={app.settings.difficulty} game={app.game} sessionId={app.sessionId}
+              onChoose={(difficulty, confirmed) => dispatch({ type: 'set-difficulty', difficulty, confirmed, sessionId: app.sessionId })} />
           </div>
           <div class="setting">
             <button type="button" role="switch" class="thinking-switch"
@@ -259,8 +246,7 @@ export function HowTo({ dispatch }: { dispatch: (e: AppEvent) => void }) {
           Starting left of the shaker, each player bids once or passes. Bidding starts
           at 30 and each new bid must be higher. Bid 42 (one mark) or more marks to
           promise all seven tricks. If the first three players pass, the shaker
-          must bid at least 30. The winner names trump and leads. Walt’s bids are
-          ready when it’s time to speak.
+          must bid at least 30. The winner names trump and leads.
         </p>
         <h2>Trumps and following</h2>
         <p>
@@ -295,16 +281,15 @@ export function About({ dispatch }: { dispatch: (e: AppEvent) => void }) {
           since 2011, with the state championship played every year in Hallettsville.
         </p>
         <p>
-          <strong>Plunge</strong> is a free, open-source, single-player game of 42:
-          you and Gran against Earl and Ruby. No ads, no accounts, no sound — just
-          dominoes and a wood table.
+          <strong>Plunge</strong> is a free, open-source game of 42. Play solo with
+          Gran, Earl and Ruby, or invite people to a family table. Accounts are optional.
         </p>
         <p>
-          Quick bidding: Walt uses results from games already played. This edition
-          draws from a shuffled collection of 125 deals, with fresh choices during play.
+          Choose Walt or Zeb for the computer seats. Walt bids from recorded games in
+          the prepared deal catalogue. Zeb forecasts bids from your hand and uses fresh shuffles.
         </p>
         <p class="fine">
-          Straight 42 with Walt. One shared player on the Mac and in your browser.
+          Both players use their own hand and public plays. Your saved decisions keep the model and version that made them.
         </p>
       </div>
     </div>

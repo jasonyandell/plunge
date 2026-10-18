@@ -1,4 +1,5 @@
 /** Reconstruct only this hand; existing saved rooms need no checkpoint snapshots. */
+import { playerKey } from '../src/ai/players';
 import { applyAction, PLUNGE_CONFIG, type GameState, type Seat } from '../src/engine';
 import { handStartOf, handSteps } from '../src/engine/hand-history';
 import { encodeReplay } from '../src/engine/replay-code';
@@ -15,8 +16,12 @@ function humanIndices(room: SavedRoom, game: GameState): number[] {
 }
 /** Preserve existing tokens, accepted ids, game/session identity and active contracts. */
 export function upgradeRoom(room: SavedRoom): boolean {
+  const modelChanged = !!room.state.modelKey && room.state.modelKey !== playerKey(room.state.player);
+  if (modelChanged) {
+    room.state = { ...room.state, modelKey: playerKey(room.state.player), revision: room.state.revision + 1, thinkingSeat: null };
+  }
   const game = room.state.game, upgraded = game ? roomAuctionConfig(game) : game;
-  let changed = upgraded !== game || room.state.retry === undefined || room.state.practiceHands === undefined
+  let changed = modelChanged || upgraded !== game || room.state.retry === undefined || room.state.practiceHands === undefined
     || room.state.open === undefined || room.state.proposal === undefined || room.state.lastVote === undefined;
   if (game && room.humanSteps?.handNumber !== game.handNumber) {
     let indices: number[];
