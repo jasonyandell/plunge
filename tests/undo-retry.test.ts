@@ -219,7 +219,7 @@ describe('play this hand again', () => {
     thrown = untilYou(pass(untilYou(replayed)));
     expect(reducer(thrown, { type: 'human', action: { type: 'next-hand' } }).game!.dealt)
       .toEqual(reducer(untilYou(pass(untilYou(app))), { type: 'human', action: { type: 'next-hand' } }).game!.dealt);
-    expect(DEFAULT_SETTINGS).toEqual({ difficulty: 'native-partner', preset: 'tournament', thinkDeeper: false, nelloPreview: false, showHints: true });
+    expect(DEFAULT_SETTINGS).toEqual({ difficulty: 'native-partner', preset: 'tournament', thinkDeeper: false, nelloEnabled: true, showHints: true });
   });
 
   it('confirms before replaying; Cancel does nothing', () => {
@@ -538,7 +538,7 @@ describe('settings changed mid-hand', () => {
     let after = you(before); // computer bids still to come
     expect(after.game!.phase).toBe('bidding');
     expect(pendingAiSeat(after)).not.toBeNull();
-    after = reducer(after, { type: 'set-nello-preview', enabled: true });
+    after = reducer(after, { type: 'set-nello-enabled', enabled: true });
     expect(reducer(after, { type: 'set-difficulty', difficulty: 'native-l1' })).toBe(after);
     expect(after.game!.config).toEqual(PLUNGE_CONFIG);
     expect(canUndo(after)).toBe(true);
@@ -554,7 +554,7 @@ describe('settings changed mid-hand', () => {
     let app = untilYou(you(untilYou(start('toggle-trump'))));
     expect(app.game!.phase).toBe('declaring');
     for (const enabled of [true, false, true]) {
-      app = reducer(app, { type: 'set-nello-preview', enabled });
+      app = reducer(app, { type: 'set-nello-enabled', enabled });
       expect(canUndo(app)).toBe(true);
       const undone = undo(app);
       expect(undone.game!.phase).toBe('bidding');
@@ -562,9 +562,9 @@ describe('settings changed mid-hand', () => {
       expect(undone.game!.config).toEqual(enabled ? PLUNGE_CONFIG : LEGACY_PLUNGE_CONFIG);
       expect(undone.settings).toBe(app.settings);
     }
-    app = untilYou(you(app)); // trump called with the preview on: the contract keeps PLUNGE rules
+    app = untilYou(you(app)); // trump called with Nel-O on: the contract keeps PLUNGE rules
     app = untilYou(you(app));
-    app = reducer(app, { type: 'set-nello-preview', enabled: false });
+    app = reducer(app, { type: 'set-nello-enabled', enabled: false });
     expect(app.game!.config).toEqual(PLUNGE_CONFIG);
     expect(canUndo(app)).toBe(true);
     expect(undo(app).game!.config).toEqual(PLUNGE_CONFIG); // still in play: rules unchanged

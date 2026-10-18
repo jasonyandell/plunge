@@ -66,11 +66,11 @@ export interface Settings {
   readonly difficulty: Difficulty;
   readonly preset: Preset;
   readonly thinkDeeper: boolean;
-  readonly nelloPreview: boolean;
+  readonly nelloEnabled: boolean;
   readonly showHints: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { difficulty: 'native-partner', preset: 'tournament', thinkDeeper: false, nelloPreview: false, showHints: true };
+export const DEFAULT_SETTINGS: Settings = { difficulty: 'native-partner', preset: 'tournament', thinkDeeper: false, nelloEnabled: true, showHints: true };
 
 /** Rotate the bidder with the shaker; use real engine auction transitions. */
 export function practice30(game: GameState): GameState {
@@ -84,9 +84,9 @@ export function configFor(preset: Preset): GameConfig {
   return preset === 'tournament' ? TOURNAMENT_CONFIG : CASUAL_CONFIG;
 }
 
-/** The preview requires the browser player, which includes counterexample defense. */
+/** Nel-O uses the browser player, which includes counterexample defense. */
 export function nelloAvailable(settings: Settings): boolean {
-  return settings.nelloPreview && isNative(settings.difficulty) && !NATIVE_TABLE;
+  return settings.nelloEnabled && isNative(settings.difficulty) && !NATIVE_TABLE;
 }
 
 function tableConfig(settings: Settings): GameConfig {
@@ -180,7 +180,7 @@ export type AppEvent =
   | { readonly type: 'set-difficulty'; readonly difficulty: Difficulty; readonly confirmed?: boolean; readonly sessionId?: string }
   | { readonly type: 'set-preset'; readonly preset: Preset }
   | { readonly type: 'set-think-deeper'; readonly enabled: boolean }
-  | { readonly type: 'set-nello-preview'; readonly enabled: boolean }
+  | { readonly type: 'set-nello-enabled'; readonly enabled: boolean }
   | { readonly type: 'set-show-hints'; readonly enabled: boolean }
   | { readonly type: 'new-game'; readonly seed: string; readonly sessionId?: string }
   | { readonly type: 'resume' }
@@ -223,10 +223,10 @@ function stale(s: AppState, epoch: number | undefined): boolean {
 
 export function initialApp(saved?: SavedState | null, search = ''): AppState {
   if (saved && !isNative(saved.settings.difficulty)) saved = null;
-  const experiment = new URLSearchParams(search).get('nello');
+  const nello = new URLSearchParams(search).get('nello');
   const settings = { ...DEFAULT_SETTINGS, ...saved?.settings,
-    ...(experiment === 'preview' || experiment === 'counterexamples' ? { nelloPreview: true }
-      : experiment === 'off' || experiment === 'ordinary' ? { nelloPreview: false } : {}) };
+    ...(nello === 'on' || nello === 'preview' || nello === 'counterexamples' ? { nelloEnabled: true }
+      : nello === 'off' || nello === 'ordinary' ? { nelloEnabled: false } : {}) };
   const game = configureAuction(saved?.game ?? null, settings);
   return {
     screen: new URLSearchParams(search).get('settings') === 'player' ? 'more' : 'home',
@@ -290,7 +290,7 @@ function canonical(v: unknown): string {
  * Undo replays the kept decisions from the deal under the hand's current
  * rules. It is offered only when replaying *every* decision under those rules
  * reproduces the hand exactly, so a recorded bid or call is never reinterpreted.
- * Live toggles (Walt version, Nel-O preview) never fail this: the two Plunge
+ * Live toggles (Walt version, Nel-O) never fail this: the two Plunge
  * configs differ only in Nel-O availability, which bids don't depend on. A
  * legacy computer-player switch between reshake and forced-30 rules mid-auction
  * can; then only "Play this hand again" — a fresh deal-start — is offered.
@@ -377,8 +377,8 @@ export function reducer(s: AppState, e: AppEvent): AppState {
       if (s.room && e.state.revision < s.room.revision) return s;
       const t = e.state, game = t.game ? rotateGame(t.game, e.localSeat) : null;
       return { ...s, screen: 'table', game, scenarioGame: null, scenarioFlag: null, aiMoves: 0,
-        // The table's rules decide what is playable, not this phone's preview setting.
-        settings: { ...s.settings, difficulty: playerId(t.player), thinkDeeper: false, nelloPreview: t.game?.config.nello === 'open' },
+        // The table's rules decide what is playable, not this phone's Nel-O setting.
+        settings: { ...s.settings, difficulty: playerId(t.player), thinkDeeper: false, nelloEnabled: t.game?.config.nello === 'open' },
         playerEvents: t.playerEvents ?? [],
         seed: t.seed, sessionId: t.sessionId || 'room', nativeReceipts: e.receipts ?? (e.localSeat === 0 ? t.nativeReceipts : {}), auctionSurveys: t.auctionSurveys,
         epoch: t.revision, retry: t.retry ?? null, practiceHands: t.practiceHands ?? [],
@@ -414,8 +414,8 @@ export function reducer(s: AppState, e: AppEvent): AppState {
       const settings = { ...s.settings, preset: e.preset };
       return { ...s, settings, game: configureAuction(s.game, settings) };
     }
-    case 'set-nello-preview': {
-      const settings = { ...s.settings, nelloPreview: e.enabled };
+    case 'set-nello-enabled': {
+      const settings = { ...s.settings, nelloEnabled: e.enabled };
       const next = { ...s, settings, game: configureAuction(s.game, settings) };
       return nelloPaused(next) ? { ...next, screen: 'home' } : next;
     }
@@ -456,7 +456,7 @@ export function reducer(s: AppState, e: AppEvent): AppState {
       return e.epoch === s.epoch ? rollbackTarget(s, 'restart') ?? s : s;
     case 'human': {
       if (s.room) return s; // Shared-table moves go to the coordinator; only its snapshots change the game.
-      if (!s.game || s.scenarioGame || s.showTrick || nelloPaused(s)) return s; // no moves during review, the trick pause, or a disabled preview
+      if (!s.game || s.scenarioGame || s.showTrick || nelloPaused(s)) return s; // no moves during review, the trick pause, or disabled Nel-O
       // A tap rendered before an undo or replay never lands afterward, even at an identical position.
       if (stale(s, e.epoch)) return s;
       // Only your own turn: a late tap must never act for a computer seat.
@@ -600,12 +600,13 @@ export function loadApp(storage: StorageLike): SavedState | null {
   try {
     const raw = storage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const p = JSON.parse(raw) as SavedState & { settings: Settings & { nelloCounterexamples?: boolean } };
+    const p = JSON.parse(raw) as SavedState & { settings: Settings & { nelloPreview?: boolean; nelloCounterexamples?: boolean } };
     if (p === null || typeof p !== 'object' || p.v !== 1) return null;
     if (!DIFFICULTIES.includes(p.settings?.difficulty)) return null;
     if (!PRESETS.includes(p.settings?.preset)) return null;
     if (p.settings.nelloCounterexamples !== undefined && typeof p.settings.nelloCounterexamples !== 'boolean') return null;
     if (p.settings.nelloPreview !== undefined && typeof p.settings.nelloPreview !== 'boolean') return null;
+    if (p.settings.nelloEnabled !== undefined && typeof p.settings.nelloEnabled !== 'boolean') return null;
     if (p.settings.thinkDeeper !== undefined && typeof p.settings.thinkDeeper !== 'boolean') return null;
     if (p.settings.showHints !== undefined && typeof p.settings.showHints !== 'boolean') return null;
     if (p.showTrick !== undefined && typeof p.showTrick !== 'boolean') return null;
@@ -623,9 +624,11 @@ export function loadApp(storage: StorageLike): SavedState | null {
       if (!Array.isArray(g.hands) || g.hands.length !== 4) return null;
       if (!Array.isArray(g.marks) || g.marks.length !== 2) return null;
     }
-    const { nelloCounterexamples, ...settings } = p.settings;
+    // Preview-era opt-ins no longer gate a regular table rule. A later explicit
+    // Nel-O preference still wins, including an intentional opt-out.
+    const { nelloPreview, nelloCounterexamples, ...settings } = p.settings;
     return { ...p, settings: { ...settings, thinkDeeper: settings.thinkDeeper ?? false, showHints: settings.showHints ?? true,
-      nelloPreview: settings.nelloPreview ?? nelloCounterexamples ?? false } };
+      nelloEnabled: settings.nelloEnabled ?? true } };
   } catch {
     return null;
   }

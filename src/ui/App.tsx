@@ -9,7 +9,7 @@
 import { useEffect, useLayoutEffect, useReducer, useRef, useState } from 'preact/hooks';
 import type { Seat } from '../engine';
 import {
-  type AppEvent, type AppState, HUMAN_SEAT, TRICK_SHOW_MS, nelloAvailable, aiDelayMs, initialApp, loadApp, pendingAiSeat, questionGameId, reducer, saveApp, saveShowHints,
+  type AppEvent, type AppState, HUMAN_SEAT, TRICK_SHOW_MS, aiDelayMs, initialApp, loadApp, pendingAiSeat, questionGameId, reducer, saveApp, saveShowHints,
 } from './store';
 import { useRoom } from '../room/useRoom';
 import {
@@ -285,7 +285,7 @@ export function App() {
     <>
       {screen}
       {soloHistoryOpen && !room.active && <SoloHistory app={app} onClose={() => setSoloHistoryOpen(false)} />}
-      {questions && <Questions nelloPreview={nelloAvailable(app.settings)} key={questions.id ?? "list"} initialId={questions.id} onClose={() => setQuestions(null)} dispatch={dispatch} />}
+      {questions && <Questions key={questions.id ?? "list"} initialId={questions.id} onClose={() => setQuestions(null)} dispatch={dispatch} />}
       {nativeError && (
         <div class="native-error" role="alert">
           <span>{nativeError}</span>

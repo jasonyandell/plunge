@@ -14,7 +14,7 @@ const response: NativeDecision = {contract:'nello',inactive:2,choice:16,legal,ro
   counterexample_result:{schema:'nello-counterexamples-v1',status:'completed',stop:'round-limit',baseline:4,choice:16,
     ordinary_worlds:1,witnesses:4,rounds:1,score_kind:'witness-mixture',options:[[4,'2','5'],[16,'0','1']]}};
 
-describe('Nel-O counterexample preview',()=>{
+describe('Nel-O counterexample defense',()=>{
   it('always includes counterexamples for Nel-O defenders at both sample sizes',()=>{
     expect(livePlayerCall(request,'native-partner',false)).toEqual({request,worlds:40,partner:true,nello_counterexamples:true});
     expect(livePlayerCall(request,'native-partner',true)).toMatchObject({worlds:350,partner:false,nello_counterexamples:true});
@@ -39,26 +39,29 @@ describe('Nel-O counterexample preview',()=>{
       expect(counterexampleStats({...response,counterexample_result:{...response.counterexample_result!,...bad} as NonNullable<NativeDecision['counterexample_result']>},request,legal)).toBeNull();
     }
   });
-  it('persists the whole preview and accepts explicit on/off links',()=>{
+  it('defaults to Nel-O, migrates preview-era saves, and remembers a later opt-out',()=>{
     const values=new Map<string,string>(); const storage={removeItem:(k:string)=>{values.delete(k);},getItem:(k:string)=>values.get(k)??null,setItem:(k:string,v:string)=>{values.set(k,v);}};
-    const app=initialApp(null,'?nello=preview'); expect(app.settings.nelloPreview).toBe(true);
+    const app=initialApp(); expect(app.settings.nelloEnabled).toBe(true);
     saveApp(storage,app); const saved=loadApp(storage)!;
-    expect(initialApp(saved).settings.nelloPreview).toBe(true);
-    expect(initialApp(saved,'?nello=off').settings.nelloPreview).toBe(false);
-    expect(reducer(app,{type:'set-nello-preview',enabled:false}).settings.nelloPreview).toBe(false);
-    expect(initialApp().settings.nelloPreview).toBe(false);
-    const { nelloPreview: _, ...oldSettings } = saved.settings;
-    for (const previous of [undefined, false, true]) {
-      storage.setItem(STORAGE_KEY, JSON.stringify({...saved,settings:{...oldSettings,nelloCounterexamples:previous}}));
-      expect(loadApp(storage)?.settings.nelloPreview).toBe(previous ?? false);
-      expect(loadApp(storage)?.settings).not.toHaveProperty('nelloCounterexamples');
+    expect(initialApp(saved).settings.nelloEnabled).toBe(true);
+    const off=reducer(app,{type:'set-nello-enabled',enabled:false});
+    saveApp(storage,off);
+    expect(initialApp(loadApp(storage)).settings.nelloEnabled).toBe(false);
+    const { nelloEnabled: _, ...oldSettings } = saved.settings;
+    for (const key of ['nelloPreview','nelloCounterexamples']) for (const previous of [undefined,false,true]) {
+      storage.setItem(STORAGE_KEY,JSON.stringify({...saved,settings:{...oldSettings,[key]:previous}}));
+      const migrated=loadApp(storage)!;
+      expect(migrated.settings.nelloEnabled).toBe(true);
+      expect(migrated.settings).not.toHaveProperty('nelloPreview');
+      expect(migrated.settings).not.toHaveProperty('nelloCounterexamples');
+      expect(reducer(initialApp(migrated),{type:'new-game',seed:'migrated'}).game?.config.nello).toBe('open');
     }
-    for (const invalid of ['true',1,null]) {
-      storage.setItem(STORAGE_KEY,JSON.stringify({...saved,settings:{...saved.settings,nelloPreview:invalid}}));
+    for (const key of ['nelloEnabled','nelloPreview','nelloCounterexamples']) for (const invalid of ['true',1,null]) {
+      storage.setItem(STORAGE_KEY,JSON.stringify({...saved,settings:{...saved.settings,[key]:invalid}}));
       expect(loadApp(storage)).toBeNull();
     }
-    expect(initialApp(null,'?nello=counterexamples').settings.nelloPreview).toBe(true);
-    expect(initialApp(saved,'?nello=ordinary').settings.nelloPreview).toBe(false);
+    for (const on of ['on','preview','counterexamples']) expect(initialApp(toSaved(off),`?nello=${on}`).settings.nelloEnabled).toBe(true);
+    for (const off of ['off','ordinary']) expect(initialApp(saved,`?nello=${off}`).settings.nelloEnabled).toBe(false);
   });
   it('uses the full defense for fresh rechecks without a separate opt-in', async()=>{
     vi.mocked(runPlayer).mockResolvedValue(response);
@@ -72,29 +75,31 @@ describe('Nel-O counterexample preview',()=>{
   it('gates new and resumed auctions, stale declarations, and the next hand',()=>{
     const declaration={type:'declare',decl:{type:'nello'}} as const;
     // Ruby shakes, so you bid first and call trump yourself.
-    let game=newDealtGame(PLUNGE_CONFIG,newGame(PLUNGE_CONFIG,'preview-gate').dealt,3);
+    let game=newDealtGame(PLUNGE_CONFIG,newGame(PLUNGE_CONFIG,'nello-setting').dealt,3);
     game=applyAction(game,{type:'bid',bid:{kind:'marks',value:1}});
     for(let i=0;i<3;i++) game=applyAction(game,{type:'bid',bid:{kind:'pass'}});
     let app=initialApp(toSaved({...initialApp(),game}));
+    expect(legalActions(app.game!)).toContainEqual(declaration);
+    app=reducer(app,{type:'set-nello-enabled',enabled:false});
     expect(legalActions(app.game!)).not.toContainEqual(declaration);
     expect(reducer(app,{type:'human',action:declaration})).toBe(app);
     expect(reducer(app,{type:'new-game',seed:'off'}).game?.config.nello).toBe('off');
-    app=reducer(app,{type:'set-nello-preview',enabled:true});
+    app=reducer(app,{type:'set-nello-enabled',enabled:true});
     expect(legalActions(app.game!)).toContainEqual(declaration);
     expect(reducer(app,{type:'new-game',seed:'on'}).game?.config.nello).toBe('open');
     app=reducer(app,{type:'human',action:declaration});
     const active=app.game!;
-    const off=reducer(app,{type:'set-nello-preview',enabled:false});
+    const off=reducer(app,{type:'set-nello-enabled',enabled:false});
     expect(off.game).toBe(active); expect(off.screen).toBe('home');
     expect(reducer(off,{type:'resume'})).toBe(off);
     expect(pendingAiSeat({...off,screen:'table'})).toBeNull();
     expect(reducer(off,{type:'human',action:legalActions(active)[0]!})).toBe(off);
-    app=reducer(reducer(off,{type:'set-nello-preview',enabled:true}),{type:'resume'});
+    app=reducer(reducer(off,{type:'set-nello-enabled',enabled:true}),{type:'resume'});
     expect(app.screen).toBe('table'); expect(app.game).toBe(active);
     game=active;
     while(game.phase==='playing') game=applyAction(game,legalActions(game)[0]!);
     for(const enabled of [false,true]) {
-      const ended=reducer({...app,game},{type:'set-nello-preview',enabled});
+      const ended=reducer({...app,game},{type:'set-nello-enabled',enabled});
       const next=reducer(ended,{type:'human',action:{type:'next-hand'}});
       expect(next.game?.phase).toBe('bidding');
       expect(next.game?.config.nello).toBe(enabled?'open':'off');

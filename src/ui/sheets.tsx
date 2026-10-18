@@ -215,7 +215,7 @@ function declTitle(d: Declaration): string {
     }
     case 'doubles': return 'Doubles';
     case 'no-trump': return 'No trump';
-    case 'nello': return 'Nel-O · Preview';
+    case 'nello': return 'Nel-O';
     case 'sevens': return 'Sevens';
   }
 }

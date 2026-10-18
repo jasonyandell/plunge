@@ -2,16 +2,16 @@
 import { receiptLabel } from '../ai/receipt-label';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { type GameState } from '../engine';
-import { DEEP_WORLDS, type AnalysisWorlds, api, requestKey, requestTile, type NativeReceipt, type NativeEstimate } from '../ai/native';
+import { DEEP_WORLDS, NATIVE_TABLE, type AnalysisWorlds, api, requestKey, requestTile, type NativeReceipt, type NativeEstimate } from '../ai/native';
 import { decisionStats, type reviewPosition, type ReviewSelection } from '../ai/native-analysis';
 import { Domino } from './Domino';
 import { CounterexampleScores } from './CounterexampleScores';
 import { MoveScores } from './MoveScores';
 import { ledChip, SEAT_NAMES, trumpChip } from './store';
 
-export function NativeStats({ g, sel, position, receipt, loading, nelloPreview }: {
+export function NativeStats({ g, sel, position, receipt, loading }: {
   g: GameState; sel: ReviewSelection; position: NonNullable<ReturnType<typeof reviewPosition>>;
-  receipt: NativeReceipt | null; loading: boolean; nelloPreview: boolean;
+  receipt: NativeReceipt | null; loading: boolean;
 }) {
   const [estimate, setEstimate] = useState<NativeEstimate | null>(null);
   const [busy, setBusy] = useState(false);
@@ -31,9 +31,9 @@ export function NativeStats({ g, sel, position, receipt, loading, nelloPreview }
   const fresh = estimate ? decisionStats(estimate.response, request, legal) : null;
   const forced = legal.length === 1;
   const led = ledChip(g, g.tricks[sel.trick]!.plays.slice(0, sel.play));
-  const previewRequired = request.contract === 'nello' && !nelloPreview;
+  const analysisUnavailable = request.contract === 'nello' && NATIVE_TABLE;
   const inspect = async (worlds: AnalysisWorlds): Promise<void> => {
-    if (busy || previewRequired) return;
+    if (busy || analysisUnavailable) return;
     setBusy(true); setError('');
     controller.current = new AbortController();
     try {
@@ -75,12 +75,12 @@ export function NativeStats({ g, sel, position, receipt, loading, nelloPreview }
             {' '}The scores show the largest comparison that finished.</p>
         </details>
       </div>}
-      {!previewRequired && <div class="native-inspect-controls">
+      {!analysisUnavailable && <div class="native-inspect-controls">
         {!original && <button class="big-btn secondary" disabled={busy || loading} onClick={() => void inspect(40)}>Ask Walt</button>}
         <button class="big-btn secondary" disabled={busy || loading} onClick={() => void inspect(DEEP_WORLDS)}>Think deeper</button>
       </div>}
-      {previewRequired && <p class="setting-hint">Enable Nel-O Preview in More → Settings for a fresh analysis with Walt.</p>}
-      {!busy && !previewRequired && <p class="setting-hint">Think deeper compares {DEEP_WORLDS} possible deals. It can take up to 20 seconds.</p>}
+      {analysisUnavailable && <p class="setting-hint">Open this hand in the browser for a fresh Nel-O analysis with Walt.</p>}
+      {!busy && !analysisUnavailable && <p class="setting-hint">Think deeper compares {DEEP_WORLDS} possible deals. It can take up to 20 seconds.</p>}
       {busy && <p role="status">Walt is comparing the options… usually a few seconds, up to 20 seconds.</p>}
       {error && <p class="native-warning" role="alert">{error}</p>}
     </>}
