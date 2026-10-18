@@ -12,7 +12,7 @@
 import type { Difficulty } from '../ai';
 import { chooseAction } from '../ai/table';
 import { catalogueDeal } from '../ai/catalogue';
-import { NATIVE_TABLE, isNative, requestOf, requestKey, checkedAction, type NativeReceipt, type FlagRecord } from '../ai/native';
+import { NATIVE_TABLE, isNative, playerName, requestOf, requestKey, checkedAction, type NativeReceipt, type FlagRecord } from '../ai/native';
 import { auctionKey, type AuctionDecision, type AuctionEvidence } from '../ai/auction';
 import {
   type Action,
@@ -226,7 +226,7 @@ export function initialApp(saved?: SavedState | null, search = ''): AppState {
       : experiment === 'off' || experiment === 'ordinary' ? { nelloPreview: false } : {}) };
   const game = configureAuction(saved?.game ?? null, settings);
   return {
-    screen: 'home',
+    screen: new URLSearchParams(search).get('settings') === 'player' ? 'more' : 'home',
     settings,
     seed: saved?.seed ?? 'plunge',
     game,
@@ -390,7 +390,7 @@ export function reducer(s: AppState, e: AppEvent): AppState {
     case 'set-difficulty': {
       const settings = { ...s.settings, difficulty: e.difficulty,
         preset: isNative(e.difficulty) ? 'tournament' as const : s.settings.preset };
-      const next = { ...s, settings, game: configureAuction(s.game, settings) };
+      const next = { ...s, settings, game: configureAuction(s.game, settings), epoch:s.epoch+1 };
       return nelloPaused(next) ? { ...next, screen: 'home' } : next;
     }
     case 'set-preset': {
@@ -422,7 +422,7 @@ export function reducer(s: AppState, e: AppEvent): AppState {
         epoch: s.epoch + 1,
         retry: null,
         practiceHands: [],
-        game: isNative(s.settings.difficulty)
+        game: isNative(s.settings.difficulty) && s.settings.difficulty !== 'zeb'
           ? catalogueDeal(newGame(tableConfig(s.settings),e.seed),e.seed)
           : newGame(tableConfig(s.settings),e.seed),
       };
@@ -449,7 +449,7 @@ export function reducer(s: AppState, e: AppEvent): AppState {
         game = applyAction(s.game, e.action);
         if (e.action.type === 'next-hand') {
           game = { ...game, config: tableConfig(s.settings) };
-          if (isNative(s.settings.difficulty)) game = catalogueDeal(game,s.seed);
+          if (isNative(s.settings.difficulty) && s.settings.difficulty !== 'zeb') game = catalogueDeal(game,s.seed);
         }
       } catch {
         return s; // defensive: stale tap / double tap — ignore
@@ -474,7 +474,7 @@ export function reducer(s: AppState, e: AppEvent): AppState {
       const seat = pendingAiSeat(s);
       if (stale(s, e.epoch) || seat === null || !s.game || s.game.phase !== 'playing' || !isNative(s.settings.difficulty)) return s;
       const req = requestOf(s.game, seat, s.sessionId);
-      const wanted = s.settings.difficulty === 'native-l1' ? 'l1-default' : 'l1-partner-rollout';
+      const wanted = playerName(s.settings.difficulty, s.game);
       if (requestKey(req) !== requestKey(e.receipt.identity.request) || e.receipt.identity.game_id !== s.sessionId
         || e.receipt.identity.hand_number !== s.game.handNumber || e.receipt.identity.player.name !== wanted) return s;
       const game = applyAction(s.game, checkedAction(s.game, req, e.receipt));
@@ -573,7 +573,7 @@ export function saveShowHints(storage: StorageLike, showHints: boolean): void {
   } catch { /* As above. */ }
 }
 
-const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard', 'onyx', 'walt', 'native-l1', 'native-partner'];
+const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard', 'onyx', 'walt', 'native-l1', 'native-partner', 'zeb'];
 const PRESETS: readonly Preset[] = ['casual', 'tournament'];
 
 export function loadApp(storage: StorageLike): SavedState | null {

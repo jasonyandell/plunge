@@ -57,9 +57,10 @@ interface TableProps {
   seatNote?: (seat: Seat) => string | null;
   /** A shared table's extra menu entry. */
   menuExtra?: ComponentChildren;
+  onHistory?: () => void;
 }
 
-export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion, seatNote = () => null, menuExtra = null }: TableProps) {
+export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion, seatNote = () => null, menuExtra = null, onHistory }: TableProps) {
   // Every human decision below — tiles, bid/trump sheets, end cards — is
   // stamped with the generation this render shows (see liveDispatch).
   const dispatch = liveDispatch(rawDispatch, app.epoch);
@@ -151,6 +152,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
           {!app.room && <button type="button" class="hand-tool" disabled={!restartReady} onClick={askRestart}>
             &#8635; Play this hand again
           </button>}
+          {!app.room && onHistory && <button type="button" class="hand-tool" aria-haspopup="dialog" onClick={onHistory}>Prior hands</button>}
         </div>
       )}
       {(g.phase === 'playing' || showingLast) && (
@@ -218,14 +220,15 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
       {saved && <div class="question-toast" role="status"><span>{saved.text}</span>{saved.id && <button class="text-btn" onClick={() => { onQuestion(saved.id); setSaved(null); }}>Add note</button>}</div>}
       {question && <MoveQuestionPrompt key={`${question.sessionId}:${question.game.handNumber}:${question.ply}`}
         target={question.target} label={question.label} onSave={() => bookmark(question)} onClose={() => setQuestion(null)} />}
-      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
-      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
+      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet player={!app.room && app.settings.difficulty==='zeb' ? 'zeb' : 'walt'} key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
+      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet player={!app.room && app.settings.difficulty==='zeb' ? 'zeb' : 'walt'} key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
       {g.phase === 'hand-over' && !showingLast && !review && (
         <HandOverSheet
           g={g}
           dispatch={dispatch}
           onReview={g.tricks.length > 0 ? () => setReview(true) : undefined}
           scenario={scenario}
+          onHistory={scenario ? undefined : onHistory}
           practice={practice}
           onUndo={undoReady ? undo : undefined}
           onRestart={restartReady ? askRestart : undefined}
@@ -235,6 +238,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
         <GameOverSheet
           g={g}
           dispatch={dispatch}
+          onHistory={scenario ? undefined : onHistory}
           onReview={g.tricks.length > 0 ? () => setReview(true) : undefined}
           practice={practice}
           onUndo={undoReady ? undo : undefined}
