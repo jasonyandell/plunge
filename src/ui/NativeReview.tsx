@@ -118,9 +118,9 @@ export function NativeReview({ g, onBack, sessionId, questionGameId = sessionId,
     <h2 class="card-title">How it went</h2>
     <p class="card-detail">{g.declarer !== null && `${SEAT_NAMES[g.declarer]} bid `}{g.contract && contractLabel(g.contract)}
       {g.declaration && ` in ${declLabel(g.declaration)}`} · Us {g.points[0]} · Them {g.points[1]}.</p>
-    <p class="review-hint">Tap a domino to see the player’s hand and what Walt thinks.</p>
+    <p class="review-hint">Tap a domino to see the original model’s scores, or ask Walt for a fresh comparison.</p>
     <div class="review-scroll">
-      <div class="native-history"><TrickHistory g={g} onTapPlay={select} selected={sel} /></div>
+      <div class="native-history"><TrickHistory g={g} onTapPlay={select} selected={sel} actionLabel="see original scores" /></div>
       {sel && current && <section class="native-question" ref={question}>
         <h3>{SEAT_NAMES[current.seat]} played {current.domino.split('').join('–')} · play {ply! + 1}</h3>
         {matchedReceipt?.storage === 'session' && <p>Device storage is unavailable. These scores last for this session; copy a link to keep them.</p>}
@@ -133,7 +133,7 @@ export function NativeReview({ g, onBack, sessionId, questionGameId = sessionId,
           <p>{matchedReceipt.response.counterexample_result?.status === 'completed' ? 'The Nel-O counterexample pass selected the move; its stress scores are shown above.' : review?.status === 'changed' ? `The check changed ${pips(review.baseline)} to ${pips(review.choice)}.`
             : review?.status === 'retained' ? 'The check kept L1’s move.'
             : review?.status === 'inactive' ? 'The partnership check did not trigger.'
-            : review ? 'The check was unresolved; L1’s move was kept.' : matchedReceipt.response.route === 'forced' ? 'Only one legal move.' : 'The baseline player chose this move.'}</p>
+            : review ? 'The check was unresolved; L1’s move was kept.' : matchedReceipt.response.route === 'forced' ? 'Only one legal move.' : matchedReceipt.response.zeb_result ? 'Zeb chose this move from its weighted estimates.' : 'The baseline player chose this move.'}</p>
           {review && (review.samples ?? 0) > 0 && <p>{review.samples} of {review.support} compatible hands compared
             {review.coverage === 'census' ? ' · full census' : ' · sampled guess'}.</p>}
           {!matchedReceipt.response.zeb_result && (matchedReceipt.response.n ?? 0) > 40 && <p>This move requested {matchedReceipt.response.n} worlds; the scores show the largest comparison that finished.</p>}
@@ -163,7 +163,7 @@ export function NativeReview({ g, onBack, sessionId, questionGameId = sessionId,
         <button type="button" class="big-btn secondary" disabled={receiptLoading} onClick={() => void copy(portableLink())}>
           {copied ? 'Link copied!' : 'Copy a link to this move'}
         </button>
-        {!NATIVE_TABLE && <p class="setting-hint">The link includes this hand, your note and Walt’s original scores when available. It also works with the research gym on your Mac.</p>}
+        {!NATIVE_TABLE && <p class="setting-hint">The link includes this hand, your note and the original model’s scores when available. It also works with the research gym on your Mac.</p>}
         {NATIVE_TABLE && flag && !flag.portable && <div class="native-analysis">
           <p>Saved on your Mac. <button class="text-btn" onClick={() => void copy(`${location.origin}${location.pathname}#flag=${flag.id}`)}>Copy flagged-move link</button></p>
           <label class="native-label">Players used for the continuation

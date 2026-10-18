@@ -7,6 +7,7 @@
  * worker on localhost, so the check must look like the real site.
  */
 import { chromium } from 'playwright';
+import zebPackage from '@jasonyandell/zeb/package.json' with { type: 'json' };
 import { createServer } from 'node:http';
 import { readFile, writeFile, mkdtemp, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -78,7 +79,7 @@ try {
   await page.getByRole('button', { name: 'Deal me in', exact: true }).click();
   stage='play offline';
   const end = Date.now() + 120000;
-  let moves = 0, hintChecked = false;
+  let moves = 0, hintChecked = false, moveHintChecked = false;
   while (Date.now() < end) {
     if (await page.getByRole('dialog', { name: 'Hand over' }).count()) break;
     const bid = page.getByRole('dialog', { name: 'Your bid' });
@@ -87,7 +88,20 @@ try {
         await bid.getByRole('button',{name:'Help me bid',exact:true}).click();
         await page.getByRole('heading',{name:/Zeb suggests/}).waitFor({timeout:30000});
         await page.screenshot({path:join(out,'zeb-bid-hint.png')});
-        await page.getByRole('button',{name:'Back to my bid',exact:true}).click();
+        const recommendation = await page.getByRole('heading',{name:/Zeb suggests/}).innerText();
+        const before = await page.evaluate(() => localStorage.getItem('plunge:save:v1'));
+        await page.getByText('Compare trumps',{exact:true}).click();
+        await page.getByLabel('Explore a target',{exact:true}).selectOption('36');
+        await page.getByText('Estimated chance of making 36',{exact:true}).waitFor();
+        if (await page.getByRole('table').getByRole('row').count() !== 10) throw new Error('Missing forecast declarations.');
+        if (await page.getByRole('heading',{name:/Zeb suggests/}).innerText() !== recommendation
+          || await page.evaluate(() => localStorage.getItem('plunge:save:v1')) !== before) throw new Error('Exploring trumps changed the recommendation or game.');
+        await page.screenshot({path:join(out,'zeb-compare-trumps.png')});
+        await page.getByRole('button',{name:'Why this hint?',exact:true}).click();
+        await page.getByRole('dialog',{name:'Saved question',exact:true}).waitFor();
+        if (await page.getByLabel('Explore a target',{exact:true}).inputValue() !== '36') throw new Error('The saved hint lost its explored target.');
+        await page.getByText('Estimated chance of making 36',{exact:true}).waitFor();
+        await page.getByRole('button',{name:'Close questions',exact:true}).click();
         hintChecked=true;
       }
       const pass = bid.getByRole('button', { name: 'Pass', exact: true });
@@ -95,6 +109,17 @@ try {
     }
     const declare = page.getByRole('dialog', { name: 'Declare trump' });
     if (await declare.count()) { await declare.getByRole('button', { name: 'Blanks', exact: true }).click().catch(() => {}); moves++; continue; }
+    const hintButton = page.getByRole('button', { name: 'Get a hint', exact: true });
+    if (player === 'Zeb' && !moveHintChecked && await hintButton.count()) {
+      await hintButton.click();
+      await page.getByRole('heading', { name: 'A hint from Zeb', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Why this hint?', exact: true }).waitFor({ timeout: 30000 });
+      await page.screenshot({ path: join(out, 'zeb-move-hint.png') });
+      await page.getByRole('button', { name: 'Why this hint?', exact: true }).click();
+      await page.getByRole('dialog', { name: 'Saved question', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Close questions', exact: true }).click();
+      moveHintChecked = true;
+    }
     const playable = page.getByLabel('Your hand').getByRole('button');
     if (await playable.count()) { await playable.first().click().catch(() => {}); moves++; continue; }
     await page.waitForTimeout(150);
@@ -110,10 +135,38 @@ try {
       opened.onsuccess=()=>{const db=opened.result,r=db.transaction('receipts').objectStore('receipts').getAll();
         r.onsuccess=()=>{resolve(r.result);db.close();};r.onerror=()=>reject(r.error);};
     }));
-    if(!records.length || records.some(r=>r.identity.player.name!=='zeb-0.4.1' || !r.response.zeb_result))throw new Error('Computer moves did not retain Zeb receipts.');
+    if(!records.length || records.some(r=>r.identity.player.name!==`zeb-${zebPackage.version}` || !r.response.zeb_result))throw new Error('Computer moves did not retain Zeb receipts.');
     if(!hintChecked)throw new Error('The test did not exercise the Zeb bidding hint.');
-    check('Zeb selection survived reload and its live bidding hint worked offline.');
+    if(!moveHintChecked)throw new Error('The test did not exercise the Zeb move hint.');
+    const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('plunge:save:v1')));
+    if(!saved.playerEvents?.length || saved.playerEvents.some(e=>e.model.character!=='zeb'))throw new Error('Missing Zeb action attribution.');
+    check('Zeb selection, action identities, bidding hints and move hints survive offline, and both hint types save to the notebook.');
   }
+
+  stage='switch offline';
+  const other = player === 'Zeb' ? 'Walt' : 'Zeb';
+  await page.reload(); // Home retains the game between hands.
+  await page.getByRole('button', { name: 'More', exact: true }).click();
+  const beforeSwitch = await page.evaluate(() => localStorage.getItem('plunge:save:v1'));
+  await page.getByRole('radio', { name: other, exact: true }).click();
+  await page.getByRole('dialog', { name: `Switch to ${other}?`, exact: true }).waitFor();
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.screenshot({ path: join(out, 'switch-warning.png') });
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth
+    || [...document.querySelectorAll('dialog[open]')].some(d => d.scrollWidth > d.clientWidth))) throw new Error('Model warning overflows a narrow phone.');
+  await page.getByRole('button', { name: `Keep ${player}`, exact: true }).click();
+  if (await page.evaluate(() => localStorage.getItem('plunge:save:v1')) !== beforeSwitch) throw new Error('Cancelling changed the saved game.');
+  await page.getByRole('radio', { name: other, exact: true }).click();
+  await page.getByRole('button', { name: 'End game and switch', exact: true }).click();
+  await page.getByRole('button', { name: 'Deal me in', exact: true }).waitFor();
+  if (await page.getByRole('button', { name: 'Resume your game', exact: true }).count()) throw new Error('Ended game is still resumable.');
+  await page.reload();
+  const switched = await page.evaluate(() => JSON.parse(localStorage.getItem('plunge:save:v1')));
+  if (switched.game || switched.settings.difficulty !== (other === 'Zeb' ? 'zeb' : 'native-partner')
+    || switched.playerEvents.length || Object.keys(switched.nativeReceipts).length) throw new Error('The model switch did not persist cleanly.');
+  await page.screenshot({ path: join(out, 'switched-home.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  check(`Offline ${player} → ${other}: warning, cancellation, confirmed game end and reload all work.`);
 
   // A new version ships: only changed files download; Walt's copy carries over.
   stage='update';

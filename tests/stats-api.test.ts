@@ -36,12 +36,12 @@ it('keeps stats on the device while signed out and on database-free previews',as
   expect((await worker.fetch(new Request(`${origin}/api/stats`),env)).status).toBe(404);
   const preview=await worker.fetch(new Request('https://plunge-pr-9.texas42.workers.dev/api/stats/hands',{method:'PUT',headers:{Origin:'https://plunge-pr-9.texas42.workers.dev'},body:'{}'}),{ASSETS:env.ASSETS});
   expect(preview.status).toBe(503);expect(await preview.json()).toMatchObject({local_only:true});
-  expect(await (await put({device:phone,hands:[]},mom)).json()).toEqual({account:'a'.repeat(32),stored:[],rejected:[],total:0});
+  expect(await (await put({device:phone,hands:[]},mom)).json()).toMatchObject({account:'a'.repeat(32),stored:[],rejected:[],total:0});
 });
 it('connects a device’s hands to the signed-in account once, first write kept, facts decoded from the replay',async()=>{
   const upload=await put({device:phone,hands:[first,second]},mom);
   expect(upload.status).toBe(200);
-  expect(await upload.json()).toEqual({account:'a'.repeat(32),stored:[first.id,second.id],rejected:[],total:2});
+  expect(await upload.json()).toMatchObject({account:'a'.repeat(32),stored:[first.id,second.id],rejected:[],total:2});
   const hand=(await row('SELECT * FROM hands WHERE id=?',`${phone}:${first.id}`))!;
   expect(hand).toMatchObject({room_id:null,walt:'native-partner',finished:1,bid:30,contract:'points',result_marks:1,ended_at:first.endedAt});
   expect(hand.deal).toBe(first.code.slice(3,60));expect(hand.deal).toHaveLength(57);
@@ -68,7 +68,7 @@ it('keeps every attempt: a hand left part-way, and the same ids from another dev
     .toEqual([[`${phone}:${second.id}`,second.endedAt],[`${laptop}:${second.id}`,other.endedAt]]);
 });
 it('is greedy: another account signing in on the device claims the same hands',async()=>{
-  expect(await (await put({device:phone,hands:[first]},dad)).json()).toEqual({account:'b'.repeat(32),stored:[first.id],rejected:[],total:1});
+  expect(await (await put({device:phone,hands:[first]},dad)).json()).toMatchObject({account:'b'.repeat(32),stored:[first.id],rejected:[],total:1});
   expect(await rows('SELECT seat,account_id FROM hand_players WHERE hand_id=? ORDER BY account_id',`${phone}:${first.id}`)).toEqual([{seat:0,account_id:'a'.repeat(32)},{seat:0,account_id:'b'.repeat(32)}]);
   expect((await row('SELECT COUNT(*) n FROM hands'))!.n).toBe(5);
   expect(await (await put({device:phone,hands:[]},mom)).json()).toMatchObject({total:5});
@@ -99,4 +99,20 @@ it('rejects what is not a hand, naming it, without dropping the rest',async()=>{
   expect((await put({device:'nope',hands:[good]},dad)).status).toBe(400);
   expect((await put({device:phone,hands:[good]},dad,{Origin:'https://evil.test'})).status).toBe(403);
   expect((await put({device:phone,hands:[good]},dad,{})).status).toBe(403);
+});
+
+it('groups recorded implementations independently and keeps mixed hands and legacy unknown versions honest', async () => {
+  const { playerIdentity } = await import('../src/ai/players');
+  const zeb = playerIdentity('zeb'), older = { ...zeb, version: '0.3.0', implementation: 'old-zeb-package' }, walt = playerIdentity('native-partner');
+  const models = [
+    { ...first, id: 'model-zeb:1', gameId: 'model-zeb', player: 'native-partner', models: [zeb] }, // switched after finishing
+    { ...first, id: 'model-old:1', gameId: 'model-old', player: 'zeb', models: [older] },
+    { ...first, id: 'model-mixed:1', gameId: 'model-mixed', player: 'zeb', models: [zeb, walt] },
+  ];
+  const result = await (await put({ device: phone, hands: models }, mom)).json() as { models: { label: string; modelKey: string; hands: number }[] };
+  expect(result.models).toContainEqual(expect.objectContaining({ label: `Zeb · ${zeb.version}`, hands: 2 }));
+  expect(result.models).toContainEqual(expect.objectContaining({ label: 'Zeb · 0.3.0', hands: 1 }));
+  expect(result.models).toContainEqual(expect.objectContaining({ label: `Walt · ${walt.version}`, hands: 1 }));
+  expect(result.models.some(m => m.label === 'Walt · version not recorded')).toBe(true);
+  expect(result.models.find(m => m.label === `Zeb · ${zeb.version}`)!.modelKey).toContain(zeb.implementation);
 });

@@ -73,7 +73,7 @@ describe('Zeb at the Plunge boundary',()=>{
     expect(decisionStats({...receipt.response,zeb_result:{...result,q:[[result.tile,NaN]]}},req,receipt.response.legal)).toBeNull();
     let app=reducer(initialApp(),{type:'set-difficulty',difficulty:'zeb'});
     app={...reducer(app,{type:'new-game',seed:'zeb-integration',sessionId:'test'}),game:g};
-    const switched=reducer(app,{type:'set-difficulty',difficulty:'native-partner'});
+    const switched=reducer(app,{type:'set-difficulty',difficulty:'native-partner',confirmed:true,sessionId:app.sessionId});
     expect(reducer(switched,{type:'native-ai',receipt,epoch:app.epoch})).toBe(switched);
     expect(playerName('zeb',{...g,contract:{kind:'nello',value:1}})).toBe('l1-partner-rollout');
   });
