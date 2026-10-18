@@ -9,7 +9,8 @@ try {
  const page=await browser.newPage({viewport:{width:390,height:844}});
  const api=[];page.on('request',r=>{const u=new URL(r.url());if(u.pathname.startsWith('/api/'))api.push(`${r.method()} ${u.pathname}`);});
  await page.goto(origin);
- await page.getByRole('link',{name:'Try signing in: sample walkthrough'}).click();
+ await page.getByRole('link',{name:'Open family ideas',exact:true}).waitFor();
+ await page.goto(`${origin}/?account=1&demo=invite`);
  await page.getByText('Sample walkthrough: inviting family').waitFor();
  const before=api.length;
  await page.getByRole('heading',{name:'Hi, Mom.',exact:true}).waitFor();
@@ -32,11 +33,11 @@ try {
  // The used link no longer works, like the real one.
  await page.getByRole('button',{name:'Benny’s phone'}).click();await page.getByRole('heading',{name:'Hi, Benny.',exact:true}).waitFor();
  await page.getByRole('link',{name:'See Benny’s home screen →'}).click();
- await page.getByRole('link',{name:'Signed in as Benny in the sample walkthrough'}).waitFor();
+ await page.getByRole('link',{name:'Open family ideas',exact:true}).waitFor();
  await page.screenshot({path:'/tmp/plunge-demo-home.png'});
  assert.deepEqual(api.slice(before).filter(r=>!r.startsWith('GET /api/rooms')&&r!=='GET /api/account'),[]);
  // Start over clears it.
- await page.getByRole('link',{name:'Signed in as Benny in the sample walkthrough'}).click();
+ await page.goto(`${origin}/?account=1&demo=invite`);
  await page.getByRole('button',{name:'Start over'}).click();await page.getByRole('heading',{name:'Hi, Mom.',exact:true}).waitFor();
  assert.equal(await page.locator('.account-invites').count(),0);
  console.log('PASS: invite walkthrough on a preview build — Mom invites, Benny saves his seat with his hands, Joined, home chip, start over, no account requests.');

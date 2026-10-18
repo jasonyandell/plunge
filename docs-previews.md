@@ -27,6 +27,38 @@ To try a local-only build yourself: `npm run build:local-only`
 (`PLUNGE_QUESTIONS=local-only npm run build`). Any value other than `remote` or
 `local-only` fails the build.
 
+## Real sign-in for the ideas dashboard
+
+The preview home screen's **Open family ideas** link opens the dashboard. Choose
+**Sign in with Plunge** to open the stable account page in a new tab, use an existing
+passkey, then choose **Open dashboard demo**. The account page explains that this
+uses real family ideas and replies. The browser-only bidding and invite examples
+remain explicitly labeled samples. An embedded preview first opens the dashboard
+in its own tab so browser storage partitioning cannot lose the sign-in handoff.
+
+**Rollout dependency:** the main app must first receive the account return screen
+and `/api/ideas-preview` service in this change. Deploying the PR preview alone
+cannot add real sign-in to the already deployed main app. Until the main app is
+updated, use the gate's **Open ideas in the main game** link. No database migration,
+new secret, or production binding on a preview Worker is needed.
+
+Passkeys and session cookies stay on the stable origin. A same-origin POST there
+issues an HMAC-signed, one-hour ideas grant bound to the initiating browser nonce,
+the existing session, and the checked preview origin and commit. The preview strips
+the returned grant from the address and keeps it in session storage. API requests
+omit cookies and use a separate CORS endpoint on the main Worker. Every request
+rechecks the signature, expiry, current session, family membership and ready preview.
+Logout, family revocation or a new preview build invalidates access. **Disconnect
+demo** removes the grant from the current tab without signing out the main game.
+
+The endpoint permits reading cards and screenshots, and posting ideas and replies.
+It cannot manage accounts, call builder endpoints, or approve project access.
+Delegated posts retain the member's name but do not carry owner build authorization;
+the owner can approve requests in the main app. Game history and saved move
+questions still stay in the preview. Authentication regression checks are in
+`tests/ideas-preview.test.ts` and `tests/ideas-preview-access.test.ts`; the coordinator
+should also exercise sign-in and return in a phone browser, including an embedded demo.
+
 ## Operations
 
 - Existing `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` repository secrets
