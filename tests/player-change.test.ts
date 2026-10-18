@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it, vi } from 'vitest';
-import { applyAction, legalActions, newGame, LEGACY_PLUNGE_CONFIG, type Phase } from '../src/engine';
+import { applyAction, legalActions, newGame, PLUNGE_CONFIG, type Phase } from '../src/engine';
 import { planPlayerChange } from '../src/ai/player-change';
 import { player, usesPreparedDeals, usesForecastBidding } from '../src/ai/players';
 import { catalogueDeal } from '../src/ai/catalogue';
@@ -49,10 +49,10 @@ describe('model changes are game boundaries', () => {
     const first = started();
     const zeb = reducer(first, { type: 'set-difficulty', difficulty: 'zeb', confirmed: true, sessionId: first.sessionId });
     const fresh = reducer(zeb, { type: 'new-game', seed: 'new-zeb', sessionId: 'zeb-game' });
-    expect(fresh.game).toEqual(newGame(LEGACY_PLUNGE_CONFIG, 'new-zeb'));
+    expect(fresh.game).toEqual(newGame(PLUNGE_CONFIG, 'new-zeb'));
     const walt = reducer(fresh, { type: 'set-difficulty', difficulty: 'native-partner', confirmed: true, sessionId: fresh.sessionId });
     const prepared = reducer(walt, { type: 'new-game', seed: 'new-walt', sessionId: 'walt-game' });
-    expect(prepared.game).toEqual(catalogueDeal(newGame(LEGACY_PLUNGE_CONFIG, 'new-walt'), 'new-walt'));
+    expect(prepared.game).toEqual(catalogueDeal(newGame(PLUNGE_CONFIG, 'new-walt'), 'new-walt'));
     expect(prepared.game?.marks).toEqual([0,0]); expect(prepared.playerEvents).toEqual([]);
   });
 
