@@ -510,6 +510,7 @@
   position: relative;
   z-index: 21;
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
   padding: 2px 8px;

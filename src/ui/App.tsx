@@ -21,10 +21,12 @@ import { codeFromHash, decodeHand } from './share';
 import { decodeObservation } from './observation-link';
 import { api, isNative, nativeMove, NATIVE_TABLE, type FlagRecord } from '../ai/native';
 import { anticipatedAuctions, auctionMove } from '../ai/auction';
+import { zebAuctionMove } from '../ai/zeb';
 import { AuctionPreparation } from '../ai/auction-preparation';
 import './app.css';
 import { retryEvidence } from '../ai/phone/records';
 import { recordHistory, retryHistory, exportHistory } from '../history/recorder';
+import { SoloHistory } from './SoloHistory';
 import { syncStats } from '../history/stats-sync';
 import { Questions } from './Questions';
 import { attachGame, syncQuestions } from '../questions/client';
@@ -50,6 +52,8 @@ export function App() {
   // A family table lives in this same app: your moves go to the room, the rest stays local.
   const room = useRoom(app, reduce);
   const dispatch = room.dispatch;
+  const [soloHistoryOpen, setSoloHistoryOpen] = useState(false);
+  const openSoloHistory = () => setSoloHistoryOpen(true);
 
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
@@ -63,7 +67,7 @@ export function App() {
     }).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
   }, [app.game, app.sessionId, app.nativeReceipts, app.auctionSurveys, app.settings]);
   useEffect(() => {
-    const evidenceFailure = () => setEvidenceError('A Walt result is only in this tab. Device storage is unavailable; keep the tab open and export your history.');
+    const evidenceFailure = () => setEvidenceError('A computer decision is only in this tab. Device storage is unavailable; keep the tab open and export your history.');
     window.addEventListener('plunge-history-storage-error', evidenceFailure);
     retryRecording();
     window.addEventListener('focus', retryRecording);
@@ -102,7 +106,7 @@ export function App() {
 
   const preparation = useRef<AuctionPreparation>();
   useEffect(() => {
-    if (NATIVE_TABLE || !isNative(app.settings.difficulty) || app.screen !== 'table'
+    if (app.settings.difficulty === 'zeb' || NATIVE_TABLE || !isNative(app.settings.difficulty) || app.screen !== 'table'
       || app.scenarioGame || questions || screenIdea || app.game?.phase !== 'bidding') return;
     const current = new AuctionPreparation();
     preparation.current = current;
@@ -134,7 +138,9 @@ export function App() {
         // Think during the presentation pause, then reveal the bid at its usual pace.
         const started = performance.now();
         setThinking(seat);
-        void auctionMove(app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal,preparation.current?.evaluate).then(
+        void (app.settings.difficulty === 'zeb'
+          ? zebAuctionMove(app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal)
+          : auctionMove(app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal,preparation.current?.evaluate)).then(
           decision => {
             if (!alive) return;
             t = setTimeout(() => { if (alive) dispatch({type:'auction-ai',decision,epoch}); },
@@ -259,12 +265,12 @@ export function App() {
     if (room.active && (room.screen || app.screen === 'table' || app.screen === 'home')) return <>
       {room.chrome}
       {room.screen ?? (app.game || app.scenarioGame
-        ? <Table app={app} dispatch={dispatch} thinking={room.thinking} onQuestion={openQuestion} seatNote={room.seatNote} menuExtra={room.menu} />
+        ? <Table app={app} dispatch={dispatch} thinking={room.thinking} onQuestion={openQuestion} seatNote={room.seatNote} menuExtra={room.menu} onHistory={room.openHistory} />
         : <div class="room-wait" role="status">Connecting to the table…</div>)}
     </>;
     switch (app.screen) {
       case 'home':
-        return <Home app={app} dispatch={dispatch} identity={<IdentityChip />} />;
+        return <Home app={app} dispatch={dispatch} onPriorHands={openSoloHistory} identity={<IdentityChip />} />;
       case 'how':
         return <HowTo dispatch={dispatch} />;
       case 'about':
@@ -273,9 +279,9 @@ export function App() {
         return <More app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} />;
       case 'table':
         return app.game || app.scenarioGame ? (
-          <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} />
+          <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} onHistory={openSoloHistory} />
         ) : (
-          <Home app={app} dispatch={dispatch} identity={<IdentityChip />} />
+          <Home app={app} dispatch={dispatch} onPriorHands={openSoloHistory} identity={<IdentityChip />} />
         );
     }
   })();
@@ -283,6 +289,7 @@ export function App() {
   return (
     <>
       {screen}
+      {soloHistoryOpen && !room.active && <SoloHistory app={app} onClose={() => setSoloHistoryOpen(false)} />}
       {questions && <Questions nelloPreview={nelloAvailable(app.settings)} key={questions.id ?? "list"} initialId={questions.id} onClose={() => setQuestions(null)} dispatch={dispatch} />}
       {nativeError && (
         <div class="native-error" role="alert">

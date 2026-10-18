@@ -13,6 +13,7 @@ interface Member { id: string; name: string }
 interface Run { id: string; idea_id: string; revision: number; through_seq: number; state: string }
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 const BUILD_LEASE_MS=180000;
+const watchable = "(status IN ('checking','ready') OR (status='failed' AND (lane='hand' OR preview_revision=revision)))";
 const cards = `SELECT i.number,i.id,m.name,i.title,i.context,i.created,i.updated,i.revision,i.status,i.pr,i.sha,i.preview,i.lane,CASE WHEN i.status='building' AND i.run_id IS NOT NULL THEN i.lease_until-${BUILD_LEASE_MS} ELSE NULL END heartbeat_at FROM ideas i JOIN idea_members m ON m.id=i.member_id`;
 type CardRow=IdeaCard & {heartbeat_at:number|null};
 function activityCard(row:CardRow):IdeaCard {
@@ -52,12 +53,16 @@ async function thread(db: IdeasDatabase, idea: string, through = Number.MAX_SAFE
   const card = await db.prepare(`${cards} WHERE i.id=?`).bind(idea).first<CardRow>();
   if (!card) return null;
   const { results: messages } = await db.prepare(`SELECT x.id,x.role,COALESCE(m.name,'Plunge builder') name,x.body,x.created,
+    r.revision result_revision,(SELECT id FROM idea_messages WHERE idea_id=x.idea_id AND role='family' AND seq<=r.through_seq ORDER BY seq DESC LIMIT 1) request_id,
     (SELECT json_group_array(json_object('id',json_extract(value,'$.id'),'width',json_extract(value,'$.width'),'height',json_extract(value,'$.height')))
       FROM json_each(x.screenshots)) screenshots
-    FROM idea_messages x LEFT JOIN idea_members m ON m.id=x.member_id WHERE x.idea_id=? AND x.seq<=? ORDER BY x.seq`).bind(idea, through).all<{id:string;role:string;name:string;body:string;created:string;screenshots:string}>();
-  return { card:activityCard(card), messages:messages.map(({screenshots,...message})=>({...message,screenshots:JSON.parse(screenshots)})), permissions:await authorization(db,idea,card.revision,through) };
+    FROM idea_messages x LEFT JOIN idea_members m ON m.id=x.member_id
+    LEFT JOIN idea_runs r ON r.id=x.id AND r.idea_id=x.idea_id AND r.state='done' AND x.role='builder'
+    WHERE x.idea_id=? AND x.seq<=? ORDER BY x.seq`).bind(idea, through).all<{id:string;role:string;name:string;body:string;created:string;screenshots:string;result_revision:number|null;request_id:string|null}>();
+  return { card:activityCard(card), messages:messages.map(({screenshots,result_revision,request_id,...message})=>({...message,screenshots:JSON.parse(screenshots),
+    ...(result_revision!==null && request_id ? {result:{revision:result_revision,requestId:request_id}} : {})})), permissions:await authorization(db,idea,card.revision,through) };
 }
-export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Response> {
+export async function ideasRequest(request: Request, env: IdeasEnv, previewAccount?: Awaited<ReturnType<typeof accountSession>>): Promise<Response> {
   if (!env.QUESTIONS || !env.IDEAS_ADMIN_TOKEN) return json({ error: 'Ideas are not available here yet.' }, 503);
   const db = env.QUESTIONS, url = new URL(request.url), path = url.pathname.slice('/api/ideas'.length);
   if (request.method !== 'GET' && request.headers.has('Origin') && request.headers.get('Origin') !== url.origin) return json({ error: 'Please open your Plunge invite.' }, 403);
@@ -68,7 +73,10 @@ export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Res
       if (!IDEA_TOKEN.test(token) || await hash(token) !== await hash(env.IDEAS_ADMIN_TOKEN)) return json({ error: 'Builder access required.' }, 403);
       return await adminRequest(request, path, db);
     }
-    const session = await accountSession(request,env);
+    const session = previewAccount ?? await accountSession(request,env);
+    // A delegated demo may post as this family member, but cannot implicitly
+    // grant repository access on behalf of an owner. Approvals stay on the main app.
+    const authorizingAccount = previewAccount ? null : session?.id ?? null;
     if(session && request.method!=='GET' && request.headers.get('Origin')!==url.origin) return json({error:'Please use your Plunge app.'},403);
     const member = session ? (session.family && session.member_id ? {id:session.member_id,name:session.name} : null)
       : IDEA_TOKEN.test(token) ? await db.prepare('SELECT id,name FROM idea_members WHERE token_hash=? AND revoked=0').bind(await hash(token)).first<Member>() : null;
@@ -125,7 +133,7 @@ export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Res
       await db.batch([
         db.prepare('INSERT OR IGNORE INTO ideas(id,member_id,title,context,created,updated) VALUES(?,?,?,?,?,?)').bind(idea, member.id, text.length>100?text.slice(0,97)+'…':text, context, now, now),
         db.prepare(`INSERT OR IGNORE INTO idea_messages(id,idea_id,member_id,role,body,created,account_id,screenshots)
-          SELECT ?,id,?,'family',?,?,?,? FROM ideas WHERE id=? AND member_id=?`).bind(idea, member.id, text, now, session?.id??null, screenshots, idea, member.id),
+          SELECT ?,id,?,'family',?,?,?,? FROM ideas WHERE id=? AND member_id=?`).bind(idea, member.id, text, now, authorizingAccount, screenshots, idea, member.id),
       ]);
       const saved = await db.prepare('SELECT member_id FROM ideas WHERE id=?').bind(idea).first<{member_id:string}>();
       return saved?.member_id === member.id ? json(await thread(db, idea)) : json({error:'Identifier already used.'},409);
@@ -136,7 +144,7 @@ export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Res
     if (!await db.prepare('SELECT id FROM ideas WHERE id=?').bind(idea).first()) return json({error:'Idea not found.'},404);
     const count = await db.prepare('SELECT COUNT(*) n FROM idea_messages WHERE member_id=? AND created>?').bind(member.id, new Date(Date.now() - 3600000).toISOString()).first<{n:number}>();
     if ((count?.n ?? 0) >= 40) return json({error:'Please give the builder a little time before sending more.'},429);
-    await db.prepare("INSERT OR IGNORE INTO idea_messages(id,idea_id,member_id,role,body,created,account_id,screenshots) VALUES(?,?,?,'family',?,?,?,?)").bind(messageId,idea,member.id,text,now,session?.id??null,screenshots).run();
+    await db.prepare("INSERT OR IGNORE INTO idea_messages(id,idea_id,member_id,role,body,created,account_id,screenshots) VALUES(?,?,?,'family',?,?,?,?)").bind(messageId,idea,member.id,text,now,authorizingAccount,screenshots).run();
     return json(await thread(db,idea));
   } catch (error) {
     if (error instanceof SyntaxError || (error instanceof Error && /message|identifier/i.test(error.message))) return json({ error: error.message }, 400);
@@ -154,14 +162,48 @@ async function screenshotResponse(db:IdeasDatabase,imageId:string,runId?:string)
     'X-Content-Type-Options':'nosniff','Content-Disposition':'inline; filename="screenshot.jpg"'}});
 }
 async function adminRequest(request: Request, path: string, db: IdeasDatabase): Promise<Response> {
+  if (path === '/admin/cards' && request.method === 'GET') {
+    return json((await db.prepare(`${cards} ORDER BY i.number`).all<CardRow>()).results.map(activityCard));
+  }
+  const cardMatch=/^\/admin\/cards\/([a-f0-9]{32})$/.exec(path);
+  if(cardMatch && request.method==='GET') {
+    const found=await thread(db,cardMatch[1]!);
+    return found ? json(found) : json({error:'Idea not found.'},404);
+  }
   const imageMatch=/^\/admin\/runs\/([a-f0-9]{32})\/attachments\/([a-f0-9]{32})$/.exec(path);
   if(imageMatch && request.method==='GET')return await screenshotResponse(db,imageMatch[2]!,imageMatch[1]!);
   if (path === '/admin/tracked' && request.method === 'GET') {
-    // A hand-built PR that failed its checks is still watched: the next push brings it back to checking.
-    return json((await db.prepare(`${cards} WHERE i.pr IS NOT NULL AND (i.status IN ('checking','ready') OR (i.lane='hand' AND i.status='failed')) ORDER BY i.number`).all<CardRow>()).results.map(activityCard));
+    return json((await db.prepare(`${cards} WHERE i.pr IS NOT NULL AND ${watchable} ORDER BY i.number`).all<CardRow>()).results.map(activityCard));
   }
   if (request.method !== 'POST') return json({error:'Method not allowed.'},405);
   const data = await body(request), now = new Date().toISOString();
+  if (path === '/admin/triage') {
+    const idea=id(data.id), action=data.action, message=field(data.message,3000);
+    const title=data.title===undefined ? null : field(data.title,100);
+    if(!['note','close'].includes(String(action)) || !Number.isSafeInteger(data.revision) || Number(data.revision)<1)
+      return json({error:'Use note or close with the current request revision.'},400);
+    // Exact retries reuse an immutable operator note. Notes never pretend to be a
+    // family request or grant access. Closing retains all messages and run archives.
+    const note=(await hash(JSON.stringify(['triage',idea,data.revision,action,title,message]))).slice(0,32);
+    const previous=await db.prepare('SELECT id FROM idea_messages WHERE id=? AND idea_id=?').bind(note,idea).first();
+    if(previous)return json(await thread(db,idea));
+    await db.batch([
+      db.prepare(`INSERT OR IGNORE INTO idea_messages(id,idea_id,role,body,created)
+        SELECT ?,id,'builder',?,? FROM ideas WHERE id=? AND revision=? AND status!='building'`)
+        .bind(note,message,now,idea,data.revision),
+      db.prepare(`UPDATE ideas SET title=COALESCE(?,title),updated=?,
+        status=CASE WHEN ? THEN 'closed' ELSE status END,
+        lane=CASE WHEN ? THEN 'hand' ELSE lane END,
+        preview=CASE WHEN ? THEN NULL ELSE preview END,
+        preview_revision=CASE WHEN ? THEN NULL ELSE preview_revision END
+        WHERE id=? AND revision=? AND status!='building'
+        AND EXISTS(SELECT 1 FROM idea_messages WHERE id=? AND idea_id=ideas.id)`)
+        .bind(title,now,...Array(4).fill(action==='close'?1:0),idea,data.revision,note),
+    ]);
+    const saved=await db.prepare('SELECT id FROM idea_messages WHERE id=?').bind(note).first();
+    if(!saved)return json({error:'This idea changed, is building, or no longer exists. Inspect it again.'},409);
+    return json(await thread(db,idea));
+  }
   if (path === '/admin/retry') {
     const retried = await db.prepare("UPDATE ideas SET status='queued',updated=? WHERE id=? AND lane='builder' AND status IN ('question','failed','queued') RETURNING id")
       .bind(now,id(data.id)).first();
@@ -230,8 +272,8 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
         SELECT ?,id,'builder',?,? FROM ideas WHERE run_id=? AND lease_until>?`).bind(run.id,message,now,run.id,finishedAt),
       db.prepare(`UPDATE idea_runs SET state='done' WHERE id=? AND EXISTS(SELECT 1 FROM ideas WHERE run_id=? AND lease_until>?)`).bind(run.id,run.id,finishedAt),
       db.prepare(`UPDATE ideas SET status=CASE WHEN revision>? THEN 'queued' ELSE ? END,
-        pr=COALESCE(?,pr),sha=COALESCE(?,sha),preview=NULL,updated=?,run_id=NULL,lease_until=NULL WHERE run_id=? AND lease_until>?`)
-        .bind(run.revision,status,status==='checking'?pr:null,status==='checking'?sha:null,now,run.id,finishedAt),
+        pr=COALESCE(?,pr),sha=COALESCE(?,sha),preview_revision=?,preview=NULL,updated=?,run_id=NULL,lease_until=NULL WHERE run_id=? AND lease_until>?`)
+        .bind(run.revision,status,status==='checking'?pr:null,status==='checking'?sha:null,status==='checking'?run.revision:null,now,run.id,finishedAt),
     ]);
     return json({ok:true});
   }
@@ -258,7 +300,7 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
         db.prepare("INSERT INTO idea_messages(id,idea_id,member_id,role,body,created) VALUES(?,?,?,'family',?,?)").bind(idea, idea, owner.member_id, body, now),
       ]);
     }
-    const adopted = await db.prepare(`UPDATE ideas SET lane='hand',status='checking',pr=?,sha=?,preview=NULL,run_id=NULL,lease_until=NULL,updated=?
+    const adopted = await db.prepare(`UPDATE ideas SET lane='hand',status='checking',pr=?,sha=?,preview_revision=revision,preview=NULL,run_id=NULL,lease_until=NULL,updated=?
       WHERE id=? AND status!='building' RETURNING id`).bind(pr, sha, now, idea).first();
     if (!adopted) return json({error:'The builder is working on this idea. Try again when it finishes.'},409);
     await db.prepare("INSERT OR IGNORE INTO idea_messages(id,idea_id,member_id,role,body,created) VALUES(?,?,?,'builder',?,?)")
@@ -268,7 +310,7 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
   if (path === '/admin/refresh') {
     const idea=id(data.id);
     if(typeof data.nextSha!=='string'||!/^[a-f0-9]{40}$/.test(data.nextSha))return json({error:'Invalid build.'},400);
-    await db.prepare("UPDATE ideas SET status='checking',sha=?,preview=NULL,updated=? WHERE id=? AND sha=? AND (status IN ('checking','ready') OR (lane='hand' AND status='failed'))")
+    await db.prepare(`UPDATE ideas SET status='checking',sha=?,preview=NULL,updated=? WHERE id=? AND sha=? AND ${watchable}`)
       .bind(data.nextSha,now,idea,data.sha).run();
     return json({ok:true});
   }
@@ -283,8 +325,15 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
       const version = await response.json() as {build?:string;preview_pr?:number};
       if (!response.ok || version.build!==card.sha || version.preview_pr!==card.pr) return json({error:'Preview is not ready.'},409);
     }
-    await db.prepare(`UPDATE ideas SET status=?,preview=?,updated=? WHERE id=? AND sha=? AND (status IN ('checking','ready') OR (lane='hand' AND status='failed'))`)
-      .bind(status,status==='ready'?previewFor(card.pr):null,now,idea,card.sha).run();
+    const note=status==='failed' ? 'The preview did not pass its final checks. Your request is saved; you do not need to submit it again. I will keep watching this build and restore the preview when its checks pass.'
+      : status==='ready' ? 'Your preview passed its checks and is ready to try.' : null;
+    const statements=[];
+    if(note) statements.push(db.prepare(`INSERT OR IGNORE INTO idea_messages(id,idea_id,role,body,created)
+      SELECT ?,id,'builder',?,? FROM ideas WHERE id=? AND sha=? AND status!=? AND ${watchable}`)
+      .bind((await hash(`${idea}:preview:${card.revision}:${card.sha}:${status}`)).slice(0,32),note,now,idea,card.sha,status));
+    statements.push(db.prepare(`UPDATE ideas SET status=?,preview=?,updated=? WHERE id=? AND sha=? AND ${watchable}`)
+      .bind(status,status==='ready'?previewFor(card.pr):null,now,idea,card.sha));
+    await db.batch(statements);
     return json({ok:true});
   }
   return json({error:'Not found.'},404);
