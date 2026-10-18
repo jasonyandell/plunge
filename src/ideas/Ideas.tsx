@@ -83,8 +83,8 @@ export function Ideas() {
     return <IdeaPreview pr={hasIdeaDemo(thread.card) ? thread.card.pr! : 0} title={ideaPresentation(thread.card).title} onClose={trial.close}/>;
   return <main class="ideas-page">
     <header class="ideas-top"><a href="/">← Back to Plunge</a><span>Made together</span></header>
-    <div class="ideas-heading"><p class="eyebrow">Our community game</p><h1>Building Plunge together</h1>
-      <p>Your ideas belong here. See what everyone’s making, try a demo, and help shape our game.</p></div>
+    <div class="ideas-heading"><p class="eyebrow">Our community game</p><h1>Ideas for Plunge</h1>
+      <p>Try what we’re making. Share what comes next.</p></div>
     {QUESTIONS_LOCAL_ONLY && !name ? <section class="idea-paper"><h2>Your real family ideas</h2><p>Use your Plunge account to explore this dashboard with your family’s ideas.</p>
       <PreviewSignIn />
       {token && !error && <p role="status">Opening your family ideas…</p>}

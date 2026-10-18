@@ -18,7 +18,7 @@ export function IdeasBoard({view, onView, cards, loaded = true, busy = false, de
     return matchesIdeaFilter(card, filter) && `${title} ${card.title} ${card.name} ${tags.join(' ')} ${card.number}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
   });
   return <section class="ideas-dashboard" aria-labelledby="ideas-board-title">
-    <div class="ideas-board-heading"><h2 id="ideas-board-title">Around the table</h2><p>Explore an idea, try a demo, or join the conversation.</p></div>
+    <h2 id="ideas-board-title" class="ideas-board-label">Browse our ideas</h2>
     <div class="ideas-filters" role="group" aria-label="Browse ideas">
       {filters.map(item => <button key={item.id} type="button" aria-pressed={filter === item.id} onClick={() => onView({...view,filter:item.id})}>
         <span>{item.label}</span><strong>{loaded ? cards.filter(card => matchesIdeaFilter(card, item.id)).length : '…'}</strong>

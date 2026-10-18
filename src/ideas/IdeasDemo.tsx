@@ -54,7 +54,7 @@ export function IdeasDemo() {
   return <main class="ideas-page">
     <header class="ideas-top"><a href="/">← Back to Plunge</a><span>Made together</span></header>
     <aside class="demo-banner"><strong>Try the family ideas demo</strong><p>Sample conversation about a change already in the game. Messages stay in this browser; demo replies don’t start builds.</p><PreviewSignIn /></aside>
-    <div class="ideas-heading"><p class="eyebrow">Our community game</p><h1>Building Plunge together</h1><p>Your ideas belong here. See what everyone’s making, try a demo, and help shape our game.</p></div>
+    <div class="ideas-heading"><p class="eyebrow">Our community game</p><h1>Ideas for Plunge</h1><p>Try what we’re making. Share what comes next.</p></div>
     <div class="ideas-welcome"><div><p>Hi, {person}.</p><div class="demo-people" role="group" aria-label="Try the demo as">
       {['Mom','Dad'].map(name=><button type="button" aria-pressed={person===name} onClick={()=>setPerson(name)} key={name}>{name}</button>)}
     </div></div><button class="big-btn secondary" onClick={()=>{setSelected(null);setNotice('');setAdding(true);}}>＋ Share an idea</button></div>
