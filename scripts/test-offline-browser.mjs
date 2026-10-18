@@ -67,11 +67,11 @@ try {
   await ctx.setOffline(true);
   await page.reload();
   if(player==='Zeb') {
-    await page.getByRole('button',{name:'More',exact:true}).click();
+    await page.getByRole('button',{name:'Settings & more',exact:true}).click();
     await page.getByRole('radio',{name:'Zeb',exact:true}).click();
     await page.getByRole('button',{name:'← Back',exact:true}).click();
     await page.reload();
-    await page.getByRole('button',{name:'More',exact:true}).click();
+    await page.getByRole('button',{name:'Settings & more',exact:true}).click();
     if(await page.getByRole('radio',{name:'Zeb',exact:true}).getAttribute('aria-checked')!=='true')throw new Error('Zeb selection was not saved.');
     await page.screenshot({path:join(out,'zeb-settings.png')});
     await page.getByRole('button',{name:'← Back',exact:true}).click();
@@ -146,7 +146,7 @@ try {
   stage='switch offline';
   const other = player === 'Zeb' ? 'Walt' : 'Zeb';
   await page.reload(); // Home retains the game between hands.
-  await page.getByRole('button', { name: 'More', exact: true }).click();
+  await page.getByRole('button', { name: 'Settings & more', exact: true }).click();
   const beforeSwitch = await page.evaluate(() => localStorage.getItem('plunge:save:v1'));
   await page.getByRole('radio', { name: other, exact: true }).click();
   await page.getByRole('dialog', { name: `Switch to ${other}?`, exact: true }).waitFor();
