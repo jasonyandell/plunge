@@ -14,7 +14,30 @@ const browser = await chromium.launch({ headless: true, ...(process.env.PLUNGE_C
 const faults = [];
 const phone = async () => { const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }); const page = await ctx.newPage();
   page.on('pageerror', e => faults.push(String(e))); page.on('console', m => { if (m.type() === 'error') faults.push('console: ' + m.text()); });
-  await page.addInitScript(() => { const Real = window.WebSocket; window.WebSocket = class extends Real { constructor(...a) { super(...a); this.addEventListener('message', e => { try { const m = JSON.parse(e.data); if (m.type === 'state') window.__room = m; if (m.type === 'error') (window.__errors ??= []).push(m); } catch {} }); } }; });
+  await page.addInitScript(() => {
+    const Real = window.WebSocket;
+    window.WebSocket = class extends Real {
+      constructor(...a) {
+        super(...a);
+        this.addEventListener('message', e => {
+          try {
+            const m = JSON.parse(e.data);
+            if (m.type === 'state') window.__room = m;
+            if (m.type === 'error') (window.__errors ??= []).push({ ...m, command: window.__commands?.[m.id],
+              receivedRevision: window.__room?.revision });
+          } catch {}
+        });
+      }
+      send(data) {
+        try {
+          const c = JSON.parse(data);
+          if (c.id) (window.__commands ??= {})[c.id] = { type: c.type, revision: c.revision, seat: c.seat,
+            modelKey: c.modelKey, action: c.action?.type, kind: c.kind, vote: c.vote };
+        } catch {}
+        return super.send(data);
+      }
+    };
+  });
   return page; };
 const state = page => page.evaluate(() => window.__room);
 const summary = async page => { const s = await state(page); return s ? JSON.stringify({ rev: s.revision, runner: s.runner, thinking: s.thinkingSeat, turn: s.game?.turn, phase: s.game?.phase, seats: s.seats, proposal: s.proposal?.kind, lastVote: s.lastVote, errors: await page.evaluate(() => window.__errors) }) : 'no state'; };
