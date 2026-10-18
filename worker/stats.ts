@@ -7,6 +7,7 @@
  * without a server change. First write wins per hand and nothing here ever
  * overwrites. Stats are greedy: whoever is signed in claims the device's hands.
  */
+import { recordedPlayerLabel } from '../src/ai/players';
 import { DEVICE_ID, GAME_ID, MAX_UPLOAD_BYTES, UPLOAD_BATCH, handSummary, validHandRecord } from '../src/history/hand-record';
 import type { HandRecord } from '../src/history/legacy';
 import { accountSession, type AccountEnv } from './accounts';
@@ -25,7 +26,7 @@ export function handStatements(db: IdeasDatabase, entries: readonly HandEntry[],
     const { record, game } = validHandRecord(entry.raw ?? entry.record), facts = handSummary(record, game), id = handId(entry);
     statements.push(db.prepare(`INSERT OR IGNORE INTO hands(id,room_id,deal,ended_at,received,walt,finished,bidder,bid,contract,declaration,result_team,result_marks,
       team0_points,team1_points,team0_tricks,team1_tricks,payload) VALUES(${Array(18).fill('?').join(',')})`)
-      .bind(id, entry.roomId ?? null, facts.deal, record.endedAt, now, entry.walt ?? null, facts.finished ? 1 : 0, facts.bidder, facts.bid, facts.contract, facts.declaration,
+      .bind(id, entry.roomId ?? null, facts.deal, record.endedAt, now, record.models?.length ? record.models.map(p => `${p.name} · ${p.version}`).sort().join(' + ') : entry.walt ?? record.player, facts.finished ? 1 : 0, facts.bidder, facts.bid, facts.contract, facts.declaration,
         facts.resultTeam, facts.resultMarks, facts.points[0], facts.points[1], facts.tricks[0], facts.tricks[1], JSON.stringify(entry.raw ?? entry.record)));
     for (const p of entry.players) statements.push(db.prepare('INSERT OR IGNORE INTO hand_players(hand_id,seat,account_id,device_id,name) VALUES(?,?,?,?,?)')
       .bind(id, p.seat, p.account ?? null, p.device ?? null, p.name ?? null));
@@ -60,6 +61,18 @@ export async function statsRequest(request: Request, env: AccountEnv): Promise<R
     }
     if (entries.length) await db.batch(handStatements(db, entries));
     const total = await db.prepare('SELECT COUNT(DISTINCT hand_id) n FROM hand_players WHERE account_id=?').bind(account.id).first<{ n: number }>();
-    return json({ account: account.id, stored: entries.map((e) => e.record.id), rejected, total: total?.n ?? 0 });
+    // One row per recorded implementation, not per current menu choice. Mixed hands appear in each applicable group.
+    const groups = await db.prepare(`WITH mine AS (
+      SELECT h.* FROM hands h WHERE EXISTS (SELECT 1 FROM hand_players p WHERE p.hand_id=h.id AND p.account_id=?)
+    ), attributed AS (
+      SELECT h.id, h.finished, json_extract(m.value,'$.id') || ':' || json_extract(m.value,'$.version') || ':' || json_extract(m.value,'$.implementation') modelKey,
+        json_extract(m.value,'$.name') || ' · ' || json_extract(m.value,'$.version') label
+      FROM mine h, json_each(h.payload,'$.models') m
+      UNION ALL SELECT id, finished, 'legacy:' || COALESCE(walt,'room'), COALESCE(walt,'room') FROM mine
+        WHERE COALESCE(json_array_length(payload,'$.models'),0)=0
+    ) SELECT modelKey, label, COUNT(DISTINCT id) hands, COUNT(DISTINCT CASE WHEN finished=1 THEN id END) finished
+      FROM attributed GROUP BY modelKey,label ORDER BY hands DESC,label,modelKey`)
+      .bind(account.id).all<{ modelKey: string; label: string; hands: number; finished: number }>();
+    return json({ models: groups.results.map(g => ({ ...g, label: recordedPlayerLabel(g.label) })), account: account.id, stored: entries.map((e) => e.record.id), rejected, total: total?.n ?? 0 });
   } catch (error) { return error instanceof SyntaxError ? json({ error: error.message }, 400) : json({ error: 'Stats are temporarily unavailable. Your device keeps them and can retry.' }, 503); }
 }

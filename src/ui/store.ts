@@ -10,8 +10,10 @@
  */
 
 import type { Difficulty } from '../ai';
+import { isPlayer, playerEvent, playerId, validPlayerEvents, type PlayerEvent } from '../ai/players';
+import { planPlayerChange } from '../ai/player-change';
+import { dealForPlayer } from '../ai/player-game';
 import { chooseAction } from '../ai/table';
-import { catalogueDeal } from '../ai/catalogue';
 import { NATIVE_TABLE, isNative, playerName, requestOf, requestKey, checkedAction, type NativeReceipt, type FlagRecord } from '../ai/native';
 import { auctionKey, type AuctionDecision, type AuctionEvidence } from '../ai/auction';
 import {
@@ -132,6 +134,7 @@ export interface AppState {
    */
   readonly scenarioGame: GameState | null;
   readonly sessionId: string;
+  readonly playerEvents?: readonly PlayerEvent[];
   readonly nativeReceipts: Record<string, string>;
   readonly scenarioFlag: FlagRecord | null;
   readonly auctionSurveys: Record<string, AuctionEvidence>;
@@ -174,7 +177,7 @@ export type ChooseFn = typeof chooseAction;
 
 export type AppEvent =
   | { readonly type: 'go'; readonly screen: Screen }
-  | { readonly type: 'set-difficulty'; readonly difficulty: Difficulty }
+  | { readonly type: 'set-difficulty'; readonly difficulty: Difficulty; readonly confirmed?: boolean; readonly sessionId?: string }
   | { readonly type: 'set-preset'; readonly preset: Preset }
   | { readonly type: 'set-think-deeper'; readonly enabled: boolean }
   | { readonly type: 'set-nello-preview'; readonly enabled: boolean }
@@ -201,7 +204,7 @@ export type AppEvent =
   /** Sit at a shared table: the game arrives with the first snapshot. */
   | { readonly type: 'room-enter'; readonly localSeat: Seat }
   /** The coordinator's latest view of a shared table. */
-  | { readonly type: 'room-snapshot'; readonly state: RoomState; readonly localSeat: Seat; readonly now?: number }
+  | { readonly type: 'room-snapshot'; readonly state: RoomState; readonly localSeat: Seat; readonly receipts?: Record<string, string>; readonly now?: number }
   /** Stand up from a shared table; the solo game is reloaded by the page. */
   | { readonly type: 'room-exit' };
 
@@ -235,6 +238,7 @@ export function initialApp(saved?: SavedState | null, search = ''): AppState {
     scenarioGame: null,
     scenarioFlag: null,
     sessionId: saved?.sessionId ?? 'legacy',
+    playerEvents: saved?.playerEvents ?? [],
     nativeReceipts: saved?.nativeReceipts ?? {},
     auctionSurveys: saved?.auctionSurveys ?? {},
     epoch: saved?.epoch ?? 0,
@@ -320,6 +324,7 @@ function rollbackTarget(s: AppState, kind: HandRetry['kind']): AppState | null {
     showTrick: false,
     aiMoves: s.aiMoves - steps.slice(kept).filter((step) => step.seat !== HUMAN_SEAT).length,
     epoch: s.epoch + 1,
+    playerEvents: (s.playerEvents ?? []).filter(e => e.handNumber !== g.handNumber || e.step < kept),
     // Links to undone moves leave the live table; the snapshots taken while
     // they were current keep them, and the receipts themselves are untouched.
     nativeReceipts: Object.fromEntries(Object.entries(s.nativeReceipts)
@@ -369,11 +374,13 @@ export function reducer(s: AppState, e: AppEvent): AppState {
         practiceHands: [], nativeReceipts: {}, auctionSurveys: {}, aiMoves: 0,
         room: { mode: 'shared-room', localSeat: e.localSeat, revision: -1, humans: [] } };
     case 'room-snapshot': {
+      if (s.room && e.state.revision < s.room.revision) return s;
       const t = e.state, game = t.game ? rotateGame(t.game, e.localSeat) : null;
       return { ...s, screen: 'table', game, scenarioGame: null, scenarioFlag: null, aiMoves: 0,
         // The table's rules decide what is playable, not this phone's preview setting.
-        settings: t.game?.config.nello === 'open' && !s.settings.nelloPreview ? { ...s.settings, nelloPreview: true } : s.settings,
-        seed: t.seed, sessionId: t.sessionId || 'room', nativeReceipts: t.nativeReceipts, auctionSurveys: t.auctionSurveys,
+        settings: { ...s.settings, difficulty: playerId(t.player), thinkDeeper: false, nelloPreview: t.game?.config.nello === 'open' },
+        playerEvents: t.playerEvents ?? [],
+        seed: t.seed, sessionId: t.sessionId || 'room', nativeReceipts: e.receipts ?? (e.localSeat === 0 ? t.nativeReceipts : {}), auctionSurveys: t.auctionSurveys,
         epoch: t.revision, retry: t.retry ?? null, practiceHands: t.practiceHands ?? [],
         showTrick: t.holdUntil > (e.now ?? Date.now()),
         room: { mode: 'shared-room', localSeat: e.localSeat, revision: t.revision, table: t,
@@ -388,6 +395,16 @@ export function reducer(s: AppState, e: AppEvent): AppState {
       return { ...s, screen: e.screen, scenarioGame: e.screen === 'home' ? null : s.scenarioGame,
         scenarioFlag: e.screen === 'home' ? null : s.scenarioFlag };
     case 'set-difficulty': {
+      if (s.room) return s; // Shared model changes are authoritative table votes.
+      if (isPlayer(e.difficulty)) {
+        const plan = planPlayerChange(s.settings.difficulty, e.difficulty, s.game);
+        if (plan.kind === 'unchanged' || (plan.endsGame && (!e.confirmed || e.sessionId !== s.sessionId))) return s;
+        return { ...s, settings: { ...s.settings, difficulty: plan.to, preset: 'tournament' },
+          screen: s.game ? 'home' : s.screen, game: null, seed: 'plunge', sessionId: 'no-game',
+          aiMoves: 0, showTrick: false, scenarioGame: null, scenarioFlag: null,
+          nativeReceipts: {}, auctionSurveys: {}, playerEvents: [], retry: null, practiceHands: [], epoch: s.epoch + 1 };
+      }
+      // Retained for old engine/difficulty fixtures; the product picker uses versioned players.
       const settings = { ...s.settings, difficulty: e.difficulty,
         preset: isNative(e.difficulty) ? 'tournament' as const : s.settings.preset };
       const next = { ...s, settings, game: configureAuction(s.game, settings), epoch:s.epoch+1 };
@@ -418,12 +435,13 @@ export function reducer(s: AppState, e: AppEvent): AppState {
         scenarioFlag: null,
         sessionId: e.sessionId ?? `seed-${e.seed.replace(/[^a-zA-Z0-9_-]/g, '').slice(0,60) || 'game'}`,
         nativeReceipts: {},
+        playerEvents: [],
         auctionSurveys: {},
         epoch: s.epoch + 1,
         retry: null,
         practiceHands: [],
-        game: isNative(s.settings.difficulty) && s.settings.difficulty !== 'zeb'
-          ? catalogueDeal(newGame(tableConfig(s.settings),e.seed),e.seed)
+        game: isNative(s.settings.difficulty)
+          ? dealForPlayer(newGame(tableConfig(s.settings),e.seed),e.seed,s.settings.difficulty)
           : newGame(tableConfig(s.settings),e.seed),
       };
     case 'resume':
@@ -449,7 +467,7 @@ export function reducer(s: AppState, e: AppEvent): AppState {
         game = applyAction(s.game, e.action);
         if (e.action.type === 'next-hand') {
           game = { ...game, config: tableConfig(s.settings) };
-          if (isNative(s.settings.difficulty) && s.settings.difficulty !== 'zeb') game = catalogueDeal(game,s.seed);
+          if (isNative(s.settings.difficulty)) game = dealForPlayer(game,s.seed,s.settings.difficulty);
         }
       } catch {
         return s; // defensive: stale tap / double tap — ignore
@@ -467,7 +485,7 @@ export function reducer(s: AppState, e: AppEvent): AppState {
       if ((g.phase==='bidding' && d.action.type!=='bid') || (g.phase==='declaring' && d.action.type!=='declare')) return s;
       try {
         const game=applyAction(g,d.action);
-        return {...s,game,aiMoves:s.aiMoves+1,auctionSurveys:d.survey ? {...s.auctionSurveys,[`${g.handNumber}:${seat}`]:d.survey} : s.auctionSurveys};
+        return {...s,game,aiMoves:s.aiMoves+1,playerEvents:[...(s.playerEvents ?? []),playerEvent(g,s.settings.difficulty)],auctionSurveys:d.survey ? {...s.auctionSurveys,[`${g.handNumber}:${seat}`]:d.survey} : s.auctionSurveys};
       } catch { return s; }
     }
     case 'native-ai': {
@@ -480,6 +498,7 @@ export function reducer(s: AppState, e: AppEvent): AppState {
       const game = applyAction(s.game, checkedAction(s.game, req, e.receipt));
       const key = `${s.game.handNumber}:${req.plays.length / 2}`;
       return { ...s, game, aiMoves: s.aiMoves + 1, showTrick: trickJustCompleted(s.game, game),
+        playerEvents: [...(s.playerEvents ?? []), playerEvent(s.game, s.settings.difficulty)],
         nativeReceipts: { ...s.nativeReceipts, [key]: e.receipt.id } };
     }
     case 'ai': {
@@ -524,6 +543,7 @@ export interface SavedState {
   readonly game: GameState | null;
   readonly aiMoves: number;
   readonly sessionId?: string;
+  readonly playerEvents?: readonly PlayerEvent[];
   readonly nativeReceipts?: Record<string, string>;
   readonly auctionSurveys?: Record<string, AuctionEvidence>;
   /** Absent in saves from before undo; they load as generation 0 with no retries. */
@@ -543,7 +563,7 @@ export const STORAGE_KEY = 'plunge:save:v1';
 export function toSaved(s: AppState): SavedState {
   return { v: 1, showTrick: s.showTrick, settings: s.settings, seed: s.seed, game: s.game, aiMoves: s.aiMoves,
     sessionId: s.sessionId, nativeReceipts: s.nativeReceipts, auctionSurveys: s.auctionSurveys,
-    epoch: s.epoch, retry: s.retry, practiceHands: s.practiceHands };
+    epoch: s.epoch, retry: s.retry, practiceHands: s.practiceHands, playerEvents: s.playerEvents ?? [] };
 }
 
 const HAND_NUMBER = (n: unknown): boolean => Number.isSafeInteger(n) && (n as number) >= 1;
@@ -594,6 +614,7 @@ export function loadApp(storage: StorageLike): SavedState | null {
     if (p.nativeReceipts !== undefined && (typeof p.nativeReceipts !== 'object' || p.nativeReceipts === null
       || Object.entries(p.nativeReceipts).some(([k,v]) => !/^\d+:\d+$/.test(k) || typeof v !== 'string' || !/^[a-f0-9]{64}$/.test(v)))) return null;
     if (p.epoch !== undefined && (!Number.isSafeInteger(p.epoch) || p.epoch < 0)) return null;
+    if (p.playerEvents !== undefined && !validPlayerEvents(p.playerEvents)) return null;
     if (!validRetry(p.retry)) return null;
     if (p.practiceHands !== undefined && (!Array.isArray(p.practiceHands) || !p.practiceHands.every(HAND_NUMBER))) return null;
     if (p.game !== null) {

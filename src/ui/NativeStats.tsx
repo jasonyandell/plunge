@@ -1,4 +1,5 @@
 /** Original playing evidence stays visible when a fresh estimate is requested. */
+import { receiptLabel } from '../ai/receipt-label';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { type GameState } from '../engine';
 import { DEEP_WORLDS, type AnalysisWorlds, api, requestKey, requestTile, type NativeReceipt, type NativeEstimate } from '../ai/native';
@@ -44,6 +45,7 @@ export function NativeStats({ g, sel, position, receipt, loading, nelloPreview }
     finally { if (alive.current) setBusy(false); }
   };
   return <section class="native-stats" aria-label="Move statistics">
+    {receipt && <p class="setting-hint">Original decision: {receiptLabel(receipt)}</p>}
     <p class="native-position">{trumpChip(g)} · {led ? `led: ${led}` : 'choosing the lead'}
       {' · '}playing to {request.seat % 2 === request.bidder % 2 ? 'make' : 'set'} {request.contract === 'nello' ? 'Nel-O' : request.bid}</p>
     <p class="setting-hint">{request.seat === 0 ? 'Your' : `${SEAT_NAMES[request.seat]}’s`} hand before this play. Legal choices are outlined.</p>
@@ -56,7 +58,7 @@ export function NativeStats({ g, sel, position, receipt, loading, nelloPreview }
       {loading ? <p role="status">Loading the original scores…</p>
         : original ? <MoveScores stats={original} selected={played} selectionLabel="Played" />
         : !estimate && <p class="setting-hint">{receipt ? 'No completed option scores were saved for this decision.'
-          : 'No original Walt estimate for this play. Ask Walt to compare the options from this player’s view.'}</p>}
+          : 'No original computer estimate for this play. Ask Walt to compare the options from this player’s view.'}</p>}
       {receipt?.response.interruption && <p class="setting-hint">{receipt.response.interruption}</p>}
       {receipt?.response.review_result?.status === 'changed' && <p class="setting-hint">These were Walt’s first estimates. A separate partner check changed its choice.</p>}
       {receipt && <CounterexampleScores response={receipt.response} request={request} legal={legal} />}
@@ -77,7 +79,7 @@ export function NativeStats({ g, sel, position, receipt, loading, nelloPreview }
         {!original && <button class="big-btn secondary" disabled={busy || loading} onClick={() => void inspect(40)}>Ask Walt</button>}
         <button class="big-btn secondary" disabled={busy || loading} onClick={() => void inspect(DEEP_WORLDS)}>Think deeper</button>
       </div>}
-      {previewRequired && <p class="setting-hint">Enable Nel-O Preview in Advanced settings for a fresh analysis with Walt.</p>}
+      {previewRequired && <p class="setting-hint">Enable Nel-O Preview in More → Settings for a fresh analysis with Walt.</p>}
       {!busy && !previewRequired && <p class="setting-hint">Think deeper compares {DEEP_WORLDS} possible deals. It can take up to 20 seconds.</p>}
       {busy && <p role="status">Walt is comparing the options… usually a few seconds, up to 20 seconds.</p>}
       {error && <p class="native-warning" role="alert">{error}</p>}

@@ -6,7 +6,7 @@
  * All decisions live in the pure store (src/ui/store.ts).
  */
 
-import { useEffect, useReducer, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useReducer, useRef, useState } from 'preact/hooks';
 import type { Seat } from '../engine';
 import {
   type AppEvent, type AppState, HUMAN_SEAT, TRICK_SHOW_MS, nelloAvailable, aiDelayMs, initialApp, loadApp, pendingAiSeat, questionGameId, reducer, saveApp, saveShowHints,
@@ -20,8 +20,9 @@ import { Table } from './Table';
 import { codeFromHash, decodeHand } from './share';
 import { decodeObservation } from './observation-link';
 import { api, isNative, nativeMove, NATIVE_TABLE, type FlagRecord } from '../ai/native';
-import { anticipatedAuctions, auctionMove } from '../ai/auction';
-import { zebAuctionMove } from '../ai/zeb';
+import { anticipatedAuctions } from '../ai/auction';
+import { computerAuction } from '../ai/computer';
+import { usesPreparedDeals } from '../ai/players';
 import { AuctionPreparation } from '../ai/auction-preparation';
 import './app.css';
 import { retryEvidence } from '../ai/phone/records';
@@ -39,7 +40,7 @@ export function App() {
     if (next.room || state.room) return next;
     // Undo, replay and a new deal never discard: the branch being left is recorded first,
     // hand included. (Content-addressed, so an already-saved snapshot isn't duplicated.)
-    if ((event.type === 'undo' || event.type === 'restart-hand' || event.type === 'new-game') && next.game !== state.game && state.game && !state.scenarioGame) {
+    if ((event.type === 'undo' || event.type === 'restart-hand' || event.type === 'new-game' || event.type === 'set-difficulty') && next.game !== state.game && state.game && !state.scenarioGame) {
       void recordHistory(state, true).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
     }
     if (next.game !== state.game || next.settings !== state.settings) {
@@ -53,6 +54,7 @@ export function App() {
   const room = useRoom(app, reduce);
   const dispatch = room.dispatch;
   const [soloHistoryOpen, setSoloHistoryOpen] = useState(false);
+  useEffect(() => setSoloHistoryOpen(false), [app.sessionId]);
   const openSoloHistory = () => setSoloHistoryOpen(true);
 
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -100,7 +102,7 @@ export function App() {
 
   const preparation = useRef<AuctionPreparation>();
   useEffect(() => {
-    if (app.settings.difficulty === 'zeb' || NATIVE_TABLE || !isNative(app.settings.difficulty) || app.screen !== 'table'
+    if (!usesPreparedDeals(app.settings.difficulty) || NATIVE_TABLE || !isNative(app.settings.difficulty) || app.screen !== 'table'
       || app.scenarioGame || questions || app.game?.phase !== 'bidding') return;
     const current = new AuctionPreparation();
     preparation.current = current;
@@ -132,9 +134,7 @@ export function App() {
         // Think during the presentation pause, then reveal the bid at its usual pace.
         const started = performance.now();
         setThinking(seat);
-        void (app.settings.difficulty === 'zeb'
-          ? zebAuctionMove(app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal)
-          : auctionMove(app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal,preparation.current?.evaluate)).then(
+        void computerAuction(app.settings.difficulty,app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal,preparation.current?.evaluate).then(
           decision => {
             if (!alive) return;
             t = setTimeout(() => { if (alive) dispatch({type:'auction-ai',decision,epoch}); },
@@ -168,8 +168,9 @@ export function App() {
   }, [app, retry, questions]);
 
   // Persist settings + in-progress game. (A shared hand opened from a link
-  // is never part of the save — the player's own game stays underneath.)
-  useEffect(() => {
+  // is never part of the save — the player's own game stays underneath.) Commit
+  // before showing the screen so an immediate reload cannot resurrect an ended game.
+  useLayoutEffect(() => {
     if (typeof localStorage === 'undefined') return;
     if (room.active) saveShowHints(localStorage, app.settings.showHints); else saveApp(localStorage, app);
   }, [app.game, app.settings, app.showTrick, app.seed, app.aiMoves, app.nativeReceipts, app.auctionSurveys, app.sessionId,

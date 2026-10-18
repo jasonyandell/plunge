@@ -5,7 +5,7 @@ import { Domino } from '../ui/Domino';
 import { bidLabel, contractLabel, declLabel } from '../ui/store';
 import { actionKey, ghostProgress, replayAt, replayScores, type ReplayAttempt } from './ghost';
 import { attemptBook } from './client';
-import type { StatsHand } from './model';
+import { handModelLabel, replaySeatLabel, type StatsHand } from './model';
 
 export function actionLabel(action: Action): string {
   if (action.type === 'play') return `Play ${action.domino[0]}–${action.domino[1]}`;
@@ -20,8 +20,9 @@ export function ReplayPane({ hand, account, demo, onBack }: { hand: StatsHand; a
   return <section class="stats-paper">
     <button type="button" onClick={onBack}>← Back to hands</button>
     <h2 tabIndex={-1} ref={heading}>Replay hand {hand.record.handNumber}</h2>
+    <p class="stats-help">{handModelLabel(hand.record)}</p>
     <label class="stats-seat">Take a seat <select value={seat} onChange={e => setSeat(Number(e.currentTarget.value) as Seat)}>
-      {([0, 1, 2, 3] as Seat[]).map(s => <option key={s} value={s}>Seat {s + 1} · {hand.players.find(p => p.seat === s)?.name ?? 'Recorded player'}</option>)}
+      {([0, 1, 2, 3] as Seat[]).map(s => <option key={s} value={s}>Seat {s + 1} · {replaySeatLabel(hand, s)}</option>)}
     </select></label>
     <ReplaySeat key={`${hand.id}:${seat}`} hand={hand} seat={seat} account={account} demo={demo}/>
   </section>;

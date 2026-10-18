@@ -1,11 +1,24 @@
 import type { GameState, Seat } from '../engine';
 import { decodeReplay } from '../engine/replay-code';
 import type { HandRecord } from '../history/legacy';
+import { recordedPlayerLabel, type PlayerIdentity } from '../ai/players';
 
 export interface StatsPlayer { seat: Seat; name: string }
 export interface SavedHand { id: string; record: HandRecord; players: StatsPlayer[]; remote?: boolean }
 export interface StatsHand extends SavedHand { game: GameState; retry: boolean }
 export type Metric = 'all' | 'made' | 'set' | 'nello' | 'unfinished' | 'retries';
+const modelKey = (m: PlayerIdentity) => `${m.id}@${m.version}:${m.implementation}`;
+const modelLabels = (models: readonly PlayerIdentity[]) => [...new Map(models.map(m => [modelKey(m), `${m.name} · ${m.version}`])).values()];
+/** Describe saved identities; never substitute the currently installed player version. */
+export function handModelLabel(record: HandRecord): string {
+  const models = [...(record.models ?? []), ...(record.playerEvents ?? []).filter(e => e.handNumber === record.handNumber).map(e => e.model)];
+  return modelLabels(models).join(' + ') || (record.player === 'demo' ? 'Sample choices · no computer model' : recordedPlayerLabel(record.player));
+}
+export function replaySeatLabel(hand: SavedHand, seat: Seat): string {
+  const human = hand.players.find(p => p.seat === seat)?.name;
+  const models = modelLabels((hand.record.playerEvents ?? []).filter(e => e.handNumber === hand.record.handNumber && e.seat === seat).map(e => e.model));
+  return [human, ...models].filter(Boolean).join(' / ') || (hand.record.player === 'demo' ? 'Sample player' : 'Recorded player · model not recorded');
+}
 export const metricNames: Record<Metric, string> = { all: 'First attempts', made: 'Bids made', set: 'Bids set',
   nello: 'Nel-O hands', unfinished: 'Unfinished', retries: 'Retries' };
 export function readHands(values: SavedHand[]): { hands: StatsHand[]; skipped: number } {

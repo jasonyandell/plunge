@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { contractLabel, declLabel } from '../ui/store';
 import { loadStats, type StatsData } from './client';
 import { demoHands } from './demo';
-import { matchesMetric, metricNames, readHands, sameContract, sameDeal, type Metric, type StatsHand } from './model';
+import { handModelLabel, matchesMetric, metricNames, readHands, sameContract, sameDeal, type Metric, type StatsHand } from './model';
 import { ReplayPane } from './ReplayPane';
 import '../ui/app.css';
 import './stats.css';
@@ -69,6 +69,7 @@ export function StatsPage({ demo = false }: { demo?: boolean }) {
         <div class="stats-hand-list">{filtered.slice(0, limit).map(h => <article key={h.id} class="stats-hand-card">
           <div><p class="stats-eyebrow">{h.players.map(p => p.name).join(' · ') || 'Recorded players'}{h.retry ? ' · Retry' : ''}</p>
             <h3>{h.game.contract ? `${contractLabel(h.game.contract)}${h.game.declaration ? ` · ${declLabel(h.game.declaration)}` : ''}` : h.game.thrownIn ? 'Thrown in' : 'Unfinished auction'}</h3>
+            <p class="stats-help">{handModelLabel(h.record)}</p>
             <p>Hand {h.record.handNumber} · <time dateTime={h.record.endedAt}>{new Date(h.record.endedAt).toLocaleDateString()}</time>
               {' · '}{h.game.handResult ? matchesMetric({ ...h, retry: false }, 'made') ? 'Made the bid' : 'Set the bid' : h.game.thrownIn ? 'No bid' : 'Unfinished'}</p>
           </div>

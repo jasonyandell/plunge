@@ -8,6 +8,7 @@ export interface VoteRule { mode: ProposalMode; needs: 'all' | 'two' | 'majority
  * reading it. A kick takes most of the table. (A knock is not a vote: see knockRoom.)
  * Tune here, nowhere else. */
 export const VOTE_RULES: Record<ProposalKind, VoteRule> = {
+  player: { mode: 'allow', needs: 'all', window: 90000 },
   start: { mode: 'veto', needs: 'all', window: 5000 },
   restart: { mode: 'veto', needs: 'all', window: 5000 },
   'next-hand': { mode: 'allow', needs: 'two', window: 90000 },
@@ -19,16 +20,17 @@ export const VOTE_RULES: Record<ProposalKind, VoteRule> = {
 export const PROPOSAL_KINDS = Object.keys(VOTE_RULES) as ProposalKind[];
 
 export function newProposal(id: string, kind: ProposalKind, by: Seat, byName: string, now: number,
-  extra: { target?: Seat } = {}): Proposal {
+  extra: { target?: Seat; player?: import('../src/ai/players').PlayerId; endsGame?: boolean; electorate?: Seat[] } = {}): Proposal {
   const rule = VOTE_RULES[kind];
   return { id, kind, mode: rule.mode, needs: rule.needs, by, byName, ...extra, at: now, deadline: now + rule.window,
     votes: { [by]: 'yes' } };
 }
 
-/** Live electorate: seated humans present right now, minus a kick's target.
- * Walt never votes and absent people never block. */
+/** Routine votes use the people present now, minus a kick's target. Model
+ * changes retain the original electorate: disconnecting never supplies consent. */
 export function voters(proposal: Proposal, present: ReadonlySet<Seat>): Seat[] {
-  return [...present].filter(seat => seat !== proposal.target).sort();
+  return [...(proposal.kind === 'player' && proposal.electorate ? proposal.electorate : present)]
+    .filter(seat => seat !== proposal.target).sort();
 }
 /** Yes votes a proposal needs from an electorate of this size. */
 export function neededYes(needs: Proposal['needs'], electorate: number): number {

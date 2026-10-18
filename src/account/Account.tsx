@@ -278,10 +278,11 @@ export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBacke
         </details>
         <div class="account-stats"><h3>Your hands</h3>
           <p><a href="/?stats=1">Explore stats, replay hands & play along →</a></p>
+          {stats?.models && stats.models.length > 0 && <div class="model-stats" aria-label="Hands by computer model"><p>Computer models in your saved attempts</p><ul>{stats.models.map(m => <li key={m.modelKey} title={m.modelKey}>{m.label}: {plural(m.hands,'hand')} · {m.finished} finished</li>)}</ul><p>Attempts can include takebacks, mixed models, and different deals; a hand may appear under more than one model. These counts do not rank playing strength.</p></div>}
           {stats?statsLines(stats,backend.localOnly).map(line=><p key={line}>{line}</p>):<p role="status">Counting the hands on this device…</p>}
           <button class="big-btn secondary" disabled={busy||connecting} onClick={()=>void connectStats(state.account?.id)}>{connecting?'Connecting…':'Connect now'}</button>
         </div>
-        <p class="idea-help">Hands played on this device connect to your account while you’re signed in, and merge with your other devices and family games. Full game history and Walt results stay on this device; export a backup from More.</p>
+        <p class="idea-help">Hands played on this device connect to your account while you’re signed in, and merge with your other devices and family games. Full game history and original model results stay on this device; export a backup from More.</p>
         <button class="text-btn" disabled={busy} onClick={()=>void act('/logout',{},'Signed out. You can still play.')}>Sign out</button>
       </section>
       {!!state.account.owner&&<section class="idea-paper"><h2>Who’s at the family table?</h2>
