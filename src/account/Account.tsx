@@ -265,6 +265,7 @@ export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBacke
           <button class="big-btn secondary" disabled={busy||!supported} onClick={()=>void passkey('add')}>Add another passkey</button>
         </details>
         <div class="account-stats"><h3>Your hands</h3>
+          <p><a href="/?stats=1">Explore stats, replay hands & play along →</a></p>
           {stats?statsLines(stats,backend.localOnly).map(line=><p key={line}>{line}</p>):<p role="status">Counting the hands on this device…</p>}
           <button class="big-btn secondary" disabled={busy||connecting} onClick={()=>void connectStats(state.account?.id)}>{connecting?'Connecting…':'Connect now'}</button>
         </div>
