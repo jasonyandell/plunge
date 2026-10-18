@@ -51,7 +51,7 @@ export function StatsPage({ demo = false }: { demo?: boolean }) {
     {!data && !error && <p role="status">Loading saved hands…</p>}
     {error && <p role="alert">{error}</p>}
     {data?.notice && <p role="status">{data.notice}</p>}
-    {parsed.skipped > 0 && <p role="status">{parsed.skipped} saved records could not be replayed and are excluded from these numbers. Their saved copies are unchanged.</p>}
+    {parsed.skipped > 0 && <p role="status">{parsed.skipped} saved records could not be opened and are excluded from these numbers. Their saved copies are unchanged.</p>}
     {data && <>
       {selected && <p role="status">This hand isn’t in this list. Try Family hands if someone shared it with you.</p>}
       <section class="stats-metrics" aria-label="Hand statistics">
