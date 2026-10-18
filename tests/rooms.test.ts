@@ -74,7 +74,7 @@ describe('family table without a host', () => {
     const guestGone = new Set<Seat>([0]);
     expect(roomSnapshot(room, guestGone, now).seats[2]).toMatchObject({ connected: false, away: false });
     expect(() => commandRoom(room, 0, move(room), guestGone, now)).toThrow(/Waiting for Guest/);
-    expect(() => commandRoom(room, 0, { type: 'thinking', id: 't', revision: room.state.revision, seat: 2 }, guestGone, now)).toThrow(/running Walt/);
+    expect(() => commandRoom(room, 0, { type: 'thinking', id: 't', revision: room.state.revision, seat: 2 }, guestGone, now)).toThrow(/computer runner/);
     const later = now + GRACE;
     expect(roomSnapshot(room, guestGone, later).seats[2]).toMatchObject({ connected: false, away: true });
     expect(roomSnapshot(room, guestGone, later).runner).toBe(0);
@@ -129,7 +129,7 @@ describe('family table without a host', () => {
     const room = fixture(), three = new Set<Seat>([0, 1, 2]);
     expect(joinRoom(room, 'Third', thirdToken, 1000).seat).toBe(1);
     expect(() => commandRoom(room, 0, { type: 'propose', id: 'self', revision: room.state.revision, kind: 'kick', target: 0 }, three, 1000)).toThrow(/Leave/);
-    expect(() => commandRoom(room, 0, { type: 'propose', id: 'walt', revision: room.state.revision, kind: 'kick', target: 3 }, three, 1000)).toThrow(/Walt/);
+    expect(() => commandRoom(room, 0, { type: 'propose', id: 'walt', revision: room.state.revision, kind: 'kick', target: 3 }, three, 1000)).toThrow(/computer player/);
     commandRoom(room, 0, { type: 'propose', id: 'kick', revision: room.state.revision, kind: 'kick', target: 1 }, three, 1000);
     expect(room.state.proposal).toMatchObject({ kind: 'kick', target: 1, mode: 'allow' });
     expect(() => commandRoom(room, 1, { type: 'vote', id: 'plead', proposal: 'kick', vote: 'no' }, three, 1001)).toThrow(/rest of the table/);

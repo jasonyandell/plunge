@@ -40,6 +40,7 @@ export function soloHandsFromHistory(events: readonly unknown[], sessionId: stri
     if (!game || !finished(game.phase) || !Array.isArray(snapshot.marks) || snapshot.marks.length !== 2
       || !snapshot.marks.every(mark => Number.isFinite(mark))) continue;
     hands.push({ sessionId: snapshot.gameId, names: [...SOLO_SEAT_NAMES],
+      models: snapshot.models ?? [],
       practice: !!snapshot.retry || !!snapshot.practiceHands?.includes(snapshot.handNumber),
       // Replay codes describe one deal; the recorder supplies its game context.
       game: { ...game, handNumber: snapshot.handNumber, marks: snapshot.marks, phase: snapshot.phase,

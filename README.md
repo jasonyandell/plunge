@@ -13,14 +13,15 @@ always at the bottom.
 Open a table and send its invite or room code. Family can open their existing
 Plunge app, choose **Play with family**, and paste the code or invite; no second
 install or account is needed. Nobody hosts: people sit down or leave any time,
-even mid-hand, and Walt plays every chair without a person in it. Whoever is
-present and lowest at the table runs Walt in their browser; if they drop, the
+even mid-hand, and the selected computer player covers every empty chair. Whoever is
+present and lowest at the table runs the selected player in their browser; if they drop, the
 next person takes over without a pause. Someone who drops keeps their seat for
-twenty seconds, then Walt covers it until they return. Refresh rejoins your seat.
+twenty seconds, then the computer covers it until they return. Refresh rejoins your seat.
 Anything done to the table is a quick vote: starting, shaking the next hand,
-undoing the last human move, starting over, opening or closing the table, and
+undoing the last human move, changing the computer player, starting over, opening
+or closing the table, and
 asking someone to step out. Low-stakes votes go ahead after five seconds unless
-anyone says no; alone with Walt they go ahead at once. Shaking the next hand
+anyone says no; alone with computers they go ahead at once. Shaking the next hand
 waits for a second person to tap it, so nobody loses the result card while
 they are still reading it. A closed table lets
 newcomers knock, and one yes from anyone present lets them in. Asking someone to
@@ -102,10 +103,17 @@ anonymously, and private hand details stay off shared links until the hand finis
 
 **Get a hint** is available during your turn to play. It suggests a legal domino
 without playing it, shows the sampled make/set comparison, and describes the
-public effect on the current trick. The first comparison uses 40 worlds;
-**Think deeper** can request 160. Closing the hint cancels pending work. Hints
+public effect on the current trick. Walt compares 40 worlds, or 350 in the phone build with
+**Think deeper**; Zeb uses budgets of 160 and 512 respectively. Closing the hint cancels pending work. Hints
 use only your hand and public history, with no separate partner review, and
 never label an unscored emergency fallback as a measured recommendation.
+
+Choose **Walt** or **Zeb** in More → Computer player, or by vote at a family
+table. The selection follows hints, messages, history, original scores and
+account counts. Zeb uses the pinned `@jasonyandell/zeb` package, fresh shuffled
+hands and sampled forecasts; Walt uses the recorded-game bid book and catalogue.
+Walt explicitly covers Nel-O when Zeb is selected. See [Zeb and player integration](docs/ZEB.md)
+for the package/version boundary and how to add another character.
 
 ## What's inside
 
@@ -114,33 +122,23 @@ never label an unscored emergency fallback as a measured recommendation.
   40/8 and an optional bounded partner count-offer check. The bidder's opening
   lead asks deeper L1 for 160 worlds with 20 seconds, retaining a complete
   40-world comparison first; later play keeps 40 worlds and 14 seconds. The
-  **Think deeper** switch in Home → Advanced settings applies that 160-world,
-  20-second profile to every computer move. It defaults off and persists across
+  **Think deeper** switch in More → Settings uses a 350-world,
+  20-second profile (160 worlds on the Mac research transport) to every computer move. It defaults off and persists across
   reloads; turn it off to restore normal later play. Deeper play skips the
   40/8-only partner check, and does not change the empirical bid book. No hidden
   hands cross the live decision boundary.
-- **Bidding** compares all nine declarations at the cheapest legal raise. Each
-  computer has 20 seconds for complete 4/12/40/160-world surveys. It bids when the
-  best sampled make estimate is at least 75%, otherwise passes, and passes over
-  partner. This is a simple initial policy over uncalibrated model estimates.
-  The winning trump is remembered; it is not searched again after bidding.
-  On modern phones, up to four independent workers share the declaration queue,
-  with fewer on smaller devices. Each runs the same Rust player.
-  Only complete surveys are ranked, with the same samples and seeded ties.
-  The entire pool stops on cancellation; a crashed job can retry once inside
-  the original time budget. Ordinary play still uses one worker.
-  While you consider a bid, that same bounded pool prepares the remaining
-  computer seats at 12, then 40 worlds. Their turns continue matching completed
-  surveys toward 160; an intervening raise is evaluated afresh. Computation
-  starts immediately while bids retain their readable presentation pace.
-  Early-pass screening is an experiment, not an enabled playing rule.
+- **Bidding** uses Walt's recorded-game book, or Zeb's nine-declaration forecast
+  with a 160-world budget and 85% cutoff. Both respect a partner's standing bid.
+  Zeb's forecasts are sampled predictions, not guarantees or completed-game
+  evidence. Historical live Walt auction experiments remain in the repository;
+  they are not the ordinary catalogue bidding policy.
 - **The table** saves games and original move scores on the device. After a hand,
-  inspect a move, ask Walt to think deeper with 160 worlds, or copy a portable
+  inspect a move, ask Walt for a fresh deeper comparison, or copy a portable
   observation link for the Mac gym. Leaving a position cancels its worker.
 - **The rules engine** is an independent pure state machine, with legal actions,
   replayable hands, points/marks scoring, and property tests. Historical variants
   and AI implementations remain in the repository as references; the active UI
-  uses straight 42 and the shared Walt player.
+  uses straight 42 with selectable computer players.
 
 ## How it ships
 

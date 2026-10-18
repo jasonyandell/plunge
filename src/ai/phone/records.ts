@@ -76,5 +76,5 @@ export async function retryEvidence(): Promise<void> {
   let failed = false;
   for (const value of [...unsavedReceipts.values()]) if (!await putReceipt(value)) failed = true;
   for (const value of [...estimates.values()]) if (!await putEstimate(value)) failed = true;
-  if (failed) throw new Error('Walt results could not be saved.');
+  if (failed) throw new Error('Computer results could not be saved.');
 }
