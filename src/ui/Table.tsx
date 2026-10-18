@@ -414,7 +414,7 @@ function seatBadges(g: GameState, seat: Seat) {
   );
 }
 
-function OpponentTop({ g, thinking, note }: { g: GameState; thinking: Seat | null; note?: string | null }) {
+export function OpponentTop({ g, thinking, note, names = SEAT_NAMES }: { g: GameState; thinking: Seat | null; note?: string | null; names?: readonly string[] }) {
   const seat: Seat = 2;
   const hand = g.hands[seat] ?? [];
   const sitsOut = g.sittingOut === seat;
@@ -422,7 +422,7 @@ function OpponentTop({ g, thinking, note }: { g: GameState; thinking: Seat | nul
   return (
     <div class={`seat seat-top${active ? ' active' : ''}${thinking === seat ? ' seat-thinking' : ''}`}>
       <div class="seat-name">
-        {SEAT_NAMES[seat]} <span class="seat-tag">Your partner</span>{note && <span class="seat-tag seat-note">{note}</span>} {seatBadges(g, seat)} {bidBubble(g, seat)}
+        {names[seat]} <span class="seat-tag">Your partner</span>{note && <span class="seat-tag seat-note">{note}</span>} {seatBadges(g, seat)} {bidBubble(g, seat)}
       </div>
       <div class={`mini-row${sitsOut ? ' sitting' : ''}`}>
         {hand.map((id) => (
@@ -434,14 +434,14 @@ function OpponentTop({ g, thinking, note }: { g: GameState; thinking: Seat | nul
   );
 }
 
-function OpponentSide({ g, seat, thinking, note }: { g: GameState; seat: Seat; thinking: Seat | null; note?: string | null }) {
+export function OpponentSide({ g, seat, thinking, note, names = SEAT_NAMES }: { g: GameState; seat: Seat; thinking: Seat | null; note?: string | null; names?: readonly string[] }) {
   const hand = g.hands[seat] ?? [];
   const sitsOut = g.sittingOut === seat;
   const active = g.turn === seat;
   return (
     <div class={`seat seat-${POS[seat]}${active ? ' active' : ''}${thinking === seat ? ' seat-thinking' : ''}`}>
       <div class="seat-name">
-        {SEAT_NAMES[seat]}{note && <span class="seat-tag seat-note">{note}</span>} {seatBadges(g, seat)} {bidBubble(g, seat)}
+        {names[seat]}{note && <span class="seat-tag seat-note">{note}</span>} {seatBadges(g, seat)} {bidBubble(g, seat)}
       </div>
       <div class={`mini-col${sitsOut ? ' sitting' : ''}`}>
         {hand.map((id) => (
@@ -455,12 +455,13 @@ function OpponentSide({ g, seat, thinking, note }: { g: GameState; seat: Seat; t
 
 // ---------------------------------------------------------------------------
 
-function TrickArea({
+export function TrickArea({
   g,
   plays,
   winner,
   gathering,
   thinking,
+  names = SEAT_NAMES,
   onQuestion,
 }: {
   g: GameState;
@@ -468,6 +469,7 @@ function TrickArea({
   winner: Seat | null;
   gathering: boolean;
   thinking: Seat | null;
+  names?: readonly string[];
   onQuestion?: ((play: number, target: HTMLElement) => void) | undefined;
 }) {
   const leader = plays[0]?.seat ?? null;
@@ -481,13 +483,13 @@ function TrickArea({
     <div class="trick">
       {partnerCallsTrump && g.turn !== null && g.declarer !== null && (
         <div class="trick-note">
-          {SEAT_NAMES[g.turn]} is calling trump for {g.declarer === HUMAN_SEAT ? 'you' : SEAT_NAMES[g.declarer]}&hellip;
+          {names[g.turn]} is calling trump for {g.declarer === HUMAN_SEAT ? 'you' : names[g.declarer]}&hellip;
         </div>
       )}
       {!partnerCallsTrump && !gathering && thinking !== null && thinking !== HUMAN_SEAT && (
         <div class="trick-note thinking-note" role="status">
           <span class="thinking-words">
-            <strong>{SEAT_NAMES[thinking]}</strong>
+            <strong>{names[thinking]}</strong>
             <span>{g.phase === 'bidding' ? 'Choosing a bid' : g.phase === 'declaring' ? 'Choosing trump' : 'Thinking it over'}</span>
           </span>
           <span class="thinking-pips" aria-hidden="true">
@@ -510,12 +512,12 @@ function TrickArea({
             .join(' ')}
         >
           {onQuestion ? <button class="played-domino" type="button" disabled={gathering}
-            aria-label={`About ${p.seat === HUMAN_SEAT ? 'your' : SEAT_NAMES[p.seat] + '’s'} ${p.domino.split('').join('–')}`}
+            aria-label={`About ${p.seat === HUMAN_SEAT ? 'your' : names[p.seat] + '’s'} ${p.domino.split('').join('–')}`}
             onClick={event => onQuestion(i, event.currentTarget)}>
             <Domino id={p.domino} orientation="h" className="trick-dom" />
           </button> : <Domino id={p.domino} orientation="h" className="trick-dom" />}
           {p.seat === leader && (
-            <span class="led-tag">{p.seat === HUMAN_SEAT ? 'You' : SEAT_NAMES[p.seat]} led</span>
+            <span class="led-tag">{p.seat === HUMAN_SEAT ? 'You' : names[p.seat]} led</span>
           )}
         </div>
       ))}

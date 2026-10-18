@@ -27,7 +27,9 @@ export function readHands(values: SavedHand[]): { hands: StatsHand[]; skipped: n
   for (const value of values) {
     const game = decodeReplay(value.record.code);
     if (!game) { skipped++; continue; }
-    hands.push({ ...value, game, retry: /-r\d+$/.test(value.record.gameId) });
+    hands.push({ ...value, game: { ...game, handNumber: value.record.handNumber, marks: value.record.marksAfter,
+      phase: value.record.gameOver ? 'game-over' : game.phase,
+      winner: value.record.gameOver ? game.handResult?.team ?? null : null }, retry: /-r\d+$/.test(value.record.gameId) });
   }
   return { hands: hands.sort((a, b) => b.record.endedAt.localeCompare(a.record.endedAt) || a.id.localeCompare(b.id)), skipped };
 }

@@ -36,10 +36,11 @@ export function StatsPage({ demo = false }: { demo?: boolean }) {
     history.replaceState(null, '', url);
     if (!id) requestAnimationFrame(() => listHeading.current?.focus());
   };
+  if (data && hand) return <ReplayPane key={hand.id} hand={hand} demo={demo} onBack={() => open(null)}/>;
   return <main class="stats-page">
     <header class="stats-header"><a href="/">← Back to Plunge</a><a href="/?account=1">Your account</a></header>
     <div class="stats-title"><p class="stats-eyebrow">{demo ? 'Interactive demo · sample hands' : 'Every number has a hand behind it'}</p>
-      <h1>Stats at the table</h1><p>Follow a stat back to the deal. Watch the choices, or take a seat and play along.</p></div>
+      <h1>Stats at the table</h1><p>Follow a stat back to the deal. Play a deal again, or keep your hand and try a new deal.</p></div>
     {demo ? <aside class="stats-banner"><strong>These are sample games, not your stats.</strong> Demo attempts stay separate from your real results. <a href="/?stats=1">Open my stats</a></aside>
       : <p><a href="/?stats=1&demo=stats">Try the interactive stats demo →</a></p>}
     <nav class="stats-controls" aria-label="Whose hands">
@@ -51,7 +52,7 @@ export function StatsPage({ demo = false }: { demo?: boolean }) {
     {error && <p role="alert">{error}</p>}
     {data?.notice && <p role="status">{data.notice}</p>}
     {parsed.skipped > 0 && <p role="status">{parsed.skipped} saved records could not be replayed and are excluded from these numbers. Their saved copies are unchanged.</p>}
-    {data && hand ? <ReplayPane key={hand.id} hand={hand} account={data.account} demo={demo} onBack={() => open(null)}/> : data && <>
+    {data && <>
       {selected && <p role="status">This hand isn’t in this list. Try Family hands if someone shared it with you.</p>}
       <section class="stats-metrics" aria-label="Hand statistics">
         {(Object.keys(metricNames) as Metric[]).map(key => <button key={key} type="button" aria-pressed={metric === key} onClick={() => chooseMetric(key)}>
@@ -73,9 +74,9 @@ export function StatsPage({ demo = false }: { demo?: boolean }) {
             <p>Hand {h.record.handNumber} · <time dateTime={h.record.endedAt}>{new Date(h.record.endedAt).toLocaleDateString()}</time>
               {' · '}{h.game.handResult ? matchesMetric({ ...h, retry: false }, 'made') ? 'Made the bid' : 'Set the bid' : h.game.thrownIn ? 'No bid' : 'Unfinished'}</p>
           </div>
-          <div class="stats-controls"><button type="button" class="stats-primary" onClick={() => open(h.id)}>Replay / play along</button>
-            <button type="button" onClick={() => { setSimilar({hand:h,kind:'deal'}); chooseMetric('all'); }}>Same deal</button>
-            {h.game.contract && <button type="button" onClick={() => { setSimilar({hand:h,kind:'contract'}); chooseMetric('all'); }}>Similar contract</button>}
+          <div class="stats-controls"><button type="button" class="stats-primary" onClick={() => open(h.id)}>Play again</button>
+            <button type="button" onClick={() => { setSimilar({hand:h,kind:'deal'}); chooseMetric('all'); }}>Find same deal</button>
+            {h.game.contract && <button type="button" onClick={() => { setSimilar({hand:h,kind:'contract'}); chooseMetric('all'); }}>Find same contract</button>}
           </div>
         </article>)}</div>
         {filtered.length > limit && <button type="button" onClick={() => setLimit(n => n + 24)}>Show more hands</button>}

@@ -37,3 +37,36 @@
 .stats-moves ol {max-height:320px; overflow:auto;}
 .stats-attempts button {margin:4px;}
 @media(max-width:520px) {.stats-metrics {grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px;} .stats-paper {padding:16px;} .stats-metrics button {padding:13px;} .stats-table {padding:12px;}}
+
+/* Practice uses the game's felt, seats, dominoes and auction sheets. */
+.play-again-page {max-width:1000px; margin:auto; padding:12px; line-height:1.45;}
+.play-again-page button:not(.dom):not(.bid-go):not(.step-btn):not(.bid-mark):not(.decl-btn),.play-again-page select {font:inherit; min-height:44px; padding:9px 13px; border:1px solid #a98c62; border-radius:10px; background:#fff8e9; color:#302316; cursor:pointer;}
+.play-again-page button:disabled {opacity:.5; cursor:default;}
+.play-again-page :focus-visible {outline:3px solid #e6b962; outline-offset:3px;}
+.practice-header {display:flex; align-items:center; flex-wrap:wrap; gap:12px;}
+.practice-header h1 {font:30px var(--display); margin:0; flex:1;}
+.practice-header label {display:flex; flex-wrap:wrap; align-items:center; gap:8px; max-width:100%;}
+.practice-header select {max-width:100%; min-width:0;}
+.practice-options {padding:8px 0 12px;}
+.practice-options p {margin:8px 0;}
+.practice-buttons {display:flex; flex-wrap:wrap; gap:8px;}
+.practice-small {font-size:13px; opacity:.85;}
+.practice-table {position:relative; height:auto; min-height:590px; background:radial-gradient(ellipse at 50% 30%,#60462b,#21170f); border:1px solid #a98c6266; border-radius:16px; overflow:hidden;}
+.practice-status {display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:12px; background:#21170f;}
+.practice-table .felt {min-height:420px; flex:1;}
+.practice-table .sheet {position:absolute; bottom:176px; max-height:330px;}
+.practice-table .hand-area {padding-top:20px;}
+.practice-table .hand > .dom {width:min(58px,calc((100% - 18px) / 7)); flex-shrink:0;}
+.practice-original {display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px 0;}
+.practice-original span {font-size:13px;}
+.practice-watch,.practice-result {padding:18px; margin:12px 0; background:#fff2d8; color:#302316; border-radius:14px;}
+.practice-watch label {display:block; margin-top:12px;}
+.practice-watch input[type=range] {display:block; width:100%; min-height:44px;}
+.practice-watch .stats-tiles .dom {width:32px; height:64px; flex-basis:32px;}
+.practice-result h2 {font:26px var(--display); margin:0 0 10px;}
+.practice-history {margin:12px 0;}
+.practice-history summary {cursor:pointer; min-height:44px; padding:10px 0;}
+.practice-history button {margin:5px;}
+.practice-error {padding:12px; background:#742c20; color:#fff7e5; border-radius:10px;}
+@media(max-width:520px) {.play-again-page {padding:8px;} .practice-table {min-height:600px;} .practice-header label {font-size:13px;} .practice-table .sheet {padding:14px;} .practice-header select {width:100%;} .practice-header label {width:100%;}}
+.practice-options summary {cursor:pointer; min-height:44px; padding:10px 0;}
