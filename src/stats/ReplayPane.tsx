@@ -13,6 +13,7 @@ import { handModelLabel, replaySeatLabel, type StatsHand } from './model';
 import { acceptPracticeMove, handFinished, playPractice, recordedAction, startPractice, type PracticeKind, type PracticeRun } from './practice';
 import { practiceComputer } from './practice-computer';
 import { practiceStore } from './practice-storage';
+import { openScreenIdea } from '../ideas/QuickIdea';
 
 export function actionLabel(action: Action): string {
   if (action.type === 'play') return `Play ${action.domino[0]}–${action.domino[1]}`;
@@ -26,7 +27,7 @@ export function ReplayPane({ hand, demo, onBack }: { hand: StatsHand; demo: bool
     <header class="practice-header"><button type="button" onClick={onBack}>← Stats</button><h1>Play again</h1>
       <label>Your seat <select value={seat} onChange={e => setSeat(Number(e.currentTarget.value) as Seat)}>
         {([0,1,2,3] as Seat[]).map(s => <option key={s} value={s}>Seat {s + 1} · {replaySeatLabel(hand,s)}</option>)}
-      </select></label></header>
+      </select></label><button type="button" data-idea-tools onClick={openScreenIdea}>Share an idea</button></header>
     <PracticeSeat key={`${hand.id}:${seat}`} hand={hand} seat={seat} demo={demo}/>
   </main>;
 }
@@ -35,12 +36,24 @@ function PracticeSeat({ hand, seat, demo }: { hand: StatsHand; seat: Seat; demo:
   const [saved, setSaved] = useState<PracticeRun[]>([]), [storageError, setStorageError] = useState('');
   const [watch, setWatch] = useState(false), [cursor, setCursor] = useState(0), [reveal, setReveal] = useState(false);
   const [held, setHeld] = useState(false), [thinking, setThinking] = useState<Seat | null>(null);
+  const [screenIdea, setScreenIdea] = useState(false), ideaActive = useRef(false);
   const [error, setError] = useState(''), [retry, setRetry] = useState(0), [copied, setCopied] = useState(false);
   const store = useMemo(() => {
     try { return practiceStore(hand, seat, demo, localStorage); } catch { return null; }
   }, [hand.id, seat, demo]);
   const sourceSteps = useMemo(() => handSteps(hand.game), [hand.id]);
   const generation = useRef(0);
+  useEffect(() => {
+    const changed = (event: Event) => {
+      const active = (event as CustomEvent<boolean>).detail;
+      ideaActive.current = active;
+      // Invalidate responses synchronously, before the screenshot or effect cleanup.
+      if (active) generation.current++;
+      setScreenIdea(active);
+    };
+    window.addEventListener('plunge-idea-active', changed);
+    return () => window.removeEventListener('plunge-idea-active', changed);
+  }, []);
   useEffect(() => {
     try {
       if (!store) throw new Error('Device storage is unavailable.');
@@ -73,7 +86,7 @@ function PracticeSeat({ hand, seat, demo }: { hand: StatsHand; seat: Seat; demo:
   // Each recorded or computer move is a real engine action. Cleanup cancels work on leave/restart/seek.
   useEffect(() => {
     setThinking(null); setError('');
-    if (!run || watch || (handFinished(run.game) && !held)) return;
+    if (!run || watch || screenIdea || (handFinished(run.game) && !held)) return;
     const token = ++generation.current, controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     if (held) timer = setTimeout(() => { if (generation.current === token) setHeld(false); }, 1400);
@@ -92,9 +105,9 @@ function PracticeSeat({ hand, seat, demo }: { hand: StatsHand; seat: Seat; demo:
       }, 350);
     }
     return () => { generation.current++; clearTimeout(timer); controller.abort(); };
-  }, [run, watch, held, retry]);
+  }, [run, watch, held, retry, screenIdea]);
   const choose = (action: Action) => {
-    if (!run || watch || held || run.game.turn !== seat || handFinished(run.game)) return;
+    if (!run || watch || held || ideaActive.current || run.game.turn !== seat || handFinished(run.game)) return;
     const next = playPractice(hand.game, run, action);
     if (next.game.tricks.length > run.game.tricks.length) setHeld(true);
     apply(action, run);
@@ -118,6 +131,7 @@ function PracticeSeat({ hand, seat, demo }: { hand: StatsHand; seat: Seat; demo:
   return <>
     <details class="practice-options" open={!run || watch || finished}><summary>Deal and practice options</summary>
       <p>{demo ? 'Sample hand. ' : ''}Same deal follows the original until you choose differently. Then the computer players respond to your new path.</p>
+      <p class="practice-small">Press and hold anywhere to mark the screen and suggest a change. Play pauses while you write.</p>
       <div class="practice-buttons"><button type="button" disabled={!loaded} onClick={() => start('same')}>Play same deal</button>
         <button type="button" disabled={!loaded} onClick={() => start('similar')}>Same hand, new deal</button>
         <button type="button" aria-pressed={watch} onClick={() => { generation.current++; setWatch(w => !w); setReveal(false); }}>{watch && run ? 'Back to my hand' : 'Watch original'}</button>
