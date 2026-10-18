@@ -26,6 +26,7 @@ export function NativeStats({ g, sel, position, receipt, loading, nelloPreview }
   }, [estimate]);
   const { request, remaining, legal, played } = position;
   const original = receipt ? decisionStats(receipt.response, request, legal) : null;
+  const originalPlayer = receipt?.response.zeb_result ? 'Zeb' : 'Walt';
   const fresh = estimate ? decisionStats(estimate.response, request, legal) : null;
   const forced = legal.length === 1;
   const led = ledChip(g, g.tricks[sel.trick]!.plays.slice(0, sel.play));
@@ -51,7 +52,7 @@ export function NativeStats({ g, sel, position, receipt, loading, nelloPreview }
     </span>)}</div>
     {forced ? <p class="native-forced"><strong>The only play available.</strong>
       {led && ` Must follow ${led}.`} There was no choice to compare.</p> : <>
-      {(receipt || !estimate) && <h4>{receipt ? 'What Walt saw when it played' : 'Ask Walt about this play'}</h4>}
+      {(receipt || !estimate) && <h4>{receipt ? `What ${originalPlayer} saw when it played` : 'Ask Walt about this play'}</h4>}
       {loading ? <p role="status">Loading the original scores…</p>
         : original ? <MoveScores stats={original} selected={played} selectionLabel="Played" />
         : !estimate && <p class="setting-hint">{receipt ? 'No completed option scores were saved for this decision.'
@@ -59,7 +60,7 @@ export function NativeStats({ g, sel, position, receipt, loading, nelloPreview }
       {receipt?.response.interruption && <p class="setting-hint">{receipt.response.interruption}</p>}
       {receipt?.response.review_result?.status === 'changed' && <p class="setting-hint">These were Walt’s first estimates. A separate partner check changed its choice.</p>}
       {receipt && <CounterexampleScores response={receipt.response} request={request} legal={legal} />}
-      {original && <p class="setting-hint">Walt’s estimate from this player’s view. Small differences can come down to the sample.</p>}
+      {original && <p class="setting-hint">{originalPlayer}’s estimate from this player’s view. Small differences can come down to the sample.</p>}
       {estimate && <div class="native-fresh" ref={freshPanel}>
         <h4>A fresh look from Walt</h4>
         {fresh ? <MoveScores stats={fresh} selected={played} selectionLabel="Played" /> : <p>No complete comparison finished within the time limit. You can retry.</p>}

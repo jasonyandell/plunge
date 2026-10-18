@@ -53,12 +53,16 @@ async function thread(db: IdeasDatabase, idea: string, through = Number.MAX_SAFE
   const card = await db.prepare(`${cards} WHERE i.id=?`).bind(idea).first<CardRow>();
   if (!card) return null;
   const { results: messages } = await db.prepare(`SELECT x.id,x.role,COALESCE(m.name,'Plunge builder') name,x.body,x.created,
+    r.revision result_revision,(SELECT id FROM idea_messages WHERE idea_id=x.idea_id AND role='family' AND seq<=r.through_seq ORDER BY seq DESC LIMIT 1) request_id,
     (SELECT json_group_array(json_object('id',json_extract(value,'$.id'),'width',json_extract(value,'$.width'),'height',json_extract(value,'$.height')))
       FROM json_each(x.screenshots)) screenshots
-    FROM idea_messages x LEFT JOIN idea_members m ON m.id=x.member_id WHERE x.idea_id=? AND x.seq<=? ORDER BY x.seq`).bind(idea, through).all<{id:string;role:string;name:string;body:string;created:string;screenshots:string}>();
-  return { card:activityCard(card), messages:messages.map(({screenshots,...message})=>({...message,screenshots:JSON.parse(screenshots)})), permissions:await authorization(db,idea,card.revision,through) };
+    FROM idea_messages x LEFT JOIN idea_members m ON m.id=x.member_id
+    LEFT JOIN idea_runs r ON r.id=x.id AND r.idea_id=x.idea_id AND r.state='done' AND x.role='builder'
+    WHERE x.idea_id=? AND x.seq<=? ORDER BY x.seq`).bind(idea, through).all<{id:string;role:string;name:string;body:string;created:string;screenshots:string;result_revision:number|null;request_id:string|null}>();
+  return { card:activityCard(card), messages:messages.map(({screenshots,result_revision,request_id,...message})=>({...message,screenshots:JSON.parse(screenshots),
+    ...(result_revision!==null && request_id ? {result:{revision:result_revision,requestId:request_id}} : {})})), permissions:await authorization(db,idea,card.revision,through) };
 }
-export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Response> {
+export async function ideasRequest(request: Request, env: IdeasEnv, previewAccount?: Awaited<ReturnType<typeof accountSession>>): Promise<Response> {
   if (!env.QUESTIONS || !env.IDEAS_ADMIN_TOKEN) return json({ error: 'Ideas are not available here yet.' }, 503);
   const db = env.QUESTIONS, url = new URL(request.url), path = url.pathname.slice('/api/ideas'.length);
   if (request.method !== 'GET' && request.headers.has('Origin') && request.headers.get('Origin') !== url.origin) return json({ error: 'Please open your Plunge invite.' }, 403);
@@ -69,7 +73,10 @@ export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Res
       if (!IDEA_TOKEN.test(token) || await hash(token) !== await hash(env.IDEAS_ADMIN_TOKEN)) return json({ error: 'Builder access required.' }, 403);
       return await adminRequest(request, path, db);
     }
-    const session = await accountSession(request,env);
+    const session = previewAccount ?? await accountSession(request,env);
+    // A delegated demo may post as this family member, but cannot implicitly
+    // grant repository access on behalf of an owner. Approvals stay on the main app.
+    const authorizingAccount = previewAccount ? null : session?.id ?? null;
     if(session && request.method!=='GET' && request.headers.get('Origin')!==url.origin) return json({error:'Please use your Plunge app.'},403);
     const member = session ? (session.family && session.member_id ? {id:session.member_id,name:session.name} : null)
       : IDEA_TOKEN.test(token) ? await db.prepare('SELECT id,name FROM idea_members WHERE token_hash=? AND revoked=0').bind(await hash(token)).first<Member>() : null;
@@ -126,7 +133,7 @@ export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Res
       await db.batch([
         db.prepare('INSERT OR IGNORE INTO ideas(id,member_id,title,context,created,updated) VALUES(?,?,?,?,?,?)').bind(idea, member.id, text.length>100?text.slice(0,97)+'…':text, context, now, now),
         db.prepare(`INSERT OR IGNORE INTO idea_messages(id,idea_id,member_id,role,body,created,account_id,screenshots)
-          SELECT ?,id,?,'family',?,?,?,? FROM ideas WHERE id=? AND member_id=?`).bind(idea, member.id, text, now, session?.id??null, screenshots, idea, member.id),
+          SELECT ?,id,?,'family',?,?,?,? FROM ideas WHERE id=? AND member_id=?`).bind(idea, member.id, text, now, authorizingAccount, screenshots, idea, member.id),
       ]);
       const saved = await db.prepare('SELECT member_id FROM ideas WHERE id=?').bind(idea).first<{member_id:string}>();
       return saved?.member_id === member.id ? json(await thread(db, idea)) : json({error:'Identifier already used.'},409);
@@ -137,7 +144,7 @@ export async function ideasRequest(request: Request, env: IdeasEnv): Promise<Res
     if (!await db.prepare('SELECT id FROM ideas WHERE id=?').bind(idea).first()) return json({error:'Idea not found.'},404);
     const count = await db.prepare('SELECT COUNT(*) n FROM idea_messages WHERE member_id=? AND created>?').bind(member.id, new Date(Date.now() - 3600000).toISOString()).first<{n:number}>();
     if ((count?.n ?? 0) >= 40) return json({error:'Please give the builder a little time before sending more.'},429);
-    await db.prepare("INSERT OR IGNORE INTO idea_messages(id,idea_id,member_id,role,body,created,account_id,screenshots) VALUES(?,?,?,'family',?,?,?,?)").bind(messageId,idea,member.id,text,now,session?.id??null,screenshots).run();
+    await db.prepare("INSERT OR IGNORE INTO idea_messages(id,idea_id,member_id,role,body,created,account_id,screenshots) VALUES(?,?,?,'family',?,?,?,?)").bind(messageId,idea,member.id,text,now,authorizingAccount,screenshots).run();
     return json(await thread(db,idea));
   } catch (error) {
     if (error instanceof SyntaxError || (error instanceof Error && /message|identifier/i.test(error.message))) return json({ error: error.message }, 400);

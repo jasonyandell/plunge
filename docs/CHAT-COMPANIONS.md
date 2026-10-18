@@ -1,5 +1,18 @@
 # Chat companions: connection milestone
 
+Production releases use the GitHub repository variable `PLUNGE_DEPLOY_PROFILE`.
+It defaults to `core`: the game, family accounts, rooms and idea board deploy with
+the existing deployment credential. The release omits the OAuth and optional
+ideas-cache KV bindings; no namespace is deleted. The same authenticated Worker
+entrypoint serves ordinary routes and returns 503 for companion routes until
+storage is configured. `/version.json` reports `companions: false`.
+
+After the companion task installs and verifies the KV credential, set the variable
+to `companions` and deploy. That profile requires KV provisioning to succeed;
+permission errors never silently downgrade a companion release. Keep the variable
+set for subsequent releases. The scoped-token setup in PR #63 must preserve this
+profile gate when adding its separate OAuth/cache provisioning step.
+
 The Texas 42 MCP endpoint is `https://plunge.texas42.workers.dev/api/mcp`.
 This first milestone authenticates a named companion and exposes **`get_player`**.
 It does not yet join rooms, read a hand, run Walt, coach, send table talk, or play.
