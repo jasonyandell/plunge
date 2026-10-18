@@ -277,6 +277,7 @@ export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBacke
           <button class="big-btn secondary" disabled={busy||!supported} onClick={()=>void passkey('add')}>Add another passkey</button>
         </details>
         <div class="account-stats"><h3>Your hands</h3>
+          <p><a href="/?stats=1">Explore stats & play hands again →</a></p>
           {stats?.models && stats.models.length > 0 && <div class="model-stats" aria-label="Hands by computer model"><p>Computer models in your saved attempts</p><ul>{stats.models.map(m => <li key={m.modelKey} title={m.modelKey}>{m.label}: {plural(m.hands,'hand')} · {m.finished} finished</li>)}</ul><p>Attempts can include takebacks, mixed models, and different deals; a hand may appear under more than one model. These counts do not rank playing strength.</p></div>}
           {stats?statsLines(stats,backend.localOnly).map(line=><p key={line}>{line}</p>):<p role="status">Counting the hands on this device…</p>}
           <button class="big-btn secondary" disabled={busy||connecting} onClick={()=>void connectStats(state.account?.id)}>{connecting?'Connecting…':'Connect now'}</button>

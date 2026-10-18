@@ -6,11 +6,11 @@ passkey enrollment, owner setup, recovery, and grants. **Ideas for Plunge** open
 large, simple cards inside the existing app. They can create another idea at any
 time, reply on either person's card, and try an individual change. No GitHub
 account is needed. **Try your change** opens the preview inside the existing app,
-under a compact **Back to your idea** bar. It does not open another tab or replace
-the installed app. Back/Forward, reload, and direct preview links keep the card
+under a compact **Back to your idea** bar. Normal play stays inside the app;
+a dashboard preview can open a separate tab for the real sign-in handoff. Back/Forward, reload, and direct preview links keep the card
 address; unsent replies stay saved. Only previews currently marked ready can open.
-The embedded preview is isolated on its own origin, with top-level navigation and
-popups blocked. Preview game saves remain separate from the regular game.
+The embedded preview is isolated on its own origin, with top-level navigation blocked. Explicit links can open a separate tab for
+sign-in, while the main app keeps its account cookie. Preview game saves remain separate from the regular game.
 Temporary previews do not offer installation or register an offline app.
 
 Conversations live in new tables in the existing production D1 database, separate
