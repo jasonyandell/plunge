@@ -271,7 +271,7 @@ export function App() {
       case 'about':
         return <About dispatch={dispatch} />;
       case 'more':
-        return <More app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} />;
+        return <More app={app} dispatch={dispatch} onQuestions={() => setQuestions({ id: null })} onHistory={downloadHistory} onPriorHands={openSoloHistory} />;
       case 'table':
         return app.game || app.scenarioGame ? (
           <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} onHistory={openSoloHistory} />

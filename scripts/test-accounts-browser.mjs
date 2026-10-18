@@ -65,7 +65,7 @@ async function enroll(person,name) {
 try {
  const owner=await newPerson();
  await owner.page.goto(origin);await owner.page.getByRole('button',{name:'Deal me in',exact:true}).waitFor();
- await owner.page.getByRole('button',{name:'More',exact:true}).click();await owner.page.getByRole('link',{name:'Your account · optional'}).click();
+ await owner.page.getByRole('button',{name:'Settings & more',exact:true}).click();await owner.page.getByRole('link',{name:'Your account · optional'}).click();
  await owner.page.getByRole('link',{name:'Keep playing without signing in'}).click();await owner.page.getByRole('button',{name:'Deal me in',exact:true}).waitFor();
  const ownerId=await enroll(owner,'Jason');
  const promote=await mf.dispatchFetch(`${origin}/api/account/owner`,{method:'POST',headers:{Authorization:`Bearer ${admin}`},body:JSON.stringify({id:ownerId})});assert.equal(promote.status,200);
@@ -214,8 +214,9 @@ try {
  await benny.page.getByText(/Your seat is saved, along with 1 hand from here\./).waitFor();
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM hand_players WHERE account_id=?').bind(bennyAccount.id).first()).n,1);
  await benny.page.getByRole('button',{name:'Sit down at the family table'}).click();await benny.page.waitForURL(/\?rooms=1#room=[a-f0-9]{32}$/);
- await benny.page.goto(origin);await benny.page.getByRole('link',{name:'Signed in as Benny. Your account'}).waitFor();await benny.page.locator('.home-table').getByText('Rejoin').waitFor();
+ await benny.page.goto(origin);await benny.page.getByRole('link',{name:'Signed in as Benny. Your account'}).waitFor();await benny.page.getByRole('button',{name:/^Family table/}).waitFor();
  await benny.page.screenshot({path:'/tmp/plunge-home-signed-in.png'});
+ await benny.page.getByRole('button',{name:/^Family table/}).click();await benny.page.waitForURL(/\?rooms=1#room=[a-f0-9]{32}$/);
  // Used once. Dad sees Benny joined; Jason sees who invited him.
  await benny.page.goto(invite);await benny.page.getByRole('alert').filter({hasText:'already used'}).waitFor();
  await dad.page.reload();await dad.page.locator('.account-invites li').filter({hasText:'Benny'}).getByText('Joined').waitFor();
