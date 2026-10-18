@@ -1,38 +1,33 @@
-import { useState } from 'preact/hooks';
 import { IdeaActivity } from './IdeaActivity';
 import { LIVE_PLUNGE, type IdeaCard } from './model';
-import { hasIdeaDemo, ideaPresentation } from './presentation';
+import { hasIdeaDemo, ideaPresentation, matchesIdeaFilter, type IdeaFilter } from './presentation';
 
-type Filter = 'all' | 'demos' | 'progress' | 'shipped';
-export function IdeasBoard({cards, loaded = true, busy = false, demo = false, now, connected, onOpen, onTry}: {
-  cards: IdeaCard[]; loaded?: boolean; busy?: boolean; demo?: boolean; now: number; connected: boolean;
+export interface IdeasBoardView {filter:IdeaFilter;query:string}
+export function IdeasBoard({view, onView, cards, loaded = true, busy = false, demo = false, now, connected, onOpen, onTry}: {
+  view:IdeasBoardView; onView:(view:IdeasBoardView)=>void; cards: IdeaCard[]; loaded?: boolean; busy?: boolean; demo?: boolean; now: number; connected: boolean;
   onOpen: (id: string) => void; onTry: (id: string) => void;
 }) {
-  const [filter, setFilter] = useState<Filter>('all');
-  const [query, setQuery] = useState('');
-  const matches = (card: IdeaCard, category: Filter) => category === 'all'
-    || (category === 'demos' && hasIdeaDemo(card))
-    || (category === 'progress' && ['queued', 'building', 'checking', 'question', 'failed'].includes(card.status))
-    || (category === 'shipped' && card.status === 'shipped');
-  const filters: {id: Filter; label: string}[] = [
-    {id: 'all', label: 'All ideas'}, {id: 'demos', label: 'Available demos'},
-    {id: 'progress', label: 'In progress'}, {id: 'shipped', label: 'In the game'},
+  const {filter,query}=view;
+  const filters: {id: IdeaFilter; label: string}[] = [
+    {id: 'current', label: 'Current ideas'}, {id: 'demos', label: 'Available demos'},
+    {id: 'attention', label: 'Needs attention'}, {id: 'shipped', label: 'In the game'},
+    {id: 'closed', label: 'Set aside'},
   ];
   const visible = cards.filter(card => {
     const {title, tags} = ideaPresentation(card);
-    return matches(card, filter) && `${title} ${card.title} ${card.name} ${tags.join(' ')} ${card.number}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
+    return matchesIdeaFilter(card, filter) && `${title} ${card.title} ${card.name} ${tags.join(' ')} ${card.number}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
   });
   return <section class="ideas-dashboard" aria-labelledby="ideas-board-title">
     <div class="ideas-board-heading"><h2 id="ideas-board-title">Around the table</h2><p>Explore an idea, try a demo, or join the conversation.</p></div>
     <div class="ideas-filters" role="group" aria-label="Browse ideas">
-      {filters.map(item => <button key={item.id} type="button" aria-pressed={filter === item.id} onClick={() => setFilter(item.id)}>
-        <span>{item.label}</span><strong>{loaded ? cards.filter(card => matches(card, item.id)).length : '…'}</strong>
+      {filters.map(item => <button key={item.id} type="button" aria-pressed={filter === item.id} onClick={() => onView({...view,filter:item.id})}>
+        <span>{item.label}</span><strong>{loaded ? cards.filter(card => matchesIdeaFilter(card, item.id)).length : '…'}</strong>
       </button>)}
     </div>
-    <label class="ideas-search">Find an idea<input type="search" value={query} placeholder="Search ideas, people, or tags" onInput={event => setQuery(event.currentTarget.value)} /></label>
+    <label class="ideas-search">Find an idea<input type="search" value={query} placeholder="Search ideas, people, or tags" onInput={event => onView({...view,query:event.currentTarget.value})} /></label>
     {!loaded ? <p role="status">Opening the board…</p> : <>
       <p class="ideas-result-count" role="status">{visible.length} of {cards.length} loaded ideas</p>
-      {!visible.length ? <p class="ideas-empty">{!cards.length ? 'Our next idea starts with you. Share one below.' : filter === 'demos' && !query.trim() ? 'No demos are available here yet. Checked previews will appear here when they’re ready to try.' : 'No matching ideas. Try another search or browse all ideas.'}</p> :
+      {!visible.length ? <p class="ideas-empty">{!cards.length ? 'Our next idea starts with you. Share one below.' : filter === 'demos' && !query.trim() ? 'No demos are available here yet. Checked previews will appear here when they’re ready to try.' : 'No matching ideas. Try another search or browse current ideas.'}</p> :
         <div class="ideas-grid">{visible.map(card => {
           const {title, tags} = ideaPresentation(card);
           return <article key={card.id} class="idea-paper idea-card" aria-labelledby={`idea-title-${card.id}`}>

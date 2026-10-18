@@ -8,6 +8,8 @@ import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
 import { syncStats, type StatsStatus } from '../history/stats-sync';
 import { familyTable, ROOMS_ENABLED, roomUrl, saveSeat } from '../room/client';
 import { rememberMe, tableName } from './me';
+import { connectionReturn } from './connection';
+import { ideaAccountReturn } from '../ideas/account-return';
 import '../ui/app.css';
 import '../ui/home.css';
 import '../ideas/ideas.css';
@@ -125,6 +127,8 @@ export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBacke
   const params = new URLSearchParams(location.search);
   const previewPr = params.get('ideas-preview') ?? '', previewState = params.get('preview-state') ?? '';
   const returningToDemo = backend === liveBackend && !QUESTIONS_LOCAL_ONLY && /^[1-9][0-9]{0,8}$/.test(previewPr) && /^[a-f0-9]{32}$/.test(previewState);
+  const returnTo=connectionReturn(new URLSearchParams(location.search).get('returnTo'),location.origin);
+  const returnToIdea=ideaAccountReturn(location.search);
   const [state,setState]=useState<State|null>(null),[members,setMembers]=useState<Person[]>([]),[name,setName]=useState(tableName);
   const [error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
   const [recover,setRecover]=useState(()=>secretFromLink('recover')),[recoveryLink,setRecoveryLink]=useState<{name:string;url:string;kind:'Recovery'|'Invite'}|null>(null);
@@ -186,6 +190,13 @@ export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBacke
         location.assign(`${result.origin}/?ideas=1#preview-session=${encodeURIComponent(result.token)}&preview-state=${previewState}`);
       })}>Open dashboard demo →</button> : state?.account && <p>Ask to join the family below. Your existing family access is needed for this dashboard.</p>}
     </section>}
+    {returnToIdea && <section class="idea-paper"><h2>{returnToIdea.includes('#') ? 'Back to your idea' : 'Back to family ideas'}</h2>
+      {state?.account?.family ? <a class="big-btn" href={returnToIdea}>{returnToIdea.includes('#') ? 'Continue to your idea →' : 'Open family ideas →'}</a>
+        : <p>Sign in below with your family account. Your idea link stays here.</p>}
+    </section>}
+    {returnTo && <section class="idea-paper"><h2>Connect your chat companion</h2>
+      {state?.account ? <><p>Continue as {state.account.name} to review the connection.</p><a class="big-btn" href={returnTo}>Continue to connection</a></>
+        : <p>Sign in with your passkey below, then return here to continue.</p>}</section>}
     {!state ? <p role="status">{error?'Account details could not load.':'Opening your account…'}</p> : join ? <section class="idea-paper">
       {!seat ? <p role="status">Opening your invite…</p> : state.account && !seat.you && !state.account.family && !state.account.owner ? <><h2>Hi, {state.account.name}.</h2>
         <p class="account-lede">{seat.invitedBy??'Jason'} saved you a seat at the family table.</p>
@@ -253,6 +264,7 @@ export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBacke
       <a class="account-play" href="/">Keep playing without signing in →</a>
     </section> : <>
       <section class="idea-paper"><h2>Hi, {state.account.name}.</h2><p>You’re signed in with your passkey.</p>
+        <a class="account-play" href={`${LIVE_PLUNGE}/oauth/connections`}>Your chat companions →</a>
         <form onSubmit={event=>{event.preventDefault();void act('/profile',{name},'Your name is saved.');}}><label>What should we call you?<input value={name} maxLength={40} onInput={e=>setName(e.currentTarget.value)}/></label><button class="big-btn secondary" disabled={busy||!name.trim()}>Save name</button></form>
         {state.account.family ? <a class="big-btn account-ideas" href="/?ideas=1">Open family ideas →</a> : <div class="account-access"><h3>Join the family</h3>
           <p>{state.account.requested?'Your request is waiting for Jason. Keep playing; it opens up as soon as he lets you in.':'Family see each other’s tables right on the home screen, sit at the family table, and share ideas for the app. Jason lets people in.'}</p>

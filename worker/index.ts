@@ -8,7 +8,7 @@ import { ideasPreviewRequest } from './ideas-preview';
 export { PlungeRoom } from './rooms';
 
 // PR previews deploy without QUESTIONS; their app keeps questions on the device.
-interface Env extends AccountEnv { QUESTIONS?: IdeasDatabase; IDEAS_ADMIN_TOKEN?: string; ROOMS?: RoomsNamespace; ASSETS: { fetch(request:Request):Promise<Response> } }
+export interface Env extends AccountEnv { QUESTIONS?: IdeasDatabase; IDEAS_ADMIN_TOKEN?: string; ROOMS?: RoomsNamespace; ASSETS: { fetch(request:Request):Promise<Response> } }
 interface Row { id:string; owner_hash:string; revision:number; payload:string; answer:string|null; answered_at:string|null }
 const json = (value: unknown, status=200) => Response.json(value,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const remote = (r:Row):RemoteQuestion => ({question:JSON.parse(r.payload) as Question,revision:r.revision,

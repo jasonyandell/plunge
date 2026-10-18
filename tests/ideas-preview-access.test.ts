@@ -42,3 +42,11 @@ it('rejects expired handoffs and has no preview authentication on arbitrary site
   expect(previewSignInLink()).toBe('https://plunge.texas42.workers.dev/?account=1');
   expect(previewSession()).toBe('');
 });
+
+it('returns to the same idea and demo without carrying unrelated fragments',()=>{
+  const id='a'.repeat(32); location.hash=`#idea=${id}&try=1&invite=private`;
+  const state=new URL(previewSignInLink()).searchParams.get('preview-state')!;
+  const token=returnFromSignIn(state);
+  expect(previewSession()).toBe(token);
+  expect(location.hash).toBe(`#idea=${id}&try=1`);
+});

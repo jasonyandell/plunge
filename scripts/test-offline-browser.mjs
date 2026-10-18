@@ -12,6 +12,8 @@ import { readFile, writeFile, mkdtemp, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, extname, normalize } from 'node:path';
 
+const player = process.env.PLUNGE_TEST_PLAYER ?? 'Walt';
+if(!['Walt','Zeb'].includes(player)) throw new Error('PLUNGE_TEST_PLAYER must be Walt or Zeb.');
 const HOST = 'plunge.localhost'; // secure like https, yet not the page's dev host
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json',
   '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml', '.onnx': 'application/octet-stream' };
@@ -37,11 +39,15 @@ const browser = await chromium.launch({ headless: true, ...(process.env.PLUNGE_C
 const checks = [];
 const check = m => { checks.push(m); console.log('OK', m); };
 const faults = [];
+let page, stage='install';
 const deadline = setTimeout(() => { console.error('Offline browser check exceeded 180 seconds'); process.exit(1); }, 180000);
 const cached = page => page.evaluate(async () => { const all = []; for (const k of await caches.keys()) all.push([k, (await (await caches.open(k)).keys()).map(r => new URL(r.url).pathname)]); return all; });
 try {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-  const page = await ctx.newPage();
+  page = await ctx.newPage();
+  // A reproducible hand, with real clocks for workers, pacing, and timeouts.
+  await page.clock.setFixedTime(new Date('2026-10-17T12:00:00Z'));
+  page.setDefaultTimeout(5000);
   page.on('pageerror', e => faults.push(String(e)));
 
   // First launch: nothing played yet, Walt never asked for a move.
@@ -55,30 +61,62 @@ try {
   check(`Install saved the whole game before any play (${first[0][1].length} files, Walt included).`);
 
   // No connection at all: the server is gone, not just throttled.
-  await new Promise(r => server.close(r)); server.closeAllConnections();
+  stage='disconnect';
+  const closed = new Promise(r => server.close(r)); server.closeAllConnections(); await closed;
   await ctx.setOffline(true);
   await page.reload();
+  if(player==='Zeb') {
+    await page.getByRole('button',{name:'More',exact:true}).click();
+    await page.getByRole('radio',{name:'Zeb',exact:true}).click();
+    await page.getByRole('button',{name:'← Back',exact:true}).click();
+    await page.reload();
+    await page.getByRole('button',{name:'More',exact:true}).click();
+    if(await page.getByRole('radio',{name:'Zeb',exact:true}).getAttribute('aria-checked')!=='true')throw new Error('Zeb selection was not saved.');
+    await page.screenshot({path:join(out,'zeb-settings.png')});
+    await page.getByRole('button',{name:'← Back',exact:true}).click();
+  }
   await page.getByRole('button', { name: 'Deal me in', exact: true }).click();
+  stage='play offline';
   const end = Date.now() + 120000;
-  let moves = 0;
+  let moves = 0, hintChecked = false;
   while (Date.now() < end) {
     if (await page.getByRole('dialog', { name: 'Hand over' }).count()) break;
     const bid = page.getByRole('dialog', { name: 'Your bid' });
     if (await bid.count()) {
+      if(player==='Zeb' && !hintChecked) {
+        await bid.getByRole('button',{name:'Help me bid',exact:true}).click();
+        await page.getByRole('heading',{name:/Zeb suggests/}).waitFor({timeout:30000});
+        await page.screenshot({path:join(out,'zeb-bid-hint.png')});
+        await page.getByRole('button',{name:'Back to my bid',exact:true}).click();
+        hintChecked=true;
+      }
       const pass = bid.getByRole('button', { name: 'Pass', exact: true });
       await ((await pass.count()) ? pass : bid.getByRole('button', { name: /^Bid \d+$/ })).first().click().catch(() => {}); moves++; continue;
     }
     const declare = page.getByRole('dialog', { name: 'Declare trump' });
-    if (await declare.count()) { await declare.getByRole('button').first().click().catch(() => {}); moves++; continue; }
+    if (await declare.count()) { await declare.getByRole('button', { name: 'Blanks', exact: true }).click().catch(() => {}); moves++; continue; }
     const playable = page.getByLabel('Your hand').getByRole('button');
     if (await playable.count()) { await playable.first().click().catch(() => {}); moves++; continue; }
     await page.waitForTimeout(150);
   }
   if (!await page.getByRole('dialog', { name: 'Hand over' }).count()) throw new Error(`The hand never finished offline (${moves} moves).`);
   await page.screenshot({ path: join(out, 'offline-hand-over.png') });
-  check(`Played a whole hand against Walt with no connection (${moves} of our moves).`);
+  check(`Played a whole hand against ${player} with no connection (${moves} of our moves).`);
+
+  if(player==='Zeb') {
+    const records=await page.evaluate(()=>new Promise((resolve,reject)=>{
+      const opened=indexedDB.open('plunge-walt',1);
+      opened.onerror=()=>reject(opened.error);
+      opened.onsuccess=()=>{const db=opened.result,r=db.transaction('receipts').objectStore('receipts').getAll();
+        r.onsuccess=()=>{resolve(r.result);db.close();};r.onerror=()=>reject(r.error);};
+    }));
+    if(!records.length || records.some(r=>r.identity.player.name!=='zeb-0.4.1' || !r.response.zeb_result))throw new Error('Computer moves did not retain Zeb receipts.');
+    if(!hintChecked)throw new Error('The test did not exercise the Zeb bidding hint.');
+    check('Zeb selection survived reload and its live bidding hint worked offline.');
+  }
 
   // A new version ships: only changed files download; Walt's copy carries over.
+  stage='update';
   const sw = join(root, 'sw.js');
   await writeFile(sw, (await readFile(sw, 'utf8')).replace(/const BUILD = "[^"]*";/, 'const BUILD = "next";'));
   served.length = 0;
@@ -95,7 +133,12 @@ try {
   if (faults.length) throw new Error('Browser faults: ' + JSON.stringify(faults));
   console.log(`\n${checks.length} checks passed. Screenshot: ${out}`);
 } catch (e) {
-  console.error(e); console.error('Faults:', faults); process.exitCode = 1;
+  console.error(`Offline check failed during ${stage}:`, e); console.error('Faults:', faults);
+  if(page) {
+    console.error('Visible state:', await page.locator('body').innerText({timeout:2000}).catch(()=>'(unavailable)'));
+    await page.screenshot({path:join(out,'failure.png'),timeout:2000}).catch(()=>{});
+  }
+  process.exitCode = 1;
 } finally {
   clearTimeout(deadline); await browser.close(); server.close();
 }

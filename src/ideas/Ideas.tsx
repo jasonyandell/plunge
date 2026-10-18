@@ -2,8 +2,9 @@ import { Composer } from './Composer';
 import { Screenshot } from './IdeaScreenshots';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { IdeaActivity } from './IdeaActivity';
-import { IdeasBoard } from './IdeasBoard';
+import { IdeasBoard, type IdeasBoardView } from './IdeasBoard';
 import { hasIdeaDemo, ideaPresentation } from './presentation';
+import { IdeaLink } from './IdeaLink';
 import { IdeaPreview, useIdeaPreview } from './IdeaPreview';
 import { PreviewSignIn } from './PreviewSignIn';
 import { clearPreviewSession } from './preview-access';
@@ -14,6 +15,7 @@ import '../ui/app.css';
 import '../ui/home.css';
 import './ideas.css';
 export function Ideas() {
+  const [boardView,setBoardView]=useState<IdeasBoardView>({filter:'current',query:''});
   const [token,setToken] = useState(initialToken), [invite,setInvite] = useState('');
   const [name,setName] = useState(''), [error,setError] = useState(''), [busy,setBusy] = useState(false);
   const [cards,setCards] = useState<IdeaCard[]>([]), [loaded,setLoaded] = useState(false), [next,setNext] = useState<number|null>(null);
@@ -87,7 +89,7 @@ export function Ideas() {
       <PreviewSignIn />
       {token && !error && <p role="status">Opening your family ideas…</p>}
       <p><a href={ideasLink(selected ?? undefined)} target="_blank" rel="noopener noreferrer">Open ideas in the main game ↗</a></p></section>
-    : !name ? <section class="idea-paper"><h2>Come on in</h2><p>Sign in to use family access Jason has granted you.</p><a class="big-btn" href="/?account=1">Open your account</a><details><summary>Have a personal invite instead?</summary><p>You can still paste your invite here.</p>
+    : !name ? <section class="idea-paper"><h2>Come on in</h2><p>Sign in to use family access Jason has granted you.</p><a class="big-btn" href={`/?account=1${selected?`&ideaReturn=${selected}`:'&ideasReturn=1'}`}>Open your account</a><details><summary>Have a personal invite instead?</summary><p>You can still paste your invite here.</p>
       <form onSubmit={enter}><label>Your invite link<input autoComplete="off" type="password" value={invite} onInput={e=>setInvite(e.currentTarget.value)} /></label><button class="big-btn" type="submit">Open my ideas</button></form></details>
       {token && !error && <p role="status">Opening your ideas…</p>}</section>
     : <>
@@ -99,9 +101,10 @@ export function Ideas() {
         {thread ? <section class="idea-paper"><div class="idea-meta"><span>{thread.card.name}’s idea</span><span>Idea {thread.card.number}</span></div>
           <h2>{ideaPresentation(thread.card).title}</h2>
           <ul class="idea-tags" aria-label="Topics">{ideaPresentation(thread.card).tags.map(tag=><li key={tag}>{tag}</li>)}</ul>
+          <IdeaLink key={thread.card.id} id={thread.card.id} busy={busy}/>
           <IdeaActivity card={thread.card} now={now} connected={connected} />
           {thread.card.status==='shipped' && <a class="big-btn" href={LIVE_PLUNGE}>Play the updated game</a>}
-          {hasIdeaDemo(thread.card) && <button class="big-btn" type="button" disabled={busy} onClick={()=>trial.open(thread.card.id)}>Try your change →</button>}
+          {hasIdeaDemo(thread.card) && <IdeaLink key={`${thread.card.id}:demo`} id={thread.card.id} preview busy={busy} onOpen={()=>trial.open(thread.card.id)}/>}
           <p class="idea-help">You can ask a question or clarify your idea below. {thread.card.lane==='hand' ? 'Jason is making this change by hand. Your replies go straight to him.' : thread.card.status==='building' ? 'Replies will be picked up when this pass finishes.' : 'You can say “let’s talk it through first” before asking for changes.'}</p>
           <ol class="idea-conversation" aria-label="Conversation">{thread.messages.map(message=><li key={message.id} class={message.role}><strong>{message.name}</strong><p>{message.body}</p><div class="screenshot-drafts">{message.screenshots?.map(image=><Screenshot key={image.id} image={image} token={token}/>)}</div></li>)}</ol>
           {owner && thread.card.lane!=='hand' && <section class="idea-approval" aria-label="Builder access"><h3>Builder access</h3>
@@ -114,7 +117,7 @@ export function Ideas() {
           <Composer key={selected} token={token} selected={selected} onBusy={setBusy} onSent={sent} onError={setError} />
         </section> : <p role="status">Opening that idea…</p>}
       </> : <>
-        <IdeasBoard cards={cards} loaded={loaded} busy={busy} now={now} connected={connected} onOpen={open} onTry={id=>{open(id);trial.open(id);}} />
+        <IdeasBoard view={boardView} onView={setBoardView} cards={cards} loaded={loaded} busy={busy} now={now} connected={connected} onOpen={open} onTry={id=>{open(id);trial.open(id);}} />
         {next && <button class="big-btn secondary ideas-more" type="button" disabled={busy} onClick={()=>void more()}>Earlier ideas</button>}
         <section ref={newIdea} tabIndex={-1} class="idea-paper new-idea" aria-labelledby="new-idea-title"><h2 id="new-idea-title">What would make the game better?</h2><p>Say it just like you would at the table. This is your place to make it happen.</p>
           <Composer key="new" token={token} selected={null} onBusy={setBusy} onSent={sent} onError={setError} />

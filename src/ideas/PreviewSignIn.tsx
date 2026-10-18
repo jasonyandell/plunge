@@ -1,11 +1,11 @@
 import { useState } from 'preact/hooks';
-import { currentPreview, previewSignInLink } from './preview-access';
+import { currentPreview, previewIdeaHash, previewSignInLink } from './preview-access';
 import { LIVE_PLUNGE } from './model';
 
 export function PreviewSignIn() {
   const embedded = window.top !== window;
   const preview = currentPreview();
-  const [link,setLink] = useState(()=>{try {return embedded && preview ? `${location.origin}/?ideas=1` : preview ? previewSignInLink() : `${LIVE_PLUNGE}/?ideas=1`;} catch {return '';}});
+  const [link,setLink] = useState(()=>{try {return embedded && preview ? `${location.origin}/?ideas=1${previewIdeaHash()}` : preview ? previewSignInLink() : `${LIVE_PLUNGE}/?ideas=1`;} catch {return '';}});
   return <>
     {link ? <a class="big-btn" href={link} target="_blank" rel="noopener noreferrer" onClick={event=>{
       if (!preview || embedded) return;

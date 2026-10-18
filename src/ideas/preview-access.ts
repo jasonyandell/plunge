@@ -1,9 +1,13 @@
-import { LIVE_PLUNGE } from './model';
+import { IDEA_ID, LIVE_PLUNGE } from './model';
 
 const SESSION_KEY = 'plunge:ideas-preview-session';
 const STATE_KEY = 'plunge:ideas-preview-signin:';
 export function currentPreview() {
   return /^https:\/\/plunge-pr-([1-9][0-9]{0,8})\.texas42\.workers\.dev$/.exec(location.origin)?.[1] ?? null;
+}
+export function previewIdeaHash() {
+  const params=new URLSearchParams(location.hash.slice(1)), id=params.get('idea');
+  return id && IDEA_ID.test(id) ? `#idea=${id}${params.get('try')==='1'?'&try=1':''}` : '';
 }
 /** Start in the preview, finish with a real passkey on the stable site, then return.
  * The nonce is shared across tabs so a preview inside the game can open sign-in separately. */
@@ -11,7 +15,7 @@ export function previewSignInLink() {
   const pr = currentPreview();
   if (!pr) return `${LIVE_PLUNGE}/?account=1`;
   const state = crypto.randomUUID().replaceAll('-','');
-  localStorage.setItem(`${STATE_KEY}${state}`,String(Date.now()+15*60*1000));
+  localStorage.setItem(`${STATE_KEY}${state}`,JSON.stringify({expires:Date.now()+15*60*1000,hash:previewIdeaHash()}));
   return `${LIVE_PLUNGE}/?account=1&ideas-preview=${pr}&preview-state=${state}`;
 }
 export function previewSession(): string {
@@ -22,12 +26,16 @@ export function previewSession(): string {
     history.replaceState(null,'',location.pathname+location.search+(hash.size?`#${hash}`:''));
     try {
       sessionStorage.removeItem(SESSION_KEY);
-      const expires = state && /^[a-f0-9]{32}$/.test(state) ? Number(localStorage.getItem(`${STATE_KEY}${state}`)) : 0;
+      const saved = state && /^[a-f0-9]{32}$/.test(state) ? JSON.parse(localStorage.getItem(`${STATE_KEY}${state}`) ?? 'null') as {expires?:number;hash?:string}|number|null : null;
+      const expires = typeof saved==='number' ? saved : saved?.expires ?? 0;
       if (state) localStorage.removeItem(`${STATE_KEY}${state}`);
       if (currentPreview() && expires > Date.now() && incoming.length <= 2048 && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(incoming)) {
         const payload = JSON.parse(atob(incoming.split('.')[0]!.replaceAll('-','+').replaceAll('_','/'))) as {state?:unknown;origin?:unknown};
         if (payload.state !== state || payload.origin !== location.origin) return '';
-        sessionStorage.setItem(SESSION_KEY,incoming);return incoming;
+        sessionStorage.setItem(SESSION_KEY,incoming);
+        if (saved && typeof saved==='object' && /^#idea=[a-f0-9]{32}(&try=1)?$/.test(saved.hash ?? ''))
+          history.replaceState(null,'',location.pathname+location.search+saved.hash);
+        return incoming;
       }
     } catch {return '';}
     return '';

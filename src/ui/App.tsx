@@ -21,6 +21,7 @@ import { codeFromHash, decodeHand } from './share';
 import { decodeObservation } from './observation-link';
 import { api, isNative, nativeMove, NATIVE_TABLE, type FlagRecord } from '../ai/native';
 import { anticipatedAuctions, auctionMove } from '../ai/auction';
+import { zebAuctionMove } from '../ai/zeb';
 import { AuctionPreparation } from '../ai/auction-preparation';
 import './app.css';
 import { retryEvidence } from '../ai/phone/records';
@@ -63,7 +64,7 @@ export function App() {
     }).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
   }, [app.game, app.sessionId, app.nativeReceipts, app.auctionSurveys, app.settings]);
   useEffect(() => {
-    const evidenceFailure = () => setEvidenceError('A Walt result is only in this tab. Device storage is unavailable; keep the tab open and export your history.');
+    const evidenceFailure = () => setEvidenceError('A computer decision is only in this tab. Device storage is unavailable; keep the tab open and export your history.');
     window.addEventListener('plunge-history-storage-error', evidenceFailure);
     retryRecording();
     window.addEventListener('focus', retryRecording);
@@ -96,7 +97,7 @@ export function App() {
 
   const preparation = useRef<AuctionPreparation>();
   useEffect(() => {
-    if (NATIVE_TABLE || !isNative(app.settings.difficulty) || app.screen !== 'table'
+    if (app.settings.difficulty === 'zeb' || NATIVE_TABLE || !isNative(app.settings.difficulty) || app.screen !== 'table'
       || app.scenarioGame || questions || app.game?.phase !== 'bidding') return;
     const current = new AuctionPreparation();
     preparation.current = current;
@@ -128,7 +129,9 @@ export function App() {
         // Think during the presentation pause, then reveal the bid at its usual pace.
         const started = performance.now();
         setThinking(seat);
-        void auctionMove(app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal,preparation.current?.evaluate).then(
+        void (app.settings.difficulty === 'zeb'
+          ? zebAuctionMove(app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal)
+          : auctionMove(app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal,preparation.current?.evaluate)).then(
           decision => {
             if (!alive) return;
             t = setTimeout(() => { if (alive) dispatch({type:'auction-ai',decision,epoch}); },
