@@ -10,12 +10,24 @@ The shared table is the ordinary app, not a second screen. The store keeps the
 coordinator's game rotated so you are seat 0 (`rotateGame`), so every screen
 that reads a game state and the settings keeps working: hints, legal-domino
 highlighting, questions, trick history, review, the Menu. `useRoom` owns what
-differs: the socket, who runs Walt, routing your decisions (moves, next hand,
+differs: the socket, who runs the computer players, routing your decisions (moves, next hand,
 undo, start) to the room instead of the reducer, the chrome around the felt,
 and recording history with canonical seats. The seat names every screen reads
 are a live binding (`SEAT_NAMES`) that the room sets while it is open. The solo
 save underneath is never written while a table is open; only the hints choice
 travels home.
+
+## Computer player
+
+The lobby and Table dialog offer Walt or Zeb. Changing the selection is a five
+second veto vote and invalidates any in-flight decision. The authoritative room
+stores the selection and package identity; the runner never uses its solo setting.
+Zeb starts fresh shuffled hands. Walt starts catalogue hands. Existing cards stay
+in place when the player changes; unsupported Nel-O play is visibly covered by
+Walt. Takeovers keep the same selection and require the same installed version.
+Hints follow the table player. Action logs and shared receipts retain the actual
+implementation, including mixed hands and Nel-O cover. See [ZEB.md](ZEB.md) for
+receipt projection, version handling and the package integration checklist.
 
 ## Nobody hosts
 
@@ -24,40 +36,40 @@ start, shake or undo, and the table paused whenever any seated person was
 disconnected. All three jobs are now derived from who is present, and nothing
 about the host is stored.
 
-- **Walt runner.** The lowest-numbered seated person who is connected runs Walt
+- **Computer runner.** The lowest-numbered seated person who is connected runs the selected player
   for every chair without a present person. Every client computes the same
   answer from the snapshot, and the coordinator enforces it on the `thinking`
   and on-behalf `action` commands, so no election protocol exists. If the
   runner drops mid-think, the next runner restarts that move.
 - **Presence tiers.** A seat is *connected*, *rejoining* (disconnected for less
-  than the twenty-second grace, the table waits), or *away* (Walt plays it until
+  than the twenty-second grace, the table waits), or *away* (the selected player plays it until
   the person returns). Absence is measured from the seat's last known contact,
   which the coordinator keeps on the saved seat; the alarm fires when a grace
   expires so the runner's browser sees the flip.
 - **Sitting down any time.** Joining mid-hand hands the newcomer the seat's
   dominoes. The first free chair in the order partner, left, right, seat 0 is
-  taken. Leaving vacates the chair and retires its key; the chair becomes Walt's
+  taken. Leaving vacates the chair and retires its key; the chair becomes a computer seat
   and anyone can sit there next.
-- **Undo** still means the last *human* move. A move Walt made for an away
+- **Undo** still means the last *human* move. A computer move made for an away
   person is not human, because the command came from the runner, not the seat.
 
 ## One vote at a time
 
 Every change to the table is a proposal. The room holds at most one, settles it
 as a pure function of the proposal, the people present and the clock, and then
-applies the same effect code a direct command used to run. Walt never votes and
+applies the same effect code a direct command used to run. Computer players never vote and
 absent people never block; the target of a kick does not vote on it.
 
 | Kind | Mode | Window | Needs |
 |---|---|---|---|
-| start, restart, undo, open, close | veto | 5 s | nobody says no |
-| next hand | allow | 90 s | a second person (alone with Walt, just you) |
+| start, restart, undo, open, close, player | veto | 5 s | nobody says no |
+| next hand | allow | 90 s | a second person (alone with computers, just you) |
 | kick | allow | 10 s | most of the table |
 
 A knock is not on this list: see Doors.
 
 - **Veto** proposals pass at the deadline unless someone says no, and pass early
-  when everyone present has said yes. Alone with Walt, the proposer's own yes
+  when everyone present has said yes. Alone with computers, the proposer's own yes
   settles it at once, so solo play never waits.
 - **Allow** proposals fail at the deadline unless enough yes votes arrive, and
   fail early on any no. The next hand is one of these on purpose: one person

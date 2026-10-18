@@ -5,6 +5,7 @@ import { listHistory, recordHistory, snapshotOf } from '../src/history/recorder'
 import { handsForGame, soloHandsFromHistory } from '../src/history/review';
 import { ROOM_HISTORY_LIMIT } from '../src/room/protocol';
 import { initialApp, reducer, SOLO_SEAT_NAMES } from '../src/ui/store';
+import { playerEvent } from '../src/ai/players';
 
 function finishedApp() {
   let game: GameState = { ...newGame(PLUNGE_CONFIG, 'solo-review'), handNumber: 7, marks: [6, 6] };
@@ -31,6 +32,20 @@ describe('solo prior hands', () => {
     expect(soloHandsFromHistory([null, {}, { ...snapshot, room: { mode: 'shared-room' } },
       { ...snapshot, handNumber: 8, phase: 'playing' },
       { ...snapshot, handNumber: 9, code: 'bad replay' }], snapshot.gameId)).toEqual([]);
+  });
+
+  it('uses recorded model versions and keeps ended games out of the next game review', () => {
+    const app = finishedApp();
+    const event = playerEvent({ ...app.game, phase: 'playing', turn: 1 }, 'zeb');
+    event.model = { ...event.model, version: 'historical-zeb' };
+    const snapshot = snapshotOf({ ...app, playerEvents: [event] })!;
+    const hands = soloHandsFromHistory([snapshot], app.sessionId);
+    expect(hands[0]!.models).toEqual([event.model]);
+    const { models: _models, ...legacy } = snapshot;
+    expect(soloHandsFromHistory([legacy], app.sessionId)[0]!.models).toEqual([]);
+    const switched = reducer(app, { type: 'set-difficulty', difficulty: 'zeb' });
+    expect(switched.game).toBeNull();
+    expect(soloHandsFromHistory([snapshot], switched.sessionId)).toEqual([]);
   });
 
   it('hides an abandoned result until its newer attempt finishes, even if older writes arrive last', () => {

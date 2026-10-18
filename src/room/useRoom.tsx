@@ -8,7 +8,10 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import type { Action, Seat } from '../engine';
-import { auctionMove } from '../ai/auction';
+import { keepRoomReceipts } from './receipts';
+import { effectivePlayer, playerId, playerKey, playerLabel, type PlayerId } from '../ai/players';
+import { PlayerPicker } from '../ui/PlayerPicker';
+import { computerAuction } from '../ai/computer';
 import { checkedAction, nativeMove, requestOf } from '../ai/native';
 import { exportHistory, recordHistory, retryHistory } from '../history/recorder';
 import { setSeatNames, type AppEvent, type AppState } from '../ui/store';
@@ -32,8 +35,8 @@ const presenceKey = (room: RoomState | undefined) => room ? `${room.runner}:${ro
 /** Who is playing a seat right now: the person, Walt for an absent person, or Walt. */
 export function seatLabel(room: RoomState, s: Seat): string {
   const seat = room.seats[s];
-  if (!seat) return `Walt ${s + 1}`;
-  return seat.away ? `${seat.name} (Walt)` : seat.name;
+  if (!seat) return `${playerLabel(room.player, room.game)} ${s + 1}`;
+  return seat.away ? `${seat.name} (${playerLabel(room.player, room.game)})` : seat.name;
 }
 export const roomActive = (search = location.search): boolean => ROOMS_ENABLED && new URLSearchParams(search).has('rooms');
 
@@ -93,13 +96,15 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
   const quiet = useRef(new Set<string>());
   const connection = useRef<RoomConnection | null>(null);
   const table = credentials ? app.room?.table : undefined;
+  useEffect(() => { if (!table?.game) setTableOpen(false); }, [table?.sessionId, table?.game === null]);
+  useEffect(() => setHistoryOpen(false), [table?.sessionId]);
   const current = useRef(table); current.current = table;
   const seat = credentials?.seat ?? null;
   const identity: RoomIdentity | null = credentials ?? (knock ? { roomId: knock.roomId, visitor: knock.visitor } : null);
 
   useEffect(() => {
     if (!active) return;
-    const failed = () => setHistoryError('A Walt result is only in this tab. Keep it open and export your history.');
+    const failed = () => setHistoryError('A computer result is only in this tab. Keep it open and export your history.');
     window.addEventListener('plunge-history-storage-error', failed);
     void retryHistory().catch(failed);
     return () => window.removeEventListener('plunge-history-storage-error', failed);
@@ -113,9 +118,16 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     if (!identity) { setVisitorRoom(null); setOnline(false); return; }
     const mine = credentials;
     const client = new RoomConnection(identity, {
-      state: state => mine ? reduce({ type: 'room-snapshot', state, localSeat: mine.seat }) : setVisitorRoom(state),
+      state: state => {
+        if (!mine) { setVisitorRoom(state); return; }
+        reduce({ type: 'room-snapshot', state, localSeat: mine.seat });
+        void keepRoomReceipts(state, mine.seat).then(receipts => {
+          const latest = current.current;
+          if (connection.current === client && latest?.revision === state.revision) reduce({ type: 'room-snapshot', state: latest, localSeat: mine.seat, receipts });
+        }).catch(() => setHistoryError('Original scores could not be saved. Keep this tab open and export your history.'));
+      },
       status: setOnline, pending: setPending,
-      error: (message, id) => { if (id && quiet.current.delete(id)) return; setError(message); },
+      error: (message, id) => { if (id && quiet.current.delete(id) && !message.includes('version')) return; setError(message); },
       ended: (code, reason) => {
         if (code === CLOSE_OTHER_TAB) { setNotice(reason || 'This seat is open in another tab. Use that tab, or refresh this one.'); return; }
         if ('token' in identity) { try { forgetSeat(identity.roomId, localStorage); } catch { /* Nothing saved. */ } }
@@ -183,16 +195,17 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     setAiError(null);
     sendAt({ type: 'thinking', seat: turn }, revision, true);
     const decide = async () => {
+      if (at.modelKey && at.modelKey !== playerKey(at.player)) throw new Error('This table uses a different model version. Refresh Plunge to continue.');
       if (g.phase === 'playing') {
-        const receipt = await nativeMove(g, turn, 'native-partner', at.sessionId, controller.signal);
-        return { action: checkedAction(g, requestOf(g, turn, at.sessionId), receipt), receiptId: receipt.id };
+        const receipt = await nativeMove(g, turn, playerId(at.player), at.sessionId, controller.signal);
+        return { action: checkedAction(g, requestOf(g, turn, at.sessionId), receipt), receiptId: receipt.id, receipt };
       }
-      const decision = await auctionMove(g, turn, at.sessionId, at.auctionSurveys[`${g.handNumber}:${turn}`], controller.signal);
+      const decision = await computerAuction(at.player, g, turn, at.sessionId, at.auctionSurveys[`${g.handNumber}:${turn}`], controller.signal);
       return { action: decision.action, ...(decision.survey ? { auction: decision.survey } : {}) };
     };
     const t = setTimeout(() => void decide().then(result => {
-      if (live && current.current?.revision === revision) sendAt({ type: 'action', seat: turn, ...result }, revision, true);
-    }).catch((e: unknown) => { if (live) { setAiError(`Walt stopped: ${String(e)}`); sendAt({ type: 'thinking', seat: null }, revision, true); } }), 350);
+      if (live && current.current?.revision === revision) sendAt({ type: 'action', seat: turn, modelKey: playerKey(at.player), ...result }, revision, true);
+    }).catch((e: unknown) => { if (live) { setAiError(`${playerLabel(at.player, g)} stopped: ${String(e)}`); sendAt({ type: 'thinking', seat: null }, revision, true); } }), 350);
     return () => { live = false; clearTimeout(t); controller.abort(); };
   }, [table?.revision, presenceKey(table), credentials?.seat, online, app.showTrick, pending, retry]);
   // History keeps canonical seats, as the recorder expects.
@@ -243,14 +256,15 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     sendAt(target === undefined ? { type: 'propose', kind } : { type: 'propose', kind, target }, table?.revision);
     setTableOpen(false);
   };
-  const vote = (choice: Vote) => { if (online && table?.proposal) send({ type: 'vote', proposal: table.proposal.id, vote: choice }); };
+  const vote = (choice: Vote) => { if (online && table?.proposal) send({ type: 'vote', proposal: table.proposal.id, vote: choice,
+    endGame: choice === 'yes' && table.proposal.kind === 'player' && table.proposal.endsGame === true }); };
   const answerDoor = (visitor: string, yes: boolean) => { if (online) send({ type: 'door', visitor, yes }); };
   const agreeOr = (kind: ProposalKind) => {
     const open = table?.proposal;
     if (open?.kind === kind && seat !== null && open.votes[seat] === undefined) vote('yes'); else propose(kind);
   };
   const leave = () => {
-    if (!credentials || !confirm('Leave the table? Walt plays your chair, and anyone can sit there next.')) return;
+    if (!credentials || !confirm(`Leave the table? ${playerLabel(table?.player, table?.game)} plays your chair, and anyone can sit there next.`)) return;
     leaving.current = true;
     if (!send({ type: 'leave' })) { try { forgetSeat(credentials.roomId, localStorage); } catch { /* Nothing saved. */ } location.assign(location.pathname); }
   };
@@ -263,6 +277,9 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
       case 'new-game': if (table) agreeOr('start'); return;
       case 'undo': if (table) propose('undo'); return;
       case 'restart-hand': return;
+      case 'set-difficulty':
+        if (table && (!e.confirmed || e.sessionId === table.sessionId)) sendAt({ type: 'propose', kind: 'player', player: playerId(e.difficulty), endGame: e.confirmed === true }, table.revision);
+        return;
       case 'go': if (e.screen === 'home') { location.assign(location.pathname); return; } reduce(e); return;
       default: reduce(e);
     }
@@ -271,7 +288,7 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
   const seatNote = (relative: Seat): string | null => {
     const person = table?.seats[abs(relative)];
     if (!person || relative === 0) return null;
-    if (person.away) return 'Walt is playing';
+    if (person.away) return `${playerLabel(table?.player, table?.game)} is playing`;
     if (!person.connected) return 'Rejoining';
     return null;
   };
@@ -279,12 +296,20 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
   if (!active) return { active, dispatch, chrome: null, screen: null, overlays: null, menu: null, openHistory: () => {}, thinking: null, seatNote: () => null };
 
   const shown = credentials ? table : visitorRoom;
+  const model = playerLabel(shown?.player, shown?.game);
+  const choosePlayer = (id: PlayerId, confirmed: boolean) => {
+    if (table) { sendAt({ type: 'propose', kind: 'player', player: id, endGame: confirmed }, table.revision); setTableOpen(false); }
+  };
+  const playerControl = <div class="setting"><span class="setting-label">Computer player</span>
+    <PlayerPicker selected={shown?.player} game={shown?.game ?? null} sessionId={shown?.sessionId ?? ''} family
+      disabled={!online || pending || !!shown?.proposal} onChoose={choosePlayer} />
+    <p class="setting-hint">Changing players ends any game in progress. Everyone present must explicitly agree.</p></div>;
   const people = shown?.seats.filter(Boolean).length ?? 0;
   const lastVote = shown?.lastVote && shown.revision - shown.lastVote.revision < 3 ? shown.lastVote : null;
   const waitingOn = table?.game?.turn !== null && table?.game?.turn !== undefined && table.seats[table.game.turn]
     && !table.seats[table.game.turn]!.connected && !table.seats[table.game.turn]!.away ? table.seats[table.game.turn]!.name : null;
   const chrome = identity ? <>
-    <div class="room-bar"><span>Family table <small>{shown ? shown.open ? 'Open · anyone with the link can sit' : 'Closed · knock to come in' : 'Experimental'}</small></span>
+    <div class="room-bar"><span>Family table · {model} <small>{shown ? shown.open ? 'Open · anyone with the link can sit' : 'Closed · knock to come in' : 'Experimental'}</small></span>
       <button onClick={share}>Invite</button>
       {credentials && table?.game && <button onClick={() => setHistoryOpen(true)} aria-haspopup="dialog">Prior hands</button>}
       {credentials && <button onClick={() => setTableOpen(true)} aria-label="Table">Table</button>}
@@ -294,13 +319,13 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     {waitingOn && !shown?.proposal && <div class="room-pause" role="status">Waiting a moment for {waitingOn} to come back…</div>}
     {credentials && shown?.knocks && <Doorbell knocks={shown.knocks} answer={answerDoor} disabled={!online} />}
     {shown?.proposal && <VoteBar proposal={shown.proposal} seat={seat} seats={shown.seats} vote={vote} pending={pending} />}
-    {!shown?.proposal && lastVote && <div class="room-takeback" role="status" data-vote-revision={lastVote.revision}>{describeResult(lastVote)}</div>}
+    {!shown?.proposal && lastVote && <div class="room-takeback" role="status" data-vote-revision={lastVote.revision}>{describeResult(lastVote, model)}</div>}
     {shown?.lastUndo && !lastVote && !shown.proposal && <div class="room-takeback" role="status" data-undo-revision={shown.lastUndo.revision}>Takeback · Back to before {shown.lastUndo.name}’s last move, for everyone.</div>}
     {offerSignIn && credentials && (table?.game?.phase === 'hand-over' || table?.game?.phase === 'game-over') && <div class="room-offer">
       <a href="?account=1">Keep your name and the hands you play here? Sign in →</a><button onClick={dismissOffer}>Not now</button></div>}
   </> : null;
   const screen = !identity ? <div class="home"><div class="home-card"><p class="eyebrow">Plunge · Experimental</p><h1 class="title">Play with family</h1>
-      <p class="room-intro">{roomId ? 'Pull up a chair at this family table. Come and go as you like; Walt covers an empty chair.' : 'Invite your family. Walt fills the empty chairs.'}</p>
+      <p class="room-intro">{roomId ? 'Pull up a chair at this family table. The selected computer player covers empty chairs.' : 'Invite your family, then choose Walt or Zeb for the empty chairs.'}</p>
       {notice && <p class="room-notice" role="status">{notice}</p>}
       <form onSubmit={e => { e.preventDefault(); void open(); }}>{member === null && <label class="room-label">Your name<input maxLength={20} value={name} onInput={e => setName(e.currentTarget.value)} autoComplete="nickname" placeholder="Name at the table" /></label>}
         <button class="big-btn" disabled={opening || member === undefined}>{opening ? 'Opening…' : `${roomId ? 'Join the table' : 'Open a family table'}${member ? ` as ${member}` : ''}`}</button></form>
@@ -317,15 +342,16 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     : !shown ? <div class="room-wait" role="status">Connecting to the table…</div>
     : knock && !credentials ? <div class="room-wait"><div class="home-card"><p class="eyebrow">Closed table</p><h1 class="sheet-title">Knocking…</h1>
       <p>{knock.answer ?? (atDoor ? 'Anyone at the table can let you in. Stay on this screen.' : chairsFull ? 'All four chairs are taken. You will knock again when one opens.' : 'Asking to come in.')}</p>
-      <div class="room-chairs">{[0,2,1,3].map(s => <div key={s}><strong>{shown.seats[s]?.name ?? 'Walt'}</strong><span>{shown.seats[s] ? shown.seats[s]!.connected ? 'Here' : 'Away' : 'Open chair'}</span></div>)}</div>
+      <div class="room-chairs">{[0,2,1,3].map(s => <div key={s}><strong>{shown.seats[s]?.name ?? model}</strong><span>{shown.seats[s] ? shown.seats[s]!.connected ? 'Here' : 'Away' : 'Open chair'}</span></div>)}</div>
       {knock.answer && <button class="big-btn" onClick={() => setKnock({ ...knock, sentAt: null, answer: null })}>Knock again</button>}
       <a class="text-btn" href={location.pathname}>Back to solo play</a>
     </div></div>
     : credentials && !shown.game ? <div class="room-wait"><div class="home-card"><p class="eyebrow">Your family table</p><h1 class="sheet-title">Pull up a chair</h1>
-      <p>You are {shown.seats[credentials.seat]?.name}. Anyone here can start; the table gets five seconds to object. People can join or leave any time, and Walt plays an empty chair.</p>
-      <div class="room-chairs">{[0,2,1,3].map(s => <div key={s}><strong>{shown.seats[s]?.name ?? 'Walt'}</strong><span>{s === credentials.seat ? 'You' : s === (credentials.seat + 2) % 4 ? 'Your partner' : 'Across the table'}{shown.seats[s] && !shown.seats[s]!.connected ? ' · Away' : ''}</span></div>)}</div>
+      <p>You are {shown.seats[credentials.seat]?.name}. Anyone here can start; the table gets five seconds to object. People can join or leave any time, and {model} plays an empty chair.</p>
+      <div class="room-chairs">{[0,2,1,3].map(s => <div key={s}><strong>{shown.seats[s]?.name ?? model}</strong><span>{s === credentials.seat ? 'You' : s === (credentials.seat + 2) % 4 ? 'Your partner' : 'Across the table'}{shown.seats[s] && !shown.seats[s]!.connected ? ' · Away' : ''}</span></div>)}</div>
+      {playerControl}
       <button class="big-btn secondary" onClick={share}>Invite someone</button>
-      <button class="big-btn" disabled={!online || pending || !!shown.proposal} onClick={() => propose('start')}>Start with {people} {people === 1 ? 'person' : 'people'} + Walt</button>
+      <button class="big-btn" disabled={!online || pending || !!shown.proposal} onClick={() => propose('start')}>Start with {people} {people === 1 ? 'person' : 'people'} + {model}</button>
       <p class="setting-hint">Refreshing rejoins this seat. Undo, kicking, starting over and opening or closing the table are all quick votes.</p>
       <p class="setting-hint">For Nel-O, win a bid of 1 mark or more, then choose Nel-O. The bidder’s partner sits out. Rooms last up to 24 hours without activity.</p>
     </div></div>
@@ -334,7 +360,8 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     {historyOpen && table && credentials && <RoomHistory room={table} seat={credentials.seat} onClose={() => setHistoryOpen(false)} />}
     {tableOpen && table && credentials && <div class="overlay room-invite"><div class="card" role="dialog" aria-label="Table"><h2 class="sheet-title">The table</h2>
       <p class="hint">Everything here is a vote. {table.proposal ? 'The table is deciding something now.' : 'Low stakes go ahead unless someone says no within five seconds.'}</p>
-      <div class="room-people">{[0,2,1,3].map(s => { const person = table.seats[s]; return <div key={s} class="room-person"><span><strong>{person?.name ?? 'Walt'}</strong>{s === credentials.seat ? ' · You' : person ? person.away ? ' · Walt is playing' : person.connected ? ' · Here' : ' · Rejoining' : ''}</span>
+      {playerControl}
+      <div class="room-people">{[0,2,1,3].map(s => { const person = table.seats[s]; return <div key={s} class="room-person"><span><strong>{person?.name ?? model}</strong>{s === credentials.seat ? ' · You' : person ? person.away ? ` · ${model} is playing` : person.connected ? ' · Here' : ' · Rejoining' : ''}</span>
         {person && s !== credentials.seat && <button class="text-btn" disabled={!online || pending || !!table.proposal} onClick={() => propose('kick', s as Seat)}>Ask to step out</button>}</div>; })}</div>
       <button class="big-btn secondary" disabled={!online || pending || !!table.proposal} onClick={() => propose(table.open ? 'close' : 'open')}>{table.open ? 'Close the table' : 'Open the table'}</button>
       <p class="hint">{table.open ? 'Anyone with the invite can sit down.' : 'Newcomers knock; anyone here can let them in, any time.'}</p>
@@ -349,7 +376,7 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
       <p class="hint">{copied ? 'Copied. Paste it into your family conversation.' : 'Select and copy the link or room code to share it.'}</p>
       <button class="big-btn" onClick={() => setInviteOpen(false)}>Back to the table</button></div></div>}
     {error && <div class="room-error" role="alert"><span>{error}</span><button onClick={() => setError(null)}>Dismiss</button></div>}
-    {aiError && <div class="room-error" role="alert"><span>{aiError}</span><button onClick={() => { setAiError(null); setRetry(n => n + 1); }}>Retry Walt</button></div>}
+    {aiError && <div class="room-error" role="alert"><span>{aiError}</span><button onClick={() => { setAiError(null); setRetry(n => n + 1); }}>Retry {model}</button></div>}
     {historyError && <div class="room-error" role="alert"><span>{historyError}</span><button onClick={() => void retryHistory().then(() => setHistoryError(null)).catch(() => {})}>Retry saving</button><button onClick={download}>Export</button></div>}
   </>;
   const menu = credentials ? <button type="button" class="big-btn secondary" onClick={() => setTableOpen(true)}>The table · votes and chairs</button> : null;

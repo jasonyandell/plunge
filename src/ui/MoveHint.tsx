@@ -1,3 +1,4 @@
+import { effectivePlayer, playerLabel, playerIdentity, type PlayerId } from '../ai/players';
 import { DEEP_WORLDS, type AnalysisWorlds } from '../ai/native';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { countValue, fromId, trickWinnerIndex, type GameState } from '../engine';
@@ -24,7 +25,9 @@ export function hintTrickEffect(g: GameState, tile: number): string {
 }
 
 /** Parent keys this component by position. Closing or leaving cancels its worker. */
-export function MoveHint({ g, sessionId, questionGameId = sessionId, onQuestion }: { g: GameState; sessionId: string; questionGameId?: string; onQuestion: (id: string) => void }) {
+export function MoveHint({ g, sessionId, questionGameId = sessionId, onQuestion, player = 'native-partner' }: { player?: PlayerId; g: GameState; sessionId: string; questionGameId?: string; onQuestion: (id: string) => void }) {
+  const model = effectivePlayer(player, g), name = playerLabel(model);
+  const ordinary = model === 'zeb' ? 160 : 40, deeper = model === 'zeb' ? 512 : DEEP_WORLDS;
   const [open, setOpen] = useState(false);
   const [hint, setHint] = useState<Hint | null>(null);
   const [busy, setBusy] = useState(false);
@@ -46,7 +49,7 @@ export function MoveHint({ g, sessionId, questionGameId = sessionId, onQuestion 
     const active = new AbortController(); controller.current = active;
     setBusy(true); setError(false);
     try {
-      const result = await getHint(g, sessionId, worlds, active.signal);
+      const result = await getHint(g, sessionId, worlds, active.signal, model);
       if (controller.current === active) {
         // A deeper timeout must not erase a previous measured hint.
         if (result.choice !== null || !hint) setHint(result);
@@ -59,15 +62,15 @@ export function MoveHint({ g, sessionId, questionGameId = sessionId, onQuestion 
   const led = ledChip(g, g.currentTrick);
   return <>
     <button type="button" class="hint-button" ref={button} onClick={() => {
-      setOpen(true); if (!hint || hint.choice === null) void inspect(40);
+      setOpen(true); if (!hint || hint.choice === null) void inspect(ordinary);
     }}>Get a hint</button>
     <dialog ref={dialog} class="hint-dialog" aria-labelledby="hint-title" onCancel={e => { e.preventDefault(); close(); }}>
-      <header class="hint-header"><h2 id="hint-title">A hint from Walt</h2>
+      <header class="hint-header"><h2 id="hint-title">A hint from {name}</h2>
         <button type="button" class="hint-close" aria-label="Close hint" onClick={close}>×</button></header>
       <p class="hint-position">{trumpChip(g)}{led ? ` · Led: ${led}` : ''}</p>
       {tile !== null && <>
         <div class="hint-pick"><Domino id={requestTile(tile)} orientation="h" />
-          <strong>{hint?.forced ? 'The only legal play' : `Walt suggests ${requestTile(tile).split('').join('–')}`}</strong></div>
+          <strong>{hint?.forced ? 'The only legal play' : `${name} suggests ${requestTile(tile).split('').join('–')}`}</strong></div>
         <p>{hintExplanation(hint!)}</p>
         {hint?.stats && hint.stats.worlds < hint.requestedWorlds && <p class="setting-hint">
           The full comparison didn’t finish. Showing the completed {hint.stats.worlds}-deal comparison.
@@ -77,19 +80,19 @@ export function MoveHint({ g, sessionId, questionGameId = sessionId, onQuestion 
           <p class="setting-hint">This compares the whole hand, beyond the current trick. It’s a sampled estimate; small differences can come down to the sample.</p>
           <details class="disclosure"><summary>Compare your choices</summary>
             <MoveScores stats={hint.stats} selected={tile} selectionLabel="Suggested" />
-            <p class="setting-hint">Hints use your hand and public plays. They compare the baseline player’s outcomes without the separate partner check.</p>
+            <p class="setting-hint">{model === 'zeb' ? 'Zeb uses your hand and public plays to estimate each legal choice.' : 'Walt compares the baseline outcomes without the separate partner check.'}</p>
           </details>
         </>}
         {hint && <SaveHint g={g} sessionId={sessionId} questionGameId={questionGameId} disabled={busy} evidence={{ kind: 'move',
-          requested_worlds: hint.requestedWorlds, choice: tile, forced: hint.forced, estimate: hint.estimate,
+          model: playerIdentity(model), requested_worlds: hint.requestedWorlds, choice: tile, forced: hint.forced, estimate: hint.estimate,
           explanation: hintExplanation(hint), context: hintTrickEffect(g, tile) }}
           onSaved={id => { close(); onQuestion(id); }} />}
       </>}
-      {busy && <p role="status">Walt is comparing your options…</p>}
-      {error && <p role="alert" class="native-warning">Walt couldn’t finish a new comparison. {tile !== null ? 'The previous hint is still shown.' : 'You can retry or keep playing.'}</p>}
+      {busy && <p role="status">{name} is comparing your options…</p>}
+      {error && <p role="alert" class="native-warning">{name} couldn’t finish a new comparison. {tile !== null ? 'The previous hint is still shown.' : 'You can retry or keep playing.'}</p>}
       <div class="hint-actions">
-        {!busy && error && <button type="button" class="big-btn secondary" onClick={() => void inspect(40)}>Try again</button>}
-        {!busy && hint?.stats && hint.stats.worlds < DEEP_WORLDS && <button type="button" class="big-btn secondary" onClick={() => void inspect(DEEP_WORLDS)}>Think deeper</button>}
+        {!busy && error && <button type="button" class="big-btn secondary" onClick={() => void inspect(ordinary)}>Try again</button>}
+        {!busy && hint?.stats && hint.stats.worlds < deeper && <button type="button" class="big-btn secondary" onClick={() => void inspect(deeper)}>Think deeper</button>}
         <button type="button" class="big-btn" onClick={close}>{busy ? 'Cancel hint' : 'Back to my hand'}</button>
       </div>
     </dialog>

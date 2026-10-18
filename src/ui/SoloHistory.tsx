@@ -4,6 +4,7 @@ import { soloHandsFromHistory } from '../history/review';
 import { HandHistory } from '../room/RoomHistory';
 import type { RoomHand } from '../room/protocol';
 import { SOLO_SEAT_NAMES, type AppState } from './store';
+import { handPlayers } from '../ai/players';
 
 export function SoloHistory({ app, onClose }: { app: AppState; onClose: () => void }) {
   const [saved, setSaved] = useState<RoomHand[]>([]);
@@ -27,6 +28,7 @@ export function SoloHistory({ app, onClose }: { app: AppState; onClose: () => vo
   const hands = saved.filter(hand => hand.sessionId === app.sessionId && hand.game.handNumber !== app.game?.handNumber);
   if (app.game && (app.game.phase === 'hand-over' || app.game.phase === 'game-over')) {
     hands.push({ sessionId: app.sessionId, game: app.game, names: [...SOLO_SEAT_NAMES],
+      models: handPlayers(app.playerEvents, app.game.handNumber),
       practice: app.practiceHands.includes(app.game.handNumber) });
   }
   return <HandHistory hands={hands} current={app.screen === 'table' ? app.game : null} sessionId={app.sessionId} seat={0} solo

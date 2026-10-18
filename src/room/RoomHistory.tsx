@@ -6,6 +6,7 @@ import { bidLabel, contractLabel, declLabel } from '../ui/store';
 import { ROOM_HISTORY_LIMIT, type RoomHand, type RoomState } from './protocol';
 import { rotateGame } from './view';
 import { handsForGame } from '../history/review';
+import { handPlayers, playerLabel } from '../ai/players';
 
 const handKey = (hand: RoomHand) => `${hand.sessionId}:${hand.game.handNumber}`;
 
@@ -15,7 +16,8 @@ export function RoomHistory({ room, seat, onClose }: { room: RoomState; seat: Se
   const current = room.game;
   if (current && (current.phase === 'hand-over' || current.phase === 'game-over')) {
     hands.push({ sessionId: room.sessionId, game: current,
-      names: room.seats.map((person, index) => person?.name ?? `Walt ${index + 1}`),
+      names: room.seats.map((person, index) => person?.name ?? `${playerLabel(room.player, current)} ${index + 1}`),
+      models: handPlayers(room.playerEvents, current.handNumber),
       practice: room.practiceHands?.includes(current.handNumber) ?? false });
   }
   return <HandHistory hands={hands} current={current} sessionId={room.sessionId} seat={seat} onClose={onClose} />;
@@ -63,6 +65,9 @@ export function HandHistory({ hands, current, sessionId, seat, onClose, solo = f
     </>}
     {g && hand && <section aria-label={`Hand ${g.handNumber} review`}>
       <h3>Hand {g.handNumber}{hand.practice ? ' · Practice' : ''}</h3>
+      <p class="setting-hint">{hand.models?.length
+        ? `Computer models in this hand: ${hand.models.map(model => `${model.name} · ${model.version}`).join(' + ')}`
+        : 'Computer model version was not recorded for this hand.'}</p>
       <p>{g.declarer !== null && `${names[g.declarer]} bid ${g.contract ? contractLabel(g.contract) : ''}`}
         {g.declaration && ` · ${declLabel(g.declaration)}`}</p>
       <p>{g.thrownIn ? 'Thrown in — no marks awarded.' : g.handResult

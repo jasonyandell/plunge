@@ -10,6 +10,9 @@ import { playIndex } from '../engine/play-index';
  * table flexes to the available height; hand tiles cap at 58px wide.
  */
 
+import { PlayerBadge } from './PlayerBadge';
+import { PlayerPicker } from './PlayerPicker';
+import { handPlayers, playerLabel, usesForecastBidding } from '../ai/players';
 import { useEffect, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import type { CompletedTrick, GameState, PlayRecord, Seat } from '../engine';
@@ -153,6 +156,7 @@ export function Table({ app, dispatch: rawDispatch, shuffling = false, thinking 
   return (
     <div class={`table-screen${!scenario && g.phase === 'playing' ? ' birdwatch-table' : ''}`} style={{ '--trick-hold-ms': `${TRICK_HOLD_MS}ms` }}>
       <StatusStrip g={g} onMenu={() => setMenuOpen(true)} hideMenu={demo} />
+      {!scenario && !demo && <div class="table-player"><PlayerBadge selected={app.settings.difficulty} game={g} /></div>}
       {!scenario && !review && !birdwatchDemo && !demo && (
         <div class="hand-tools">
           {practice && <span class="practice-chip" title="Undone or replayed: kept as practice, not counted in stats">Practice</span>}
@@ -176,7 +180,7 @@ export function Table({ app, dispatch: rawDispatch, shuffling = false, thinking 
       )}
       <div class="felt">
         <div class="birdwatch-perch">
-          <OpponentTop g={g} thinking={thinking} note={seatNote(2)} />
+          <OpponentTop g={g} thinking={thinking} note={seatNote(2) ?? (!app.room && !scenario && !demo ? playerLabel(app.settings.difficulty, g) : null)} />
           {birdwatchEnabled && !scenario && g.phase === 'playing' && !showingLast && !review && !menuOpen &&
             (!birdwatchDemo || g.currentTrick.length === 0) &&
             !histOpen && !question && confirmRestart === null && !app.room?.table?.proposal && (
@@ -184,7 +188,7 @@ export function Table({ app, dispatch: rawDispatch, shuffling = false, thinking 
           )}
         </div>
         <div class="middle">
-          <OpponentSide g={g} seat={1} thinking={thinking} note={seatNote(1)} />
+          <OpponentSide g={g} seat={1} thinking={thinking} note={seatNote(1) ?? (!app.room && !scenario && !demo ? playerLabel(app.settings.difficulty, g) : null)} />
           <TrickArea
             g={g}
             plays={trickPlays}
@@ -193,7 +197,7 @@ export function Table({ app, dispatch: rawDispatch, shuffling = false, thinking 
             thinking={thinking}
             onQuestion={scenario || birdwatchDemo || demo ? undefined : (i, target) => selectQuestion(playIndex(g,showingLast ? g.tricks.length - 1 : g.tricks.length,i), target)}
           />
-          <OpponentSide g={g} seat={3} thinking={thinking} note={seatNote(3)} />
+          <OpponentSide g={g} seat={3} thinking={thinking} note={seatNote(3) ?? (!app.room && !scenario && !demo ? playerLabel(app.settings.difficulty, g) : null)} />
         </div>
         <div class="hand-area">
           <div class="hand-heading">
@@ -204,7 +208,7 @@ export function Table({ app, dispatch: rawDispatch, shuffling = false, thinking 
                 : 'Your hand'}</span>
             </p>
             {!demo && app.settings.showHints && humanTurn && !showingLast && !scenario && explainScope(g) && isNative(app.settings.difficulty) &&
-              <MoveHint key={`${app.sessionId}:${app.epoch}:${g.handNumber}:${g.tricks.length}:${g.currentTrick.length}`} g={g} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
+              <MoveHint player={app.settings.difficulty} key={`${app.sessionId}:${app.epoch}:${g.handNumber}:${g.tricks.length}:${g.currentTrick.length}`} g={g} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
           </div>
           {humanSitsOut ? (
             <div class="hand sit-out">
@@ -238,10 +242,10 @@ export function Table({ app, dispatch: rawDispatch, shuffling = false, thinking 
       {saved && <div class="question-toast" role="status"><span>{saved.text}</span>{saved.id && <button class="text-btn" onClick={() => { onQuestion(saved.id); setSaved(null); }}>Add note</button>}</div>}
       {question && <MoveQuestionPrompt key={`${question.sessionId}:${question.game.handNumber}:${question.ply}`}
         target={question.target} label={question.label} onSave={() => bookmark(question)} onClose={() => setQuestion(null)} />}
-      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet player={!app.room && app.settings.difficulty==='zeb' ? 'zeb' : 'walt'} key={app.epoch} showHints={app.settings.showHints && !demo} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
-      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet player={!app.room && app.settings.difficulty==='zeb' ? 'zeb' : 'walt'} key={app.epoch} showHints={app.settings.showHints && !demo} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
+      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet bookSeat={app.room?.localSeat ?? 0} player={usesForecastBidding(app.settings.difficulty) ? 'zeb' : 'walt'} key={app.epoch} showHints={app.settings.showHints && !demo} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
+      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet bookSeat={app.room?.localSeat ?? 0} player={usesForecastBidding(app.settings.difficulty) ? 'zeb' : 'walt'} key={app.epoch} showHints={app.settings.showHints && !demo} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
       {g.phase === 'hand-over' && !showingLast && !review && (
-        <HandOverSheet
+        <HandOverSheet modelSummary={handPlayers(app.playerEvents, g.handNumber).map(p => `${p.name} · ${p.version}`).join(' + ')}
           g={g}
           dispatch={dispatch}
           onReview={!demo && g.tricks.length > 0 ? () => setReview(true) : undefined}
@@ -253,7 +257,7 @@ export function Table({ app, dispatch: rawDispatch, shuffling = false, thinking 
         />
       )}
       {g.phase === 'game-over' && !showingLast && !review && (
-        <GameOverSheet
+        <GameOverSheet modelSummary={handPlayers(app.playerEvents, g.handNumber).map(p => `${p.name} · ${p.version}`).join(' + ')}
           g={g}
           dispatch={dispatch}
           onHistory={scenario ? undefined : onHistory}
@@ -298,6 +302,9 @@ function GameMenu({ app, dispatch, onClose, onHome, extra }: {
   return (
     <div class="overlay game-menu-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div class="card game-menu" role="dialog" aria-label="Menu">
+        <p class="setting-hint">Computer player: <PlayerBadge selected={app.settings.difficulty} game={app.game} /></p>
+        {!app.room && <PlayerPicker selected={app.settings.difficulty} game={app.game} sessionId={app.sessionId}
+          onChoose={(difficulty, confirmed) => dispatch({ type: 'set-difficulty', difficulty, confirmed, sessionId: app.sessionId })} />}
         <HintsSwitch app={app} dispatch={dispatch} />
         {extra}
         <button type="button" class="big-btn" onClick={onClose}>Keep playing</button>

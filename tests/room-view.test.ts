@@ -127,7 +127,7 @@ describe('the home screen list of tables', () => {
     expect(tableTitle(table)).toBe('Mom’s table');
     expect(tableTitle({ ...table, standing: true })).toBe('Family table');
     expect(tableTitle({ ...table, seats: [null, null, null, null] })).toBe('Someone’s table');
-    expect(tableNote(table)).toBe('Mom, Mae here · Closed, knock to come in');
-    expect(tableNote({ ...table, open: true, seats: [null, null, { name: 'Dad', connected: false }, null] })).toBe('Nobody here right now · Open, sit right down');
+    expect(tableNote(table)).toBe('Mom, Mae here · Walt · Closed, knock to come in');
+    expect(tableNote({ ...table, open: true, seats: [null, null, { name: 'Dad', connected: false }, null] })).toBe('Nobody here right now · Walt · Open, sit right down');
   });
 });
