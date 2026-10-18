@@ -3,8 +3,12 @@ import { Screenshot } from './IdeaScreenshots';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { IdeaActivity } from './IdeaActivity';
 import { IdeaResult } from './IdeaResult';
+import { IdeasBoard, type IdeasBoardView } from './IdeasBoard';
+import { hasIdeaDemo, ideaPresentation } from './presentation';
 import { IdeaLink } from './IdeaLink';
 import { IdeaPreview, useIdeaPreview } from './IdeaPreview';
+import { PreviewSignIn } from './PreviewSignIn';
+import { clearPreviewSession } from './preview-access';
 import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
 import { LIVE_PLUNGE, type IdeaCard, type IdeaThread } from './model';
 import { cardFromHash, ideasApi, ideasLink, initialToken, InviteError, inviteToken, TOKEN_KEY } from './client';
@@ -12,6 +16,7 @@ import '../ui/app.css';
 import '../ui/home.css';
 import './ideas.css';
 export function Ideas() {
+  const [boardView,setBoardView]=useState<IdeasBoardView>({filter:'current',query:''});
   const [token,setToken] = useState(initialToken), [invite,setInvite] = useState('');
   const [name,setName] = useState(''), [error,setError] = useState(''), [busy,setBusy] = useState(false);
   const [cards,setCards] = useState<IdeaCard[]>([]), [loaded,setLoaded] = useState(false), [next,setNext] = useState<number|null>(null);
@@ -20,6 +25,13 @@ export function Ideas() {
   useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),5000);const offline=()=>setConnected(false);
     window.addEventListener('offline',offline);return()=>{clearInterval(timer);window.removeEventListener('offline',offline);};},[]);
   const [saved,setSaved] = useState(''), [owner,setOwner] = useState(false);
+  const [adding,setAdding] = useState(false);
+  const newIdea = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if(adding && !selected && newIdea.current) {
+      newIdea.current.focus();newIdea.current.scrollIntoView({block:'start'});setAdding(false);
+    }
+  }, [adding,selected]);
   const trial=useIdeaPreview();
   const generation = useRef(0), olderLoaded=useRef(false);
   useEffect(() => {
@@ -28,7 +40,7 @@ export function Ideas() {
   }, [selected]);
   useEffect(() => {
     const epoch = ++generation.current; let running = false;
-    if (QUESTIONS_LOCAL_ONLY) return;
+    if (QUESTIONS_LOCAL_ONLY && !token) return;
     const refresh = async () => {
       if (running) return; running=true;
       try {
@@ -68,27 +80,32 @@ export function Ideas() {
   const more = async () => {try {const page=await ideasApi<{cards:IdeaCard[];next:number|null}>(token,`?before=${next}`);
     olderLoaded.current=true;setCards(c => [...c,...page.cards.filter(x=>!c.some(y=>y.id===x.id))]);setNext(page.next);
   } catch(e) {setError(String(e));}};
-  if(trial.id && thread?.card.id===trial.id && name && !QUESTIONS_LOCAL_ONLY)
-    return <IdeaPreview pr={thread.card.status==='ready' && thread.card.preview ? thread.card.pr ?? 0 : 0} title={thread.card.title} onClose={trial.close}/>;
+  if(trial.id && thread?.card.id===trial.id && name)
+    return <IdeaPreview pr={hasIdeaDemo(thread.card) ? thread.card.pr! : 0} title={ideaPresentation(thread.card).title} onClose={trial.close}/>;
   return <main class="ideas-page">
     <header class="ideas-top"><a href="/">← Back to Plunge</a><span>Made together</span></header>
-    <div class="ideas-heading"><p class="eyebrow">Your seat at the drawing table</p><h1>Ideas for Plunge</h1>
-      <p>Little fixes. Big ideas. A game that feels more like ours.</p></div>
-    {QUESTIONS_LOCAL_ONLY ? <section class="idea-paper"><h2>Keep the conversation going</h2><p>This is a test version of Plunge. Your ideas and replies live together on the main game.</p>
-      <a class="big-btn" href="/?ideas=1&demo=bidding">Try the family ideas demo</a><p><a href={ideasLink(selected ?? undefined)}>Open your live ideas</a></p></section>
-    : !name ? <section class="idea-paper"><h2>Come on in</h2><p>Sign in to use family access Jason has granted you.</p><a class="big-btn" href={`/?account=1${selected?`&ideaReturn=${selected}`:''}`}>Open your account</a><details><summary>Have a personal invite instead?</summary><p>You can still paste your invite here.</p>
+    <div class="ideas-heading"><p class="eyebrow">Our community game</p><h1>Ideas for Plunge</h1>
+      <p>Try what we’re making. Share what comes next.</p></div>
+    {QUESTIONS_LOCAL_ONLY && !name ? <section class="idea-paper"><h2>Your real family ideas</h2><p>Use your Plunge account to explore this dashboard with your family’s ideas.</p>
+      <PreviewSignIn />
+      {token && !error && <p role="status">Opening your family ideas…</p>}
+      <p><a href={ideasLink(selected ?? undefined)} target="_blank" rel="noopener noreferrer">Open ideas in the main game ↗</a></p></section>
+    : !name ? <section class="idea-paper"><h2>Come on in</h2><p>Sign in to use family access Jason has granted you.</p><a class="big-btn" href={`/?account=1${selected?`&ideaReturn=${selected}`:'&ideasReturn=1'}`}>Open your account</a><details><summary>Have a personal invite instead?</summary><p>You can still paste your invite here.</p>
       <form onSubmit={enter}><label>Your invite link<input autoComplete="off" type="password" value={invite} onInput={e=>setInvite(e.currentTarget.value)} /></label><button class="big-btn" type="submit">Open my ideas</button></form></details>
       {token && !error && <p role="status">Opening your ideas…</p>}</section>
     : <>
-      <div class="ideas-welcome"><p>Hi, {name}.</p><button class="big-btn secondary" type="button" disabled={busy} onClick={()=>open(null)}>＋ Another idea</button></div>
+      {QUESTIONS_LOCAL_ONLY && <aside class="demo-banner"><strong>Dashboard demo · real family ideas</strong><p>You’re signed in as {name}. Ideas and replies here go to the family. Game progress stays in this preview.</p>
+        <button class="text-btn" type="button" disabled={busy} onClick={()=>{clearPreviewSession();setToken('');setName('');setOwner(false);setCards([]);setThread(null);setSaved('');setError('');}}>Disconnect demo</button></aside>}
+      <div class="ideas-welcome"><p>Hi, {name}.</p><button class="big-btn secondary" type="button" disabled={busy} onClick={()=>{open(null);setAdding(true);}}>＋ Share an idea</button></div>
       {selected ? <>
         <button class="text-btn" type="button" disabled={busy} onClick={()=>open(null)}>← All ideas</button>
         {thread ? <section class="idea-paper"><div class="idea-meta"><span>{thread.card.name}’s idea</span><span>Idea {thread.card.number}</span></div>
-          <h2>{thread.card.title}</h2>
+          <h2>{ideaPresentation(thread.card).title}</h2>
+          <ul class="idea-tags" aria-label="Topics">{ideaPresentation(thread.card).tags.map(tag=><li key={tag}>{tag}</li>)}</ul>
           <IdeaLink key={thread.card.id} id={thread.card.id} busy={busy}/>
           <IdeaActivity card={thread.card} now={now} connected={connected} />
           {thread.card.status==='shipped' && <a class="big-btn" href={LIVE_PLUNGE}>Play the updated game</a>}
-          {thread.card.status==='ready' && thread.card.preview && <IdeaLink key={`${thread.card.id}:demo`} id={thread.card.id} preview busy={busy} onOpen={()=>trial.open(thread.card.id)}/>}
+          {hasIdeaDemo(thread.card) && <IdeaLink key={`${thread.card.id}:demo`} id={thread.card.id} preview busy={busy} onOpen={()=>trial.open(thread.card.id)}/>}
           <p class="idea-help">You can ask a question or clarify your idea below. {thread.card.lane==='hand' ? 'Jason is making this change by hand. Your replies go straight to him.' : thread.card.status==='building' ? 'Replies will be picked up when this pass finishes.' : 'You can say “let’s talk it through first” before asking for changes.'}</p>
           <ol class="idea-conversation" aria-label="Conversation">{thread.messages.map(message=><li key={message.id} class={message.role}><strong>{message.name}</strong><p>{message.body}</p><div class="screenshot-drafts">{message.screenshots?.map(image=><Screenshot key={image.id} image={image} token={token}/>)}</div><IdeaResult thread={thread} message={message} busy={busy} onTry={()=>trial.open(thread.card.id)} /></li>)}</ol>
           {owner && thread.card.lane!=='hand' && <section class="idea-approval" aria-label="Builder access"><h3>Builder access</h3>
@@ -101,18 +118,14 @@ export function Ideas() {
           <Composer key={selected} token={token} selected={selected} onBusy={setBusy} onSent={sent} onError={setError} />
         </section> : <p role="status">Opening that idea…</p>}
       </> : <>
-        <section class="idea-paper new-idea"><h2>What would make the game better?</h2><p>Say it just like you would at the table.</p>
+        <IdeasBoard view={boardView} onView={setBoardView} cards={cards} loaded={loaded} busy={busy} now={now} connected={connected} onOpen={open} onTry={id=>{open(id);trial.open(id);}} />
+        {next && <button class="big-btn secondary ideas-more" type="button" disabled={busy} onClick={()=>void more()}>Earlier ideas</button>}
+        <section ref={newIdea} tabIndex={-1} class="idea-paper new-idea" aria-labelledby="new-idea-title"><h2 id="new-idea-title">What would make the game better?</h2><p>Say it just like you would at the table. This is your place to make it happen.</p>
           <Composer key="new" token={token} selected={null} onBusy={setBusy} onSent={sent} onError={setError} />
           <p class="idea-help">We’ll make a version for you to try. You can ask questions and suggest more changes right on your card.</p>
         </section>
-        <h2 class="ideas-board-title">Around the table</h2>
-        {!loaded ? <p role="status">Opening the board…</p> : !cards.length ? <p>No ideas yet. Yours can be the first.</p> :
-          <div class="ideas-grid">{cards.map(card=><button type="button" key={card.id} class="idea-paper idea-card" disabled={busy} onClick={()=>open(card.id)}>
-            <span class="idea-meta">{card.name} · Idea {card.number}</span><h3>{card.title}</h3><IdeaActivity card={card} now={now} connected={connected} compact /><span class="idea-open">Open conversation →</span>
-          </button>)}</div>}
-        {next && <button class="big-btn secondary" type="button" onClick={()=>void more()}>Earlier ideas</button>}
       </>}
-      <p class="idea-help">Your family can read and reply to these cards. Changes are reviewed before they join everyone’s game.</p>
+      <p class="idea-help">Everyone with family access can explore these ideas and add their voice. Changes are reviewed before they join everyone’s game.</p>
     </>}
     {saved && <p role="status" class="idea-notice">{saved}</p>}
     {error && <p role="alert" class="idea-error">{error} Your unsent reply stays here.</p>}

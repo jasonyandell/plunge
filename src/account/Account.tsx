@@ -3,7 +3,7 @@ import type { ComponentChildren } from 'preact';
 import { startRegistration, startAuthentication, browserSupportsWebAuthn,
   type PublicKeyCredentialCreationOptionsJSON, type PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser';
 import { TOKEN_KEY } from '../ideas/client';
-import { LIVE_PLUNGE } from '../ideas/model';
+import { LIVE_PLUNGE, previewFor } from '../ideas/model';
 import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
 import { syncStats, type StatsStatus } from '../history/stats-sync';
 import { familyTable, ROOMS_ENABLED, roomUrl, saveSeat } from '../room/client';
@@ -124,6 +124,9 @@ function statsLines(s:StatsStatus,localOnly:boolean):string[] {
 }
 export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBackend;heading?:ComponentChildren}={}) {
   const api=backend.api;
+  const params = new URLSearchParams(location.search);
+  const previewPr = params.get('ideas-preview') ?? '', previewState = params.get('preview-state') ?? '';
+  const returningToDemo = backend === liveBackend && !QUESTIONS_LOCAL_ONLY && /^[1-9][0-9]{0,8}$/.test(previewPr) && /^[a-f0-9]{32}$/.test(previewState);
   const returnTo=connectionReturn(new URLSearchParams(location.search).get('returnTo'),location.origin);
   const returnToIdea=ideaAccountReturn(location.search);
   const [state,setState]=useState<State|null>(null),[members,setMembers]=useState<Person[]>([]),[name,setName]=useState(tableName);
@@ -178,8 +181,17 @@ export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBacke
   return <main class="ideas-page account-page">{heading}<header class="ideas-top"><a href="/">← Back to Plunge</a><span>Always welcome at the table</span></header>
     <div class="ideas-heading">{join||family||welcomed?<><h1>Welcome to Plunge</h1><p>Texas 42 with the family, free for everyone.</p></>
       :<><h1>Your Plunge account</h1><p>Sign in if you’d like. Playing is always open to everyone.</p></>}</div>
-    {returnToIdea && <section class="idea-paper"><h2>Back to your idea</h2>
-      {state?.account?.family ? <a class="big-btn" href={returnToIdea}>Continue to your idea →</a>
+    {returningToDemo && <section class="idea-paper"><h2>Continue to your dashboard demo</h2>
+      <p>{state?.account ? `Open demo ${previewPr} as ${state.account.name}. It will use your real family ideas and replies for up to an hour.` : 'Sign in below with your usual Plunge passkey, then open the dashboard demo here.'}</p>
+      {state?.account?.family ? <button class="big-btn" disabled={busy} onClick={()=>void run(async()=>{
+        const response = await fetch('/api/ideas-preview',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({pr:previewPr,state:previewState})});
+        const result = await response.json() as {token?:string;origin?:string;error?:string};
+        if (!response.ok || !result.token || result.origin !== previewFor(Number(previewPr))) throw new Error(result.error ?? 'Could not open the demo. Please try again.');
+        location.assign(`${result.origin}/?ideas=1#preview-session=${encodeURIComponent(result.token)}&preview-state=${previewState}`);
+      })}>Open dashboard demo →</button> : state?.account && <p>Ask to join the family below. Your existing family access is needed for this dashboard.</p>}
+    </section>}
+    {returnToIdea && <section class="idea-paper"><h2>{returnToIdea.includes('#') ? 'Back to your idea' : 'Back to family ideas'}</h2>
+      {state?.account?.family ? <a class="big-btn" href={returnToIdea}>{returnToIdea.includes('#') ? 'Continue to your idea →' : 'Open family ideas →'}</a>
         : <p>Sign in below with your family account. Your idea link stays here.</p>}
     </section>}
     {returnTo && <section class="idea-paper"><h2>Connect your chat companion</h2>
