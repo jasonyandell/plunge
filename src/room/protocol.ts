@@ -1,5 +1,5 @@
 import type { NativeReceipt } from '../ai/native';
-import type { PlayerId, PlayerEvent } from '../ai/players';
+import type { PlayerId, PlayerEvent, PlayerIdentity } from '../ai/players';
 import type { Action, GameState, Seat } from '../engine';
 import type { AuctionEvidence } from '../ai/auction';
 import type { HandRetry } from '../ui/store';
@@ -7,6 +7,16 @@ import type { HandRetry } from '../ui/store';
 export interface RoomCredentials { roomId: string; token: string; seat: Seat }
 /** `away`: absent long enough that Walt plays this seat until the person returns. */
 export interface RoomSeat { name: string; connected: boolean; away: boolean }
+export interface RoomHand {
+  sessionId: string;
+  game: GameState;
+  names: string[];
+  practice: boolean;
+  /** Recorded decision identities only; absent when the original version was not recorded. */
+  models?: readonly PlayerIdentity[];
+}
+/** Bound the room's saved snapshots and reconnect payload. */
+export const ROOM_HISTORY_LIMIT = 20;
 /** A table on the home screen's list: who is here now, and whether the door is open. */
 export interface ListedTable { roomId: string; standing: boolean; player?: PlayerId; open: boolean; started: boolean; updated: number; seats: ({ name: string; connected: boolean } | null)[] }
 
@@ -55,6 +65,8 @@ export interface RoomState {
   nativeReceipts: Record<string, string>; auctionSurveys: Record<string, AuctionEvidence>;
   /** Optional on snapshots from an older coordinator. */
   canUndo?: boolean; retry?: HandRetry | null; practiceHands?: readonly number[];
+  /** Completed hands before the current deal, oldest first; absent in older rooms. */
+  recentHands?: readonly RoomHand[];
   lastUndo?: { revision: number; seat: Seat; name: string } | null;
 }
 /** `revision` guards game-changing commands. A vote is keyed to its proposal instead. */

@@ -60,9 +60,10 @@ interface TableProps {
   seatNote?: (seat: Seat) => string | null;
   /** A shared table's extra menu entry. */
   menuExtra?: ComponentChildren;
+  onHistory?: () => void;
 }
 
-export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion, seatNote = () => null, menuExtra = null }: TableProps) {
+export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion, seatNote = () => null, menuExtra = null, onHistory }: TableProps) {
   // Every human decision below — tiles, bid/trump sheets, end cards — is
   // stamped with the generation this render shows (see liveDispatch).
   const dispatch = liveDispatch(rawDispatch, app.epoch);
@@ -155,6 +156,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
           {!app.room && <button type="button" class="hand-tool" disabled={!restartReady} onClick={askRestart}>
             &#8635; Play this hand again
           </button>}
+          {!app.room && onHistory && <button type="button" class="hand-tool" aria-haspopup="dialog" onClick={onHistory}>Prior hands</button>}
         </div>
       )}
       {(g.phase === 'playing' || showingLast) && (
@@ -230,6 +232,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
           dispatch={dispatch}
           onReview={g.tricks.length > 0 ? () => setReview(true) : undefined}
           scenario={scenario}
+          onHistory={scenario ? undefined : onHistory}
           practice={practice}
           onUndo={undoReady ? undo : undefined}
           onRestart={restartReady ? askRestart : undefined}
@@ -239,6 +242,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
         <GameOverSheet modelSummary={handPlayers(app.playerEvents, g.handNumber).map(p => `${p.name} · ${p.version}`).join(' + ')}
           g={g}
           dispatch={dispatch}
+          onHistory={scenario ? undefined : onHistory}
           onReview={g.tricks.length > 0 ? () => setReview(true) : undefined}
           practice={practice}
           onUndo={undoReady ? undo : undefined}

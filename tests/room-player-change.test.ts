@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { legalActions, newGame, PLUNGE_CONFIG, type Seat } from '../src/engine';
 import { playerEvent, playerIdentity, playerKey } from '../src/ai/players';
 import { describeProposal, describeResult } from '../src/room/VoteBar';
+import { handsForGame } from '../src/history/review';
 import { commandRoom, createRoom, joinRoom, PlungeRoom, settleRoom, type SavedRoom } from '../worker/rooms';
 import { newProposal, VOTE_RULES } from '../worker/room-votes';
 import type { IdeasDatabase } from '../worker/ideas';
@@ -87,6 +88,34 @@ describe('family model changes', () => {
     expect(settleRoom(room, both, 6000)).toBe(true);
     expect(room.state).toMatchObject({ player: 'native-partner', game, lastVote: { outcome: 'moot' } });
     expect(room.departedHands).toBeUndefined();
+  });
+
+  it('preserves completed-hand archives while keeping the new model game journal empty', () => {
+    const room = playingRoom(), completed = finishedHand('done-before-switch');
+    const earlier = { sessionId: 'older-game', game: finishedHand('older-game'), names: ['A', 'B', 'C', 'D'], practice: false };
+    room.state = { ...room.state, game: completed, recentHands: [earlier] };
+    propose(room); vote(room, 'yes');
+    const archive = room.state.recentHands!;
+    expect(archive).toEqual([earlier, { sessionId: 'switch-room', game: completed,
+      names: ['Host', 'Walt 2', 'Partner', 'Walt 4'], practice: true, models: [playerIdentity('native-partner')] }]);
+    expect(archive[0]!.models).toBeUndefined();
+    expect(handsForGame(archive, room.state.sessionId)).toEqual([]);
+    expect(room.departedHands![0]!.record).toMatchObject({ gameId: 'switch-room', player: 'native-partner' });
+    commandRoom(room, 0, { type: 'propose', id: 'start', revision: room.state.revision, kind: 'start' }, both, 4003);
+    vote(room, 'yes', 'start');
+    expect(room.state.player).toBe('zeb');
+    expect(room.state.recentHands).toEqual(archive);
+    expect(handsForGame(room.state.recentHands!, room.state.sessionId)).toEqual([]);
+  });
+
+  it('never assigns today’s model version to a legacy hand whose decisions lack recorded identities', () => {
+    const room = playingRoom();
+    room.state = { ...room.state, game: finishedHand('legacy-switch') };
+    delete room.state.playerEvents;
+    propose(room); vote(room, 'yes');
+    expect(room.state.recentHands).toHaveLength(1);
+    expect(room.state.recentHands![0]!.models).toBeUndefined();
+    expect(room.state.player).toBe('zeb');
   });
 
   it('persists a departing hand with the new lobby, and retries the durable outbox after a database outage and restart', async () => {

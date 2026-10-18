@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ScreenshotInfo, ScreenshotUpload } from './screenshots';
 import { encodePicture, loadPicture, screenshotUrl } from './screenshot-client';
+import { ideasFetch } from './client';
 
 export function Screenshot({image,token}:{image:ScreenshotInfo;token:string}) {
   const [url,setUrl]=useState(''),[error,setError]=useState(false),[attempt,setAttempt]=useState(0),[open,setOpen]=useState(false);
   useEffect(()=>{let objectUrl='',disposed=false;const controller=new AbortController();setError(false);setUrl('');
-    void fetch(`/api/ideas/attachments/${image.id}`,{credentials:'same-origin',headers:token?{Authorization:`Bearer ${token}`}:{},cache:'no-store',signal:controller.signal})
+    void ideasFetch(token,`/attachments/${image.id}`,{signal:controller.signal})
       .then(async response=>{if(!response.ok)throw new Error('Unavailable');return response.blob();})
       .then(blob=>{if(!disposed){objectUrl=URL.createObjectURL(blob);setUrl(objectUrl);}}).catch(()=>{if(!disposed)setError(true);});
     return()=>{disposed=true;controller.abort();if(objectUrl)URL.revokeObjectURL(objectUrl);};

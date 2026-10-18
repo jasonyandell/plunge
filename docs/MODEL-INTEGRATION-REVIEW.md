@@ -47,6 +47,27 @@ unmerged feature. Passing checks on the old heads do not test their resolutions
 against today's combined app. #49 and older untouched PRs fall outside this
 time window.
 
+### Follow-up after main advanced
+
+Rechecked on 2026-10-17 (2026-10-18 UTC) against main
+`67aaae7`. #58 and completed-hand review #37 have now merged. Both are
+integrated into this branch. The hand-review merge needed explicit preservation
+of capability-based dealing, archived model identities and game-scoped history.
+Finished hands retain their original models; switching starts an empty visible
+journal without deleting older records. Old archives with no model version
+remain unspecified.
+
+New [#66 stats replay](https://github.com/jasonyandell/plunge/pull/66), inspected at
+`6f460a92cd3f9cd06d64b1ec19ba4cb91eeced7b`, adds hand cards and a replay seat
+picker without displaying `record.models` or `record.playerEvents`. Computer
+seats appear as “Recorded player,” which would make Zeb/Walt provenance invisible
+in that new flow even though this branch records it. Preserve its human names,
+add recorded model/version labels to the hand and per-seat replay, and exercise
+legacy unknown versions and mixed/Nel-O coverage when integrating it. Its
+`worker/stats.ts` change also meets this branch's model-stat additions and needs
+combined tests. This is a follow-up integration finding, not a request to merge
+or rewrite #66 here.
+
 ## Boundary for the future cast
 
 The registry separates a stable character from a versioned implementation.

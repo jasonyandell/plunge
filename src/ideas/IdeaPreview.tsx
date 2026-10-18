@@ -39,7 +39,7 @@ export function IdeaPreview({pr,title,onClose}:{pr:number;title:string;onClose:(
       {loading && <p class="idea-trial-notice" role="status">{slow?'The game is taking a while to open. You can try again or go back to your idea.':'Opening your game…'}</p>}
       {slow && <button class="idea-trial-back" onClick={()=>{setSlow(false);setLoading(true);setAttempt(n=>n+1);}}>Try again</button>}
       <iframe key={attempt} title={`Try your change: ${title}`} src={previewFor(pr)}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-downloads allow-popups allow-popups-to-escape-sandbox"
         onLoad={()=>{setLoading(false);setSlow(false);}} />
     </>}
   </section>;

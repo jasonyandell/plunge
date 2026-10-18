@@ -26,6 +26,7 @@ interface EndSheetProps extends SheetProps {
   modelSummary?: string;
   /** Swap to the hand-review card (trick-by-trick history). */
   onReview?: (() => void) | undefined;
+  onHistory?: (() => void) | undefined;
   /** Viewing a shared hand (view-only) — no next hand to shake. */
   scenario?: boolean | undefined;
   /** This hand was undone or replayed (practice, not counted in stats). */
@@ -223,7 +224,7 @@ function declTitle(d: Declaration): string {
 // Hand over / game over
 // ---------------------------------------------------------------------------
 
-export function HandOverSheet({ g, dispatch, onReview, scenario, practice, onUndo, onRestart, modelSummary }: EndSheetProps) {
+export function HandOverSheet({ g, dispatch, onReview, onHistory, scenario, practice, onUndo, onRestart, modelSummary }: EndSheetProps) {
   const copy = handOverCopy(g);
   return (
     <div class="overlay">
@@ -254,13 +255,14 @@ export function HandOverSheet({ g, dispatch, onReview, scenario, practice, onUnd
             See how it went
           </button>
         )}
+        {onHistory && <button type="button" class="text-btn" onClick={onHistory}>Prior hands</button>}
         {!scenario && <RetryLinks onUndo={onUndo} onRestart={onRestart} />}
       </div>
     </div>
   );
 }
 
-export function GameOverSheet({ g, dispatch, onReview, practice, onUndo, onRestart, modelSummary }: EndSheetProps) {
+export function GameOverSheet({ g, dispatch, onReview, onHistory, practice, onUndo, onRestart, modelSummary }: EndSheetProps) {
   const copy = gameOverCopy(g);
   const won = g.winner === 0;
   return (
@@ -286,6 +288,7 @@ export function GameOverSheet({ g, dispatch, onReview, practice, onUndo, onResta
             See how it went
           </button>
         )}
+        {onHistory && <button type="button" class="text-btn" onClick={onHistory}>Prior hands</button>}
         <RetryLinks onUndo={onUndo} onRestart={onRestart} />
         <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'home' })}>
           Back home

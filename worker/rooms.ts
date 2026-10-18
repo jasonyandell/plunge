@@ -10,7 +10,7 @@ import { dealForPlayer } from '../src/ai/player-game';
 import { planPlayerChange } from '../src/ai/player-change';
 import type { AuctionEvidence } from '../src/ai/auction';
 import type { Knock, ListedTable, Proposal, ProposalKind, RoomCommand, RoomCredentials, RoomState, VoteResult } from '../src/room/protocol';
-import { CLOSE_EXPIRED, CLOSE_OTHER_TAB, CLOSE_PAUSED, CLOSE_SEAT_GONE, ROOM_ID, VISITOR_ID } from '../src/room/protocol';
+import { CLOSE_EXPIRED, CLOSE_OTHER_TAB, CLOSE_PAUSED, CLOSE_SEAT_GONE, ROOM_ID, VISITOR_ID, ROOM_HISTORY_LIMIT } from '../src/room/protocol';
 import { roomAuctionConfig, roomUndoTarget, upgradeRoom } from './room-undo';
 import { newProposal, objector, PROPOSAL_KINDS, proposalStatus } from './room-votes';
 import { handRecordOf } from '../src/history/legacy';
@@ -170,7 +170,20 @@ export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), n
 }
 
 // --- Effects: the same code whether a person taps or a vote passes ----------
+/** Archive only when leaving a finished hand, so takebacks keep its final version. */
+function archiveHand(room: SavedRoom): void {
+  const { game, sessionId } = room.state;
+  if (!game || (game.phase !== 'hand-over' && game.phase !== 'game-over')) return;
+  const hands = (room.state.recentHands ?? []).filter(hand => hand.sessionId !== sessionId || hand.game.handNumber !== game.handNumber);
+  const models = handPlayers(room.state.playerEvents, game.handNumber);
+  room.state = { ...room.state, recentHands: [...hands, {
+    sessionId, game, names: [0, 1, 2, 3].map(seat => seatName(room, seat as Seat)),
+    practice: room.state.practiceHands?.includes(game.handNumber) ?? false,
+    ...(models.length ? { models } : {}),
+  }].slice(-ROOM_HISTORY_LIMIT) };
+}
 function startGame(room: SavedRoom): void {
+  archiveHand(room);
   const seed = randomKey(16), sessionId = randomKey(16);
   room.state = { ...room.state, seed, sessionId, game: dealForPlayer(newGame(PLUNGE_CONFIG, seed), seed, room.state.player),
     started: true, holdUntil: 0, thinkingSeat: null, nativeReceipts: {}, decisionReceipts: {}, playerEvents: [], modelKey: playerKey(room.state.player), auctionSurveys: {},
@@ -183,6 +196,7 @@ function advance(room: SavedRoom, legal: Action, now: number, human: boolean, re
   if (legal.type === 'next-hand') {
     next = roomAuctionConfig(next);
     next = dealForPlayer(next, room.state.seed, room.state.player);
+    archiveHand(room);
     room.humanSteps = { handNumber: next.handNumber, indices: [] };
   } else if (human) {
     room.humanSteps!.indices = [...room.humanSteps!.indices, handSteps(game).length];
@@ -235,6 +249,7 @@ function applyProposal(room: SavedRoom, proposal: Proposal, now: number): boolea
       if (change.kind === 'unchanged') return false;
       // Saved proposals from older clients must never acquire a new destructive meaning.
       if (proposal.mode !== 'allow' || proposal.needs !== 'all' || (change.endsGame && !proposal.endsGame)) return false;
+      archiveHand(room);
       const departed = roomHandEntry(room);
       if (departed) room.departedHands = [...(room.departedHands ?? []), departed];
       room.state = { ...room.state, player: change.to, modelKey: playerKey(change.to), game: null, seed: '', sessionId: '', started: false,
