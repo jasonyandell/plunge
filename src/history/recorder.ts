@@ -59,7 +59,7 @@ export async function appendSnapshot(snapshot: Snapshot): Promise<void> {
     tx.onabort = tx.onerror = () => reject(tx.error ?? new Error('History could not be saved.'));
   });
 }
-const pending = new Map<string, AppState>();
+const pending = new Map<string, { app: AppState; leaving: boolean }>();
 const staged = new Map<string, string>();
 const STAGING = 'plunge:history:pending:';
 /**
@@ -71,20 +71,27 @@ export async function recordHistory(app: AppState, leaving = false): Promise<voi
   const snapshot = snapshotOf(app);
   if (!snapshot) return;
   const key = JSON.stringify(snapshot);
-  pending.set(key, app);
+  const wasLeaving = pending.get(key)?.leaving ?? false;
+  leaving ||= wasLeaving;
+  const entryState = { app, leaving };
+  pending.set(key, entryState);
   // Stage synchronously before IndexedDB/hash awaits: reloads recover even an
   // action immediately followed by closing the tab. Separate keys avoid tabs
   // overwriting one shared outbox. Storage failure leaves the memory retry.
   if (!staged.has(key) && typeof localStorage !== 'undefined') {
     const entry = STAGING + crypto.randomUUID();
-    try { localStorage.setItem(entry, JSON.stringify(app)); staged.set(key, entry); }
+    try { localStorage.setItem(entry, JSON.stringify({ ...app, historyLeaving: leaving })); staged.set(key, entry); }
     catch { /* IndexedDB can still succeed independently. */ }
+  } else if (leaving && !wasLeaving && typeof localStorage !== 'undefined') {
+    try { localStorage.setItem(staged.get(key)!, JSON.stringify({ ...app, historyLeaving: true })); }
+    catch { /* The pending memory copy still retains the departure. */ }
   }
   await appendSnapshot(snapshot);
   // Every attempt gets its own record under its branch id; the first attempt's record is left as written.
   const g = app.game!, done = g.phase === 'hand-over' || g.phase === 'game-over';
   if (!snapshot.room && (done || leaving)) await recordHand(g, questionGameId(app), app.settings.difficulty, app.practiceHands ?? [],
     { build: BUILD_ID, models: snapshot.models, playerEvents: snapshot.playerEvents });
+  if (pending.get(key) !== entryState) return; // A newer departure still owns its durable staging entry.
   pending.delete(key);
   const entry = staged.get(key);
   if (entry && typeof localStorage !== 'undefined') localStorage.removeItem(entry);
@@ -94,12 +101,12 @@ export async function retryHistory(): Promise<void> {
   if (typeof localStorage !== 'undefined') {
     const entries = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).filter((key): key is string => !!key?.startsWith(STAGING));
     for (const entry of entries) {
-      const app = JSON.parse(localStorage.getItem(entry)!) as AppState;
+      const app = JSON.parse(localStorage.getItem(entry)!) as AppState & { historyLeaving?: boolean };
       const snapshot = snapshotOf(app);
-      if (snapshot) { const key = JSON.stringify(snapshot); pending.set(key, app); staged.set(key, entry); }
+      if (snapshot) { const key = JSON.stringify(snapshot); pending.set(key, { app, leaving: app.historyLeaving === true || (pending.get(key)?.leaving ?? false) }); staged.set(key, entry); }
     }
   }
-  for (const app of [...pending.values()]) await recordHistory(app);
+  for (const { app, leaving } of [...pending.values()]) await recordHistory(app, leaving);
 }
 export async function listHistory(): Promise<unknown[]> {
   const db = await historyDb();
@@ -124,7 +131,7 @@ export async function exportHistory(): Promise<string> {
   }).catch(() => { unavailableStores.push('receipts'); return []; });
   const unique = <T extends { id: string }>(values: T[]) => [...new Map(values.map(value => [value.id, value])).values()];
   return JSON.stringify({ schema: 'plunge-history-export-v1', exportedAt: new Date().toISOString(),
-    build: BUILD_ID, events: await listHistory().catch(() => { unavailableStores.push('events'); return []; }), pending: [...pending.values()].map(snapshotOf),
+    build: BUILD_ID, events: await listHistory().catch(() => { unavailableStores.push('events'); return []; }), pending: [...pending.values()].map(({ app }) => snapshotOf(app)),
     hands: await listHands().catch(() => { unavailableStores.push('hands'); return []; }), receipts: unique([...receipts, ...sessionReceipts()]),
     estimates: unique([...(await listEstimates().catch(() => { unavailableStores.push('estimates'); return []; })), ...sessionEstimates()]),
     rescuedJournal: await readExistingDatabase('plunge-records'),

@@ -44,7 +44,7 @@ try {
   if (model === 'Zeb') {
     await a.getByRole('radio', { name: 'Zeb', exact: true }).click();
     await b.getByText('Host wants Zeb to play the computer seats').waitFor();
-    await b.getByRole('button', { name: 'Fine', exact: true }).click();
+    await b.getByRole('button', { name: 'Yes', exact: true }).click();
     await until(async () => (await state(a)).player === 'zeb' && (await state(b)).player === 'zeb', 10000, 'Zeb agreed', a);
     check('Both people agreed to Zeb; all phones share its versioned selection.');
   }
@@ -96,6 +96,36 @@ try {
   const modelEvents = (await state(a)).playerEvents ?? [];
   if (!modelEvents.length || modelEvents.some(e => e.model.name !== model)) throw new Error('Wrong model in room action log.');
   check(`${model} played a real move; both phones retain the original scores and the partner has a projected receipt.`);
+  const other = model === 'Zeb' ? 'Walt' : 'Zeb', oldSession = (await state(a)).sessionId;
+  await a.getByRole('button', { name: 'Table', exact: true }).click();
+  await a.getByRole('radio', { name: other, exact: true }).click();
+  await a.getByRole('dialog', { name: `Switch to ${other}?`, exact: true }).waitFor();
+  await a.screenshot({ path: join(out, 'switch-warning.png') });
+  await a.getByRole('button', { name: `Keep ${model}`, exact: true }).click();
+  if ((await state(a)).sessionId !== oldSession || (await state(a)).proposal) throw new Error('Cancelled model switch changed the family game.');
+  await a.getByRole('radio', { name: other, exact: true }).click();
+  await a.getByRole('button', { name: 'Ask to end game and switch', exact: true }).click();
+  await b.getByText(`Host wants to end this game and switch to ${other}`, { exact: true }).waitFor();
+  await b.getByRole('button', { name: 'No', exact: true }).click();
+  await until(async () => !(await state(a)).proposal, 10000, 'model change declined', a);
+  if ((await state(a)).sessionId !== oldSession || !(await state(a)).game) throw new Error('Declined model switch ended the family game.');
+  check('Cancelling the warning or declining the vote keeps the existing family game.');
+  await a.getByRole('button', { name: 'Table', exact: true }).click();
+  await a.getByRole('radio', { name: other, exact: true }).click();
+  await a.getByRole('button', { name: 'Ask to end game and switch', exact: true }).click();
+  await b.getByRole('button', { name: 'End game & switch', exact: true }).click();
+  await a.getByRole('heading', { name: 'Pull up a chair', exact: true }).waitFor();
+  await b.getByRole('heading', { name: 'Pull up a chair', exact: true }).waitFor();
+  const lobby = await state(a);
+  if (lobby.game || lobby.started || lobby.sessionId || lobby.playerEvents.length || Object.keys(lobby.nativeReceipts).length || lobby.seats[2]?.name !== 'Guest') throw new Error('Model switch did not reset the family game while keeping its seats.');
+  check('Explicit agreement ends the game for both phones and returns the same people to a clean lobby.');
+  // Return to the original model before the remaining room lifecycle checks.
+  await a.getByRole('radio', { name: model, exact: true }).click();
+  await b.getByRole('button', { name: 'Yes', exact: true }).click();
+  await a.getByRole('button', { name: `Start with 2 people + ${model}`, exact: true }).click();
+  await b.getByRole('button', { name: 'Fine', exact: true }).click();
+  await until(async () => !!(await state(a)).game && (await state(a)).sessionId !== oldSession, 10000, 'fresh game after model switch', a);
+  if ((await state(a)).game.marks.some(n => n !== 0)) throw new Error('The new game kept old marks.');
   await b.getByRole('button', { name: 'Table', exact: true }).click(); await b.getByRole('button', { name: 'Close the table' }).click();
   await a.getByText('Guest wants to close the table').waitFor({ timeout: 10000 }); await a.getByRole('button', { name: 'Fine' }).click();
   await until(async () => (await state(a))?.open === false, 10000, 'closed', a); check('The table closed by vote.');

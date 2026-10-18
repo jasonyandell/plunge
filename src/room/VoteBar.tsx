@@ -6,7 +6,9 @@ import { neededYes } from '../../worker/room-votes';
 
 export function describeProposal(p: Proposal): string {
   switch (p.kind) {
-    case 'player': return `${p.byName} wants ${playerLabel(p.player)} to play the computer seats`;
+    case 'player': return p.endsGame
+      ? `${p.byName} wants to end this game and switch to ${playerLabel(p.player)}`
+      : `${p.byName} wants ${playerLabel(p.player)} to play the computer seats`;
     case 'start': return `${p.byName} wants to start the game`;
     case 'restart': return `${p.byName} wants to start over`;
     case 'next-hand': return `${p.byName} is ready for the next hand`;
@@ -21,6 +23,7 @@ const DONE: Record<VoteResult['kind'], string> = { player: 'Computer player chan
 const ASK: Record<VoteResult['kind'], string> = { player: 'changing the computer player', start: 'starting', restart: 'starting over', 'next-hand': 'the next hand',
   undo: 'the takeback', open: 'opening the table', close: 'closing the table', kick: 'that' };
 export function describeResult(r: VoteResult, model = 'Walt'): string {
+  if (r.outcome === 'passed' && r.kind === 'player') return `${r.endsGame ? 'Game ended · ' : ''}${playerLabel(r.player)} selected · Ready for a new game`;
   if (r.outcome === 'passed') return r.kind === 'kick' ? `${r.targetName ?? 'A chair'} stepped out · ${model} plays that seat` : `${DONE[r.kind]} · ${r.byName} asked, the table agreed`;
   if (r.outcome === 'failed') return r.noFrom ? `${r.noFrom} said no to ${ASK[r.kind]}` : `Nobody answered ${r.byName} about ${ASK[r.kind]}`;
   return `Nothing left for ${ASK[r.kind]}`;
@@ -40,15 +43,20 @@ export function VoteBar({ proposal, seat, seats, vote, pending }: {
 }) {
   const left = useCountdown(proposal.deadline), seconds = Math.ceil(left / 1000);
   const mine = seat === null ? undefined : proposal.votes[seat];
-  const canVote = seat !== null && proposal.target !== seat && !pending;
+  const canVote = seat !== null && proposal.target !== seat && !pending
+    && (!proposal.electorate || proposal.electorate.includes(seat));
   const text = proposal.kind === 'kick' && proposal.target !== undefined
     ? `${proposal.byName} asks ${seats[proposal.target]?.name ?? 'that chair'} to step out` : describeProposal(proposal);
   // The same arithmetic as the coordinator, over the seats it would count.
-  const present = seats.filter((s, i) => s && s.connected && !s.away && i !== proposal.target).length;
-  const yes = Object.values(proposal.votes).filter(v => v === 'yes').length;
+  const present = proposal.kind === 'player' && proposal.electorate ? proposal.electorate.length
+    : seats.filter((s, i) => s && s.connected && !s.away && i !== proposal.target).length;
+  const yes = proposal.kind === 'player' && proposal.electorate
+    ? proposal.electorate.filter(seat => proposal.votes[seat] === 'yes').length
+    : Object.values(proposal.votes).filter(v => v === 'yes').length;
   const more = Math.max(0, neededYes(proposal.needs, present) - yes);
   const nextHand = proposal.kind === 'next-hand';
-  const note = proposal.mode === 'veto' ? `Goes ahead in ${seconds}s unless someone says no`
+  const note = proposal.kind === 'player' ? `${proposal.endsGame ? 'Everyone returns to the lobby. ' : ''}Everyone here must say yes · ${seconds}s`
+    : proposal.mode === 'veto' ? `Goes ahead in ${seconds}s unless someone says no`
     : nextHand ? `Shakes when ${more === 1 ? 'one more person is' : `${more} more people are`} ready · ${seconds}s`
     : `Needs ${more === 1 ? 'a yes' : `${more} more yes`} within ${seconds}s`;
   return <div class={`vote-bar vote-${proposal.mode}`} role="status" data-proposal={proposal.id} data-kind={proposal.kind}>
@@ -56,7 +64,7 @@ export function VoteBar({ proposal, seat, seats, vote, pending }: {
     {seat === null ? null : proposal.target === seat ? <span class="vote-you">The table decides</span>
       : mine ? <span class="vote-you">{nextHand && mine === 'yes' ? 'You are ready' : `You said ${mine}`}</span>
       : <div class="vote-buttons">
-        <button class="vote-yes" disabled={!canVote} onClick={() => vote('yes')}>{nextHand ? 'Ready' : proposal.mode === 'veto' ? 'Fine' : 'Yes'}</button>
+        <button class="vote-yes" disabled={!canVote} onClick={() => vote('yes')}>{proposal.kind === 'player' && proposal.endsGame ? 'End game & switch' : nextHand ? 'Ready' : proposal.mode === 'veto' ? 'Fine' : 'Yes'}</button>
         <button class="vote-no" disabled={!canVote} onClick={() => vote('no')}>{proposal.mode === 'veto' ? 'Wait, no' : nextHand ? 'Not yet' : 'No'}</button>
       </div>}
   </div>;

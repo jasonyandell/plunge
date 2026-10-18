@@ -5,8 +5,9 @@ import { observe } from '../src/ai/observation';
 import type { NativeReceipt } from '../src/ai/native';
 import { applyAction, toSeed, legalActions, newGame, PLUNGE_CONFIG, type Action, type GameState, type Seat } from '../src/engine';
 import { handSteps } from '../src/engine/hand-history';
-import { playerId, playerKey, playerLabel, playerEvent, handPlayers, effectivePlayer, isPlayer, player, type PlayerId } from '../src/ai/players';
-import { catalogueDeal } from '../src/ai/catalogue';
+import { playerId, playerKey, playerLabel, playerEvent, handPlayers, effectivePlayer, isPlayer, player, usesForecastBidding, type PlayerId } from '../src/ai/players';
+import { dealForPlayer } from '../src/ai/player-game';
+import { planPlayerChange } from '../src/ai/player-change';
 import type { AuctionEvidence } from '../src/ai/auction';
 import type { Knock, ListedTable, Proposal, ProposalKind, RoomCommand, RoomCredentials, RoomState, VoteResult } from '../src/room/protocol';
 import { CLOSE_EXPIRED, CLOSE_OTHER_TAB, CLOSE_PAUSED, CLOSE_SEAT_GONE, ROOM_ID, VISITOR_ID } from '../src/room/protocol';
@@ -71,6 +72,8 @@ export interface SavedRoom {
   former?: { token: string; reason: 'kicked' | 'left' }[];
   /** Hand attempts already handed to the stats database (worker/stats.ts). */
   recordedHands?: string[];
+  /** Departing games travel with the durable room save until the hand outbox takes them. */
+  departedHands?: HandEntry[];
 }
 export class ClosedTable extends Error { readonly closed = true; }
 export function cleanName(value: unknown): string {
@@ -169,7 +172,7 @@ export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), n
 // --- Effects: the same code whether a person taps or a vote passes ----------
 function startGame(room: SavedRoom): void {
   const seed = randomKey(16), sessionId = randomKey(16);
-  room.state = { ...room.state, seed, sessionId, game: player(room.state.player).deal === 'shuffle' ? newGame(PLUNGE_CONFIG, seed) : catalogueDeal(newGame(PLUNGE_CONFIG, seed), seed),
+  room.state = { ...room.state, seed, sessionId, game: dealForPlayer(newGame(PLUNGE_CONFIG, seed), seed, room.state.player),
     started: true, holdUntil: 0, thinkingSeat: null, nativeReceipts: {}, decisionReceipts: {}, playerEvents: [], modelKey: playerKey(room.state.player), auctionSurveys: {},
     retry: null, practiceHands: [], lastUndo: null };
   room.humanSteps = { handNumber: 1, indices: [] };
@@ -179,7 +182,7 @@ function advance(room: SavedRoom, legal: Action, now: number, human: boolean, re
   let next = applyAction(game, legal);
   if (legal.type === 'next-hand') {
     next = roomAuctionConfig(next);
-    if (player(room.state.player).deal === 'catalogue') next = catalogueDeal(next, room.state.seed);
+    next = dealForPlayer(next, room.state.seed, room.state.player);
     room.humanSteps = { handNumber: next.handNumber, indices: [] };
   } else if (human) {
     room.humanSteps!.indices = [...room.humanSteps!.indices, handSteps(game).length];
@@ -226,9 +229,20 @@ function checkProposal(room: SavedRoom, kind: ProposalKind, by: Seat, target: Se
 function applyProposal(room: SavedRoom, proposal: Proposal, now: number): boolean {
   checkProposal(room, proposal.kind, proposal.by, proposal.target, now);
   switch (proposal.kind) {
-    case 'player':
+    case 'player': {
       if (!isPlayer(proposal.player)) throw new Error('Choose an available computer player.');
-      room.state = { ...room.state, player: proposal.player, modelKey: playerKey(proposal.player), thinkingSeat: null }; return true;
+      const change = planPlayerChange(room.state.player, proposal.player, room.state.game);
+      if (change.kind === 'unchanged') return false;
+      // Saved proposals from older clients must never acquire a new destructive meaning.
+      if (proposal.mode !== 'allow' || proposal.needs !== 'all' || (change.endsGame && !proposal.endsGame)) return false;
+      const departed = roomHandEntry(room);
+      if (departed) room.departedHands = [...(room.departedHands ?? []), departed];
+      room.state = { ...room.state, player: change.to, modelKey: playerKey(change.to), game: null, seed: '', sessionId: '', started: false,
+        thinkingSeat: null, holdUntil: 0, playerEvents: [], nativeReceipts: {}, decisionReceipts: {}, auctionSurveys: {},
+        retry: null, practiceHands: [], lastUndo: null };
+      delete room.humanSteps;
+      return true;
+    }
     case 'start': case 'restart': startGame(room); return true;
     case 'next-hand': {
       const legal = legalActions(room.state.game!).find(action => action.type === 'next-hand');
@@ -259,7 +273,7 @@ export function settleRoom(room: SavedRoom, connected: ReadonlySet<Seat>, now = 
   if (!proposal) return false;
   const present = seated(room, connected), status = proposalStatus(proposal, present, now);
   if (status === 'open') return false;
-  const result: VoteResult = { revision: room.state.revision + 1, kind: proposal.kind, ...(proposal.player ? { player: proposal.player } : {}), byName: proposal.byName, outcome: status,
+  const result: VoteResult = { revision: room.state.revision + 1, kind: proposal.kind, ...(proposal.player ? { player: proposal.player, endsGame: proposal.endsGame } : {}), byName: proposal.byName, outcome: status,
     ...(proposal.target !== undefined ? { targetName: seatName(room, proposal.target) } : {}) };
   if (status === 'failed') { const who = objector(proposal, present); if (who !== undefined) result.noFrom = seatName(room, who); }
   room.state = { ...room.state, proposal: null };
@@ -324,6 +338,8 @@ export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
     if (!proposal || proposal.id !== command.proposal) throw new Error('That vote has already closed.');
     if (!['yes', 'no'].includes(command.vote)) throw new Error('Invalid room command.');
     if (proposal.target === seat) throw new Error('The rest of the table decides this one.');
+    if (proposal.kind === 'player' && proposal.endsGame && command.vote === 'yes' && command.endGame !== true)
+      throw new Error('This vote ends the current game. Refresh Plunge to see and confirm the change.');
     room.state = { ...room.state, proposal: { ...proposal, votes: { ...proposal.votes, [seat]: command.vote } } };
   } else if (command.type === 'door') {
     // The first person to answer decides; one yes is all a knock ever needed.
@@ -348,10 +364,15 @@ export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
       if (command.target !== undefined && ![0, 1, 2, 3].includes(command.target)) throw new Error('Invalid room command.');
       if (room.state.proposal) throw new Error('The table is already deciding something. One moment.');
       if (command.kind === 'player' && !isPlayer(command.player)) throw new Error('Choose an available computer player.');
+      const change = command.kind === 'player' ? planPlayerChange(room.state.player, command.player!, room.state.game) : null;
+      if (change?.kind === 'unchanged') return 'duplicate';
+      if (change?.kind === 'switch' && change.endsGame && command.endGame !== true)
+        throw new Error('Changing the computer player ends this game. Refresh Plunge and confirm the change.');
       checkProposal(room, command.kind, seat, command.target, now);
       const player = room.players[seat]!;
       room.state = { ...room.state, proposal: newProposal(command.id, command.kind, seat, player.name, now,
-        command.kind === 'player' ? { player: command.player! } : command.kind === 'kick' && command.target !== undefined ? { target: command.target } : {}) };
+        change?.kind === 'switch' ? { player: change.to, endsGame: change.endsGame, electorate: [...seated(room, connected)].sort() }
+          : command.kind === 'kick' && command.target !== undefined ? { target: command.target } : {}) };
     } else if (command.type === 'thinking') {
       const game = room.state.game;
       if (seat !== runner || (command.seat !== null && (!game || command.seat !== game.turn || !waltDrives(room, command.seat, connected, now))))
@@ -378,7 +399,7 @@ export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
       const legal = legalActions(game).find(candidate => JSON.stringify(candidate) === JSON.stringify(action));
       if (!legal) throw new Error('That move is not legal at this table.');
       if (command.receiptId !== undefined && !/^[a-f0-9]{64}$/.test(command.receiptId)) throw new Error('Invalid computer receipt.');
-      if (command.auction !== undefined && ((effectivePlayer(room.state.player, game) === 'zeb' ? command.auction.schema !== 'zeb-auction-v1' : !['plunge-played-auction-v1', 'walt-auction-v1'].includes(command.auction.schema))
+      if (command.auction !== undefined && ((usesForecastBidding(effectivePlayer(room.state.player, game)) ? command.auction.schema !== 'zeb-auction-v1' : !['plunge-played-auction-v1', 'walt-auction-v1'].includes(command.auction.schema))
         || command.auction.seat !== game.turn)) throw new Error('Invalid computer auction evidence.');
       if (command.receipt) {
         const r = command.receipt, expected = playRequestOf(observe(game, game.turn), { n: 40, n0: 8 });
@@ -429,10 +450,11 @@ export class PlungeRoom {
   }
   /**
    * Hand attempts worth keeping since the last look: a finished hand, and the
-   * branch a takeback left (the retry attempt rose on the same hand, however
-   * the table decided it). Each waits under its own storage key until the
-   * stats database takes it, so a failed write is retried on later activity
-   * and never bloats the room record. Database-free builds record nothing.
+   * branch a takeback left, and games ended by a model change. Departing
+   * games are already in the durable room record before this method runs.
+   * Each waits under its own storage key until the
+   * stats database takes it, so a failed write is retried on later activity.
+   * Without a database, departing hands remain in the room's durable queue.
    */
   private async recordHands(): Promise<void> {
     if (!this.room || !this.env.QUESTIONS) return;
@@ -444,7 +466,12 @@ export class PlungeRoom {
       const attempt = (state: RoomState, hand: number) => state.retry?.handNumber === hand ? state.retry.attempt : 0;
       if (before?.game && after.game && attempt(after, before.game.handNumber) > attempt(before, before.game.handNumber)) { const e = roomHandEntry(this.room, before); if (e) fresh.push(e); }
       if (after.game && (after.game.phase === 'hand-over' || after.game.phase === 'game-over')) { const e = roomHandEntry(this.room, after); if (e) fresh.push(e); }
-      if (fresh.length) { for (const entry of fresh) await this.ctx.storage.put(`hand:${handId(entry)}`, entry); await this.ctx.storage.put('room', this.room); }
+      const queued = [...(this.room.departedHands ?? []), ...fresh];
+      if (queued.length) {
+        for (const entry of queued) await this.ctx.storage.put(`hand:${handId(entry)}`, entry);
+        this.room.departedHands = [];
+        await this.ctx.storage.put('room', this.room);
+      }
       const pending = await this.ctx.storage.list<HandEntry>({ prefix: 'hand:' });
       if (!pending.size) return;
       await this.env.QUESTIONS.batch(handStatements(this.env.QUESTIONS, [...pending.values()]));

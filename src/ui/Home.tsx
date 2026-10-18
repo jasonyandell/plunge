@@ -2,8 +2,9 @@
  * Home, More, How-to-play, and About screens.
  */
 
-import { SELECTABLE_PLAYERS, player, playerVersion } from '../ai/players';
-import { DEEP_WORLDS, NATIVE_TABLE, isNative, nativeLabel } from '../ai/native';
+import { playerVersion } from '../ai/players';
+import { PlayerPicker } from './PlayerPicker';
+import { DEEP_WORLDS, NATIVE_TABLE } from '../ai/native';
 import { canRestart, canUndo, nelloAvailable, nelloPaused, type AppEvent, type AppState } from './store';
 import { Domino } from './Domino';
 import './home.css';
@@ -24,8 +25,6 @@ interface MoreProps extends HomeProps {
   onQuestions?: () => void;
   onHistory?: () => void;
 }
-
-const DIFFS = SELECTABLE_PLAYERS;
 
 const openRooms = () => { const url = new URL(location.href); url.searchParams.set('rooms', '1'); location.assign(url.href); };
 /** The home screen asks who is playing this often while it is on screen. */
@@ -153,22 +152,9 @@ export function More({ app, dispatch, onQuestions, onHistory }: MoreProps) {
           <HintsSwitch app={app} dispatch={dispatch} />
           <div class="setting">
             <span class="setting-label">Computer player</span>
-            <p class="setting-hint">Choose who plays the computer seats. At a family table, everyone votes on the choice.</p>
-            <p class="setting-hint">{playerVersion(app.settings.difficulty)}. {player(app.settings.difficulty).description} {app.settings.difficulty === 'zeb' && 'Walt covers Nel-O.'}</p>
-            <div class="seg" role="radiogroup" aria-label="Computer player">
-              {(app.settings.difficulty === 'native-l1' ? ['native-l1' as const, ...DIFFS] : DIFFS).map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  role="radio"
-                  aria-checked={app.settings.difficulty === d}
-                  class={`seg-btn${app.settings.difficulty === d ? ' on' : ''}`}
-                  onClick={() => dispatch({ type: 'set-difficulty', difficulty: d })}
-                >
-                  {isNative(d) ? nativeLabel(d) : d}
-                </button>
-              ))}
-            </div>
+            <p class="setting-hint">Changing players ends any game in progress. You’ll confirm before switching.</p>
+            <PlayerPicker selected={app.settings.difficulty} game={app.game} sessionId={app.sessionId}
+              onChoose={(difficulty, confirmed) => dispatch({ type: 'set-difficulty', difficulty, confirmed, sessionId: app.sessionId })} />
           </div>
           <div class="setting">
             <button type="button" role="switch" class="thinking-switch"

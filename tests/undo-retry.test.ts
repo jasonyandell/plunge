@@ -533,13 +533,13 @@ describe('a tap rendered before an undo or replay', () => {
 });
 
 describe('settings changed mid-hand', () => {
-  it('Walt version and Nel-O preview toggles during the auction keep Undo exact', () => {
+  it('an unconfirmed Walt change preserves the game while Nel-O toggles keep Undo exact', () => {
     const before = untilYou(dealWhereOthersBidAfterYou());
     let after = you(before); // computer bids still to come
     expect(after.game!.phase).toBe('bidding');
     expect(pendingAiSeat(after)).not.toBeNull();
     after = reducer(after, { type: 'set-nello-preview', enabled: true });
-    after = reducer(after, { type: 'set-difficulty', difficulty: 'native-l1' });
+    expect(reducer(after, { type: 'set-difficulty', difficulty: 'native-l1' })).toBe(after);
     expect(after.game!.config).toEqual(PLUNGE_CONFIG);
     expect(canUndo(after)).toBe(true);
     const undone = undo(after);

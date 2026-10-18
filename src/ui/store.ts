@@ -10,9 +10,10 @@
  */
 
 import type { Difficulty } from '../ai';
-import { playerEvent, playerId, validPlayerEvents, type PlayerEvent } from '../ai/players';
+import { isPlayer, playerEvent, playerId, validPlayerEvents, type PlayerEvent } from '../ai/players';
+import { planPlayerChange } from '../ai/player-change';
+import { dealForPlayer } from '../ai/player-game';
 import { chooseAction } from '../ai/table';
-import { catalogueDeal } from '../ai/catalogue';
 import { NATIVE_TABLE, isNative, playerName, requestOf, requestKey, checkedAction, type NativeReceipt, type FlagRecord } from '../ai/native';
 import { auctionKey, type AuctionDecision, type AuctionEvidence } from '../ai/auction';
 import {
@@ -176,7 +177,7 @@ export type ChooseFn = typeof chooseAction;
 
 export type AppEvent =
   | { readonly type: 'go'; readonly screen: Screen }
-  | { readonly type: 'set-difficulty'; readonly difficulty: Difficulty }
+  | { readonly type: 'set-difficulty'; readonly difficulty: Difficulty; readonly confirmed?: boolean; readonly sessionId?: string }
   | { readonly type: 'set-preset'; readonly preset: Preset }
   | { readonly type: 'set-think-deeper'; readonly enabled: boolean }
   | { readonly type: 'set-nello-preview'; readonly enabled: boolean }
@@ -394,6 +395,16 @@ export function reducer(s: AppState, e: AppEvent): AppState {
       return { ...s, screen: e.screen, scenarioGame: e.screen === 'home' ? null : s.scenarioGame,
         scenarioFlag: e.screen === 'home' ? null : s.scenarioFlag };
     case 'set-difficulty': {
+      if (s.room) return s; // Shared model changes are authoritative table votes.
+      if (isPlayer(e.difficulty)) {
+        const plan = planPlayerChange(s.settings.difficulty, e.difficulty, s.game);
+        if (plan.kind === 'unchanged' || (plan.endsGame && (!e.confirmed || e.sessionId !== s.sessionId))) return s;
+        return { ...s, settings: { ...s.settings, difficulty: plan.to, preset: 'tournament' },
+          screen: s.game ? 'home' : s.screen, game: null, seed: 'plunge', sessionId: 'no-game',
+          aiMoves: 0, showTrick: false, scenarioGame: null, scenarioFlag: null,
+          nativeReceipts: {}, auctionSurveys: {}, playerEvents: [], retry: null, practiceHands: [], epoch: s.epoch + 1 };
+      }
+      // Retained for old engine/difficulty fixtures; the product picker uses versioned players.
       const settings = { ...s.settings, difficulty: e.difficulty,
         preset: isNative(e.difficulty) ? 'tournament' as const : s.settings.preset };
       const next = { ...s, settings, game: configureAuction(s.game, settings), epoch:s.epoch+1 };
@@ -429,8 +440,8 @@ export function reducer(s: AppState, e: AppEvent): AppState {
         epoch: s.epoch + 1,
         retry: null,
         practiceHands: [],
-        game: isNative(s.settings.difficulty) && s.settings.difficulty !== 'zeb'
-          ? catalogueDeal(newGame(tableConfig(s.settings),e.seed),e.seed)
+        game: isNative(s.settings.difficulty)
+          ? dealForPlayer(newGame(tableConfig(s.settings),e.seed),e.seed,s.settings.difficulty)
           : newGame(tableConfig(s.settings),e.seed),
       };
     case 'resume':
@@ -456,7 +467,7 @@ export function reducer(s: AppState, e: AppEvent): AppState {
         game = applyAction(s.game, e.action);
         if (e.action.type === 'next-hand') {
           game = { ...game, config: tableConfig(s.settings) };
-          if (isNative(s.settings.difficulty) && s.settings.difficulty !== 'zeb') game = catalogueDeal(game,s.seed);
+          if (isNative(s.settings.difficulty)) game = dealForPlayer(game,s.seed,s.settings.difficulty);
         }
       } catch {
         return s; // defensive: stale tap / double tap — ignore

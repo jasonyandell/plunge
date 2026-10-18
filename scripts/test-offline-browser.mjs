@@ -143,6 +143,31 @@ try {
     check('Zeb selection, action identities, bidding hints and move hints survive offline, and both hint types save to the notebook.');
   }
 
+  stage='switch offline';
+  const other = player === 'Zeb' ? 'Walt' : 'Zeb';
+  await page.reload(); // Home retains the game between hands.
+  await page.getByRole('button', { name: 'More', exact: true }).click();
+  const beforeSwitch = await page.evaluate(() => localStorage.getItem('plunge:save:v1'));
+  await page.getByRole('radio', { name: other, exact: true }).click();
+  await page.getByRole('dialog', { name: `Switch to ${other}?`, exact: true }).waitFor();
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.screenshot({ path: join(out, 'switch-warning.png') });
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth
+    || [...document.querySelectorAll('dialog[open]')].some(d => d.scrollWidth > d.clientWidth))) throw new Error('Model warning overflows a narrow phone.');
+  await page.getByRole('button', { name: `Keep ${player}`, exact: true }).click();
+  if (await page.evaluate(() => localStorage.getItem('plunge:save:v1')) !== beforeSwitch) throw new Error('Cancelling changed the saved game.');
+  await page.getByRole('radio', { name: other, exact: true }).click();
+  await page.getByRole('button', { name: 'End game and switch', exact: true }).click();
+  await page.getByRole('button', { name: 'Deal me in', exact: true }).waitFor();
+  if (await page.getByRole('button', { name: 'Resume your game', exact: true }).count()) throw new Error('Ended game is still resumable.');
+  await page.reload();
+  const switched = await page.evaluate(() => JSON.parse(localStorage.getItem('plunge:save:v1')));
+  if (switched.game || switched.settings.difficulty !== (other === 'Zeb' ? 'zeb' : 'native-partner')
+    || switched.playerEvents.length || Object.keys(switched.nativeReceipts).length) throw new Error('The model switch did not persist cleanly.');
+  await page.screenshot({ path: join(out, 'switched-home.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  check(`Offline ${player} → ${other}: warning, cancellation, confirmed game end and reload all work.`);
+
   // A new version ships: only changed files download; Walt's copy carries over.
   stage='update';
   const sw = join(root, 'sw.js');

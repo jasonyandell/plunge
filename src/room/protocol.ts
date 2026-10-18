@@ -21,6 +21,10 @@ export interface Proposal {
   /** Seat a kick would empty. */
   target?: Seat;
   player?: PlayerId;
+  /** The coordinator's consequence, shown beside every vote. */
+  endsGame?: boolean;
+  /** Model changes keep the people who were asked: disconnecting is not agreement. */
+  electorate?: Seat[];
   at: number; deadline: number;
   votes: Partial<Record<Seat, Vote>>;
 }
@@ -28,7 +32,7 @@ export type ProposalOutcome = 'passed' | 'failed' | 'moot';
 export interface VoteResult {
   revision: number; kind: ProposalKind; byName: string; outcome: ProposalOutcome;
   /** Who said no, when that decided it. */
-  noFrom?: string; targetName?: string; player?: PlayerId;
+  noFrom?: string; targetName?: string; player?: PlayerId; endsGame?: boolean;
 }
 /** Someone at the door of a closed table. Not a vote: the first person at the table to
  * answer decides, whatever else the table is doing. Gone when they stop waiting. */
@@ -57,8 +61,8 @@ export interface RoomState {
 export type RoomCommand =
   | { type: 'action'; id: string; revision: number; action: Action; receiptId?: string; receipt?: NativeReceipt; auction?: AuctionEvidence; seat?: Seat; modelKey?: string }
   | { type: 'thinking'; id: string; revision: number; seat: Seat | null }
-  | { type: 'propose'; id: string; revision: number; kind: ProposalKind; target?: Seat; player?: PlayerId }
-  | { type: 'vote'; id: string; proposal: string; vote: Vote }
+  | { type: 'propose'; id: string; revision: number; kind: ProposalKind; target?: Seat; player?: PlayerId; endGame?: boolean }
+  | { type: 'vote'; id: string; proposal: string; vote: Vote; endGame?: boolean }
   | { type: 'leave'; id: string }
   | { type: 'knock'; id: string; name: string }
   | { type: 'door'; id: string; visitor: string; yes: boolean };

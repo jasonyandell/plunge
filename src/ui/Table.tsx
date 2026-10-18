@@ -11,7 +11,8 @@ import { playIndex } from '../engine/play-index';
  */
 
 import { PlayerBadge } from './PlayerBadge';
-import { handPlayers, playerLabel, SELECTABLE_PLAYERS } from '../ai/players';
+import { PlayerPicker } from './PlayerPicker';
+import { handPlayers, playerLabel, usesForecastBidding } from '../ai/players';
 import { useEffect, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import type { CompletedTrick, GameState, PlayRecord, Seat } from '../engine';
@@ -221,8 +222,8 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
       {saved && <div class="question-toast" role="status"><span>{saved.text}</span>{saved.id && <button class="text-btn" onClick={() => { onQuestion(saved.id); setSaved(null); }}>Add note</button>}</div>}
       {question && <MoveQuestionPrompt key={`${question.sessionId}:${question.game.handNumber}:${question.ply}`}
         target={question.target} label={question.label} onSave={() => bookmark(question)} onClose={() => setQuestion(null)} />}
-      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet bookSeat={app.room?.localSeat ?? 0} player={app.settings.difficulty==='zeb' ? 'zeb' : 'walt'} key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
-      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet bookSeat={app.room?.localSeat ?? 0} player={app.settings.difficulty==='zeb' ? 'zeb' : 'walt'} key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
+      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet bookSeat={app.room?.localSeat ?? 0} player={usesForecastBidding(app.settings.difficulty) ? 'zeb' : 'walt'} key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
+      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet bookSeat={app.room?.localSeat ?? 0} player={usesForecastBidding(app.settings.difficulty) ? 'zeb' : 'walt'} key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
       {g.phase === 'hand-over' && !showingLast && !review && (
         <HandOverSheet modelSummary={handPlayers(app.playerEvents, g.handNumber).map(p => `${p.name} · ${p.version}`).join(' + ')}
           g={g}
@@ -280,7 +281,8 @@ function GameMenu({ app, dispatch, onClose, onHome, extra }: {
     <div class="overlay game-menu-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div class="card game-menu" role="dialog" aria-label="Menu">
         <p class="setting-hint">Computer player: <PlayerBadge selected={app.settings.difficulty} game={app.game} /></p>
-        {!app.room && <div class="seg" role="radiogroup" aria-label="Computer player">{SELECTABLE_PLAYERS.map(id => <button role="radio" class={`seg-btn${app.settings.difficulty === id ? ' on' : ''}`} aria-checked={app.settings.difficulty === id} onClick={() => dispatch({ type: 'set-difficulty', difficulty: id })}>{playerLabel(id)}</button>)}</div>}
+        {!app.room && <PlayerPicker selected={app.settings.difficulty} game={app.game} sessionId={app.sessionId}
+          onChoose={(difficulty, confirmed) => dispatch({ type: 'set-difficulty', difficulty, confirmed, sessionId: app.sessionId })} />}
         <HintsSwitch app={app} dispatch={dispatch} />
         {extra}
         <button type="button" class="big-btn" onClick={onClose}>Keep playing</button>

@@ -46,7 +46,8 @@ describe('versioned computer players', () => {
     expect(PLAYERS.zeb.version).toBe(version());
     const a = reducer(initialApp(), { type: 'new-game', seed: 'identity', sessionId: 'model-log' });
     const first = reducer(a, { type: 'auction-ai', decision: { key: auctionKey(a.game!, a.sessionId), action: legalActions(a.game!)[0]!, survey: null } });
-    const switched = reducer(first, { type: 'set-difficulty', difficulty: 'zeb' });
+    // Historical mixed-model logs remain readable; new switches now end the game.
+    const switched = { ...first, settings: { ...first.settings, difficulty: 'zeb' as const }, epoch: first.epoch + 1 };
     const next = reducer(switched, { type: 'auction-ai', epoch: switched.epoch, decision: { key: auctionKey(switched.game!, switched.sessionId), action: legalActions(switched.game!)[0]!, survey: null } });
     expect(handPlayers(next.playerEvents, 1).map(m => m.id)).toEqual(['native-partner', 'zeb']);
     const storage = { getItem: () => JSON.stringify(toSaved(next)) };

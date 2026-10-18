@@ -5,13 +5,13 @@ import type { GameState, Seat } from '../engine';
 
 export const PLAYERS = {
   'native-partner': { character: 'walt', name: 'Walt', version: walt.player, implementation: walt.wasm_sha256,
-    receiptName: 'l1-partner-rollout', package: 'bundled:walt', deal: 'catalogue', nello: true,
-    description: 'Bids from recorded games, then studies each move with a partner check.' },
+    receiptName: 'l1-partner-rollout', package: 'bundled:walt', capabilities: { bidding: 'recorded-hands', nello: true },
+    description: 'Plays prepared hands with bids supplied by recorded games. Studies each move with a partner check.' },
   'native-l1': { character: 'walt', name: 'Walt L1', version: walt.player, implementation: walt.wasm_sha256,
-    receiptName: 'l1-default', package: 'bundled:walt', deal: 'catalogue', nello: true,
-    description: 'The original Walt analysis, without the partner check.' },
+    receiptName: 'l1-default', package: 'bundled:walt', capabilities: { bidding: 'recorded-hands', nello: true },
+    description: 'Plays prepared hands with bids supplied by recorded games. The original Walt analysis, without the partner check.' },
   zeb: { character: 'zeb', name: 'Zeb', version: zebPackage.version, implementation: `@jasonyandell/zeb@${zebPackage.version}`,
-    receiptName: `zeb-${zebPackage.version}`, package: zebPackage.name, deal: 'shuffle', nello: false,
+    receiptName: `zeb-${zebPackage.version}`, package: zebPackage.name, capabilities: { bidding: 'forecast', nello: false },
     description: 'Forecasts bids from your hand and reads public play. Every new hand is freshly shuffled.' },
 } as const;
 export type PlayerId = keyof typeof PLAYERS;
@@ -20,9 +20,12 @@ export const SELECTABLE_PLAYERS: readonly PlayerId[] = ['native-partner', 'zeb']
 export const isPlayer = (value: unknown): value is PlayerId => typeof value === 'string' && Object.hasOwn(PLAYERS, value);
 export const playerId = (value: unknown): PlayerId => isPlayer(value) ? value : DEFAULT_PLAYER;
 export const player = (value: unknown) => PLAYERS[playerId(value)];
+/** Prepared bidding evidence and forecasting imply different supported deal sources. */
+export const usesPreparedDeals = (value: unknown): boolean => player(value).capabilities.bidding === 'recorded-hands';
+export const usesForecastBidding = (value: unknown): boolean => player(value).capabilities.bidding === 'forecast';
 export function effectivePlayer(value: unknown, game?: Pick<GameState, 'contract'> | null): PlayerId {
   const id = playerId(value);
-  return game?.contract?.kind === 'nello' && !PLAYERS[id].nello ? DEFAULT_PLAYER : id;
+  return game?.contract?.kind === 'nello' && !PLAYERS[id].capabilities.nello ? DEFAULT_PLAYER : id;
 }
 export const playerLabel = (value: unknown, game?: Pick<GameState, 'contract'> | null): string => player(effectivePlayer(value, game)).name;
 export const playerVersion = (value: unknown): string => `${player(value).name} · ${player(value).version}`;

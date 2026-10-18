@@ -156,3 +156,38 @@ it('records each attempt once: a finished hand, a branch left part-way, a retry 
   expect(roomHandEntry(room, { ...room.state, retry, practiceHands: [1] })).toMatchObject({ record: { id: 'abcd-r1:1', gameId: 'abcd-r1', practiceHands: [1] } });
   expect(roomHandEntry(room, { ...room.state, game: { ...game, bids: [] } })).toBeNull();
 });
+
+it('keeps an agreed model change in both clients and records the ended partial game with its original model', async () => {
+  const post = (path: string, name: string) => mf.dispatchFetch(`${origin}/api/rooms${path}`, {
+    method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+  const host = await (await post('', 'May')).json() as RoomCredentials;
+  const partner = await (await post(`/${host.roomId}/join`, 'June')).json() as RoomCredentials;
+  const a = await connect(host), b = await connect(partner);
+  try {
+    const lobby = await b.until(m => m.seats[0]?.connected === true && m.seats[2]?.connected === true);
+    let state = await agree(a, b, 'start', lobby.revision);
+    const game = state.game!, actor = game.turn === 2 ? b : a;
+    const action = legalActions(game).find(action => action.type === 'bid' && action.bid.kind === 'points')!;
+    actor.socket.send(JSON.stringify({ type: 'action', id: 'bid-before-switch', revision: state.revision, action }));
+    state = await actor.until(m => m.revision === state.revision + 1);
+    const endedSession = state.sessionId;
+    a.socket.send(JSON.stringify({ type: 'propose', id: 'switch-model', revision: state.revision, kind: 'player', player: 'zeb', endGame: true }));
+    const proposal = await b.until(m => m.proposal?.id === 'switch-model');
+    expect(proposal).toMatchObject({ player: 'native-partner', proposal: { endsGame: true, mode: 'allow', electorate: [0, 2] } });
+    b.socket.send(JSON.stringify({ type: 'vote', id: 'agree-switch', proposal: 'switch-model', vote: 'yes', endGame: true }));
+    state = await a.until(m => m.lastVote?.kind === 'player' && m.lastVote.outcome === 'passed');
+    expect(state).toMatchObject({ player: 'zeb', game: null, started: false });
+    expect(await b.until(m => m.revision === state.revision)).toMatchObject({ player: 'zeb', game: null, started: false });
+    const deadline = Date.now() + 5000;
+    let stored: Record<string, unknown>[] = [];
+    while (Date.now() < deadline && !stored.length) {
+      stored = await rows('SELECT * FROM hands WHERE room_id=?', host.roomId);
+      if (!stored.length) await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({ finished: 0, walt: 'native-partner' });
+    expect(JSON.parse(String(stored[0]!.payload))).toMatchObject({ gameId: endedSession, player: 'native-partner', gameOver: false, marksAfter: [0, 0] });
+    expect(await rows('SELECT seat,name FROM hand_players WHERE hand_id=? ORDER BY seat', stored[0]!.id))
+      .toEqual([{ seat: 0, name: 'May' }, { seat: 2, name: 'June' }]);
+  } finally { a.socket.close(); b.socket.close(); }
+}, 20000);

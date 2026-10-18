@@ -2,8 +2,15 @@
 
 `/?settings=player` opens the player controls directly without changing a saved game.
 More → Computer player selects **Walt** or **Zeb** for solo play; the home screen and table identify the selection. Existing Walt
-saves continue, including the older L1 selection. A change of player invalidates
-in-flight decisions without discarding the game. Family tables choose the player by vote in the lobby or Table dialog. That choice
+saves continue, including the older L1 selection. Selecting another player during
+a game warns that confirmation ends the whole game and returns home; cancel keeps
+it unchanged. Saved history and hints remain under their original model identities.
+The next game starts cleanly with the selected player's supported deal source.
+Family tables choose the player by vote in the lobby or Table dialog. Changing
+players during a game requires a warning for the proposer and an explicit yes from
+everyone originally asked, with the consequence visible in the vote. Silence or
+disconnection never supplies consent. Agreement returns the same people to the
+lobby. Old clients must refresh before approving a destructive change. That choice
 and its version belong to the room, and follow every runner and reconnect. A
 client with a different package version must refresh before running the table.
 
@@ -53,22 +60,34 @@ PLUNGE_ROOM_PLAYER=Zeb PLUNGE_ROOM_URL=http://localhost:8788/ npm run test:rooms
 
 The Zeb browser check selects the player through Settings, reloads offline,
 saves real bidding and move hints, plays a full hand, checks action identities and
-saved Zeb receipts, and
-verifies the service-worker update. These are automated Chromium checks, not a
+saved Zeb receipts, verifies warning/cancel/confirm/reload for switching offline,
+and verifies the service-worker update. Both model directions and family votes
+are exercised. These are automated Chromium checks, not a
 physical-device performance claim.
 
 
 ## Identity, history and more characters
 
 `src/ai/players.ts` is the shared registry for names, character ids, package
-versions, receipt names, deal policy and Nel-O capability. Persisted selection
+versions, receipt names and capabilities. Bidding is explicitly `recorded-hands`
+for Walt and `forecast` for Zeb: Walt is not a general-purpose bidder. The
+capability selects prepared catalogue deals or fresh shuffles through the shared
+pure `dealForPlayer` function. Nel-O support is a separate capability. Persisted selection
 ids remain compatible with existing saves. A character is separate from its
 implementation: a future profile can use `character`, while statistics and
 receipts use the recorded version and artifact identity. No profile service or
 dynamic package loader is needed today.
 
+`planPlayerChange` is the shared pure policy for the picker, solo reducer and room
+coordinator: same selection is a no-op; a different selection requires consent
+when a game is unfinished. The UI stages that choice against its original session.
+Confirmed transitions clear game-specific state and advance the existing
+epoch/revision, so stale work cannot enter the next game. History writes remain
+at the effect boundaries; departed room hands are durably queued with the new lobby.
+
 Each executed computer action records an identity event, including passes and
-Nel-O cover. Changing players during a hand produces a mixed hand; undo removes
+Nel-O cover. Historical mixed-model hands remain readable; new model changes end
+the game instead of changing its implementation in place. Undo removes
 only the undone events from the current attempt. Earlier history remains intact.
 Hand summaries, exports and account counts use these events, never today's menu
 choice or an invented version for an older save. Account counts include attempts;
@@ -93,8 +112,8 @@ To add or update a player:
    receives only the actor's hand and public history, supports cancellation,
    returns legal actions, and records its real evidence. A new package API needs
    this adapter; registry metadata alone cannot make arbitrary packages playable.
-4. Declare unsupported contracts and the visible fallback. Select shuffled or
-   catalogue deals explicitly. Extend the pure evidence validator and score
+4. Declare bidding and contract capabilities and any visible fallback. The
+   capability must match the adapter and its supported deal source. Extend the pure evidence validator and score
    renderer if the model returns a different kind of estimate; do not invent
    completed-game counts from weighted predictions.
 5. Run adapter/provenance/room version tests, both offline browser checks and the
@@ -102,5 +121,5 @@ To add or update a player:
    includes the package worker and WASM. Inspect the deployed preview's build id.
 
 Profiles, portraits and different characters in each chair can be added later.
-Today one selection controls the computer chairs, preserving the existing game
-and family voting model.
+Today one selection controls the computer chairs for the whole game. Switching
+models is an explicit game boundary, shared by solo and family play.

@@ -9,7 +9,8 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import type { Action, Seat } from '../engine';
 import { keepRoomReceipts } from './receipts';
-import { effectivePlayer, playerId, playerKey, playerLabel, playerVersion, SELECTABLE_PLAYERS, type PlayerId } from '../ai/players';
+import { effectivePlayer, playerId, playerKey, playerLabel, type PlayerId } from '../ai/players';
+import { PlayerPicker } from '../ui/PlayerPicker';
 import { computerAuction } from '../ai/computer';
 import { checkedAction, nativeMove, requestOf } from '../ai/native';
 import { exportHistory, recordHistory, retryHistory } from '../history/recorder';
@@ -92,6 +93,7 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
   const quiet = useRef(new Set<string>());
   const connection = useRef<RoomConnection | null>(null);
   const table = credentials ? app.room?.table : undefined;
+  useEffect(() => { if (!table?.game) setTableOpen(false); }, [table?.sessionId, table?.game === null]);
   const current = useRef(table); current.current = table;
   const seat = credentials?.seat ?? null;
   const identity: RoomIdentity | null = credentials ?? (knock ? { roomId: knock.roomId, visitor: knock.visitor } : null);
@@ -250,7 +252,8 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     sendAt(target === undefined ? { type: 'propose', kind } : { type: 'propose', kind, target }, table?.revision);
     setTableOpen(false);
   };
-  const vote = (choice: Vote) => { if (online && table?.proposal) send({ type: 'vote', proposal: table.proposal.id, vote: choice }); };
+  const vote = (choice: Vote) => { if (online && table?.proposal) send({ type: 'vote', proposal: table.proposal.id, vote: choice,
+    endGame: choice === 'yes' && table.proposal.kind === 'player' && table.proposal.endsGame === true }); };
   const answerDoor = (visitor: string, yes: boolean) => { if (online) send({ type: 'door', visitor, yes }); };
   const agreeOr = (kind: ProposalKind) => {
     const open = table?.proposal;
@@ -270,7 +273,9 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
       case 'new-game': if (table) agreeOr('start'); return;
       case 'undo': if (table) propose('undo'); return;
       case 'restart-hand': return;
-      case 'set-difficulty': if (table) sendAt({ type: 'propose', kind: 'player', player: playerId(e.difficulty) }, table.revision); return;
+      case 'set-difficulty':
+        if (table && (!e.confirmed || e.sessionId === table.sessionId)) sendAt({ type: 'propose', kind: 'player', player: playerId(e.difficulty), endGame: e.confirmed === true }, table.revision);
+        return;
       case 'go': if (e.screen === 'home') { location.assign(location.pathname); return; } reduce(e); return;
       default: reduce(e);
     }
@@ -288,12 +293,13 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
 
   const shown = credentials ? table : visitorRoom;
   const model = playerLabel(shown?.player, shown?.game);
-  const choosePlayer = (id: PlayerId) => { if (table) sendAt({ type: 'propose', kind: 'player', player: id }, table.revision); };
-  const playerControl = <div class="setting"><span class="setting-label">Computer player · {playerVersion(shown?.player)}</span>
-    <div class="seg" role="radiogroup" aria-label="Table computer player">{SELECTABLE_PLAYERS.map(id => <button type="button" role="radio"
-      class={`seg-btn${playerId(shown?.player) === id ? ' on' : ''}`} aria-checked={playerId(shown?.player) === id}
-      disabled={!online || pending || !!shown?.proposal} onClick={() => choosePlayer(id)}>{playerLabel(id)}</button>)}</div>
-    <p class="setting-hint">Everyone shares this choice. Changing it is a table vote. Walt covers Nel-O when Zeb is selected.</p></div>;
+  const choosePlayer = (id: PlayerId, confirmed: boolean) => {
+    if (table) { sendAt({ type: 'propose', kind: 'player', player: id, endGame: confirmed }, table.revision); setTableOpen(false); }
+  };
+  const playerControl = <div class="setting"><span class="setting-label">Computer player</span>
+    <PlayerPicker selected={shown?.player} game={shown?.game ?? null} sessionId={shown?.sessionId ?? ''} family
+      disabled={!online || pending || !!shown?.proposal} onChoose={choosePlayer} />
+    <p class="setting-hint">Changing players ends any game in progress. Everyone present must explicitly agree.</p></div>;
   const people = shown?.seats.filter(Boolean).length ?? 0;
   const lastVote = shown?.lastVote && shown.revision - shown.lastVote.revision < 3 ? shown.lastVote : null;
   const waitingOn = table?.game?.turn !== null && table?.game?.turn !== undefined && table.seats[table.game.turn]
