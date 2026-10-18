@@ -21,7 +21,7 @@ import { Domino } from './Domino';
 import { Tally } from './Tally';
 import type { AppEvent, AppState } from './store';
 import {
-  HUMAN_SEAT, SEAT_NAMES, nelloAvailable, TRICK_HOLD_MS, bidLabel, contractLabel, declLabel, ledChip, trumpChip,
+  HUMAN_SEAT, SEAT_NAMES, TRICK_HOLD_MS, bidLabel, contractLabel, declLabel, ledChip, trumpChip,
   canRestart, canUndo, liveDispatch, questionGameId,
 } from './store';
 import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet, RestartConfirm } from './sheets';
@@ -251,7 +251,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
       )}
       {(g.phase === 'hand-over' || g.phase === 'game-over') && review && (
           <NativeReview key={scenario ? (app.scenarioFlag?.id ?? g.dealt.flat().join('')) : `${app.sessionId}:${app.epoch}:${g.handNumber}`}
-            g={g} nelloPreview={nelloAvailable(app.settings)} onBack={() => setReview(false)} sessionId={app.sessionId} questionGameId={branch}
+            g={g} onBack={() => setReview(false)} sessionId={app.sessionId} questionGameId={branch}
             receipts={scenario ? {} : app.nativeReceipts} initialFlag={app.scenarioFlag} onQuestion={onQuestion} />
       )}
       {menuOpen && (

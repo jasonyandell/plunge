@@ -123,7 +123,7 @@ export function Home({ app, dispatch, onPriorHands, identity }: HomeProps) {
               Resume your game
             </button>
           )}
-          {paused && <p class="setting-hint">Your Nel-O hand is saved. {NATIVE_TABLE ? 'Resume it in the browser with Nel-O Preview enabled.' : 'Turn on Nel-O Preview under More to resume.'}</p>}
+          {paused && <p class="setting-hint">Your Nel-O hand is saved. {NATIVE_TABLE ? 'Resume it in the browser with Nel-O enabled.' : 'Turn on Nel-O in Settings & more to resume.'}</p>}
           <button
             type="button"
             class={resumable || ROOMS_ENABLED ? 'big-btn secondary' : 'big-btn'}
@@ -186,18 +186,18 @@ export function More({ app, dispatch, onQuestions, onHistory }: MoreProps) {
           </div>
           {!NATIVE_TABLE && <div class="setting">
             <button type="button" role="switch" class="thinking-switch"
-              aria-checked={app.settings.nelloPreview} aria-describedby="nello-preview-hint"
+              aria-checked={app.settings.nelloEnabled} aria-describedby="nello-hint"
               onClick={() => {
-                const enabled = !app.settings.nelloPreview;
+                const enabled = !app.settings.nelloEnabled;
                 const url = new URL(location.href);
-                url.searchParams.set('nello', enabled ? 'preview' : 'off');
+                url.searchParams.set('nello', enabled ? 'on' : 'off');
                 history.replaceState(null, '', url);
-                dispatch({ type: 'set-nello-preview', enabled });
+                dispatch({ type: 'set-nello-enabled', enabled });
               }}>
-              <span>Nel-O <small class="preview-badge">Preview</small></span>
+              <span>Nel-O</span>
               <span class="switch-track" aria-hidden="true"><span /></span>
             </button>
-            <p id="nello-preview-hint" class="setting-hint">Enable experimental Nel-O, including Walt’s counterexample defense. May take longer. Off removes Nel-O from the available declarations.</p>
+            <p id="nello-hint" class="setting-hint">Win a bid of one mark or more, then choose Nel-O to try taking no tricks. Your partner sits out. Turn off for straight 42 only.</p>
           </div>}
           <p class="setting-hint native-intro">
             {app.settings.difficulty === 'zeb' ? 'Zeb runs right on your device.' : NATIVE_TABLE ? 'Walt runs on your Mac.' : 'Walt runs right on your device.'}
@@ -268,6 +268,13 @@ export function HowTo({ dispatch }: { dispatch: (e: AppEvent) => void }) {
           belongs to trump and nothing else. Otherwise a domino led counts as its higher
           end's suit, and you must follow that suit if you can. The double is the boss of
           its suit. Highest trump wins the trick; barring trump, highest of the led suit.
+        </p>
+        <h2>Nel-O</h2>
+        <p>
+          Win a bid of one mark or more, then choose Nel-O to try taking no tricks.
+          Your partner sits out and you lead. Doubles form their own suit, with 6-6
+          highest. Taking even one trick sets you immediately. Nel-O is on by default;
+          turn it off in More → Settings for straight 42 only.
         </p>
         <h2>Counting it up</h2>
         <p>
