@@ -47,7 +47,7 @@ export async function familyTable(): Promise<RoomCredentials> {
   return body;
 }
 export const roomUrl = (roomId: string): string => `${location.pathname}?rooms=1#room=${roomId}`;
-/** Signed in with family access, and the name that person sits under. Asked once per page. */
+/** Whether to offer the family table, and the name a signed-in person sits under at any table. Asked once per page. */
 export interface FamilyProbe { family: boolean; name?: string }
 let probe: Promise<FamilyProbe> | undefined;
 export const familyProbe = (): Promise<FamilyProbe> => probe ??= (!ROOMS_ENABLED || QUESTIONS_LOCAL_ONLY || typeof fetch !== 'function'

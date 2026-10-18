@@ -2,10 +2,10 @@
 import type { Seat } from '../src/engine';
 import type { Proposal, ProposalKind, ProposalMode } from '../src/room/protocol';
 
-export interface VoteRule { mode: ProposalMode; needs: 'all' | 'one' | 'two' | 'majority'; window: number }
+export interface VoteRule { mode: ProposalMode; needs: 'all' | 'two' | 'majority'; window: number }
 /** Low stakes pass unless someone objects within five seconds. Shaking the next
  * hand takes a second person, so nobody loses the result card while still
- * reading it. Admitting a knock takes one yes; a kick takes most of the table.
+ * reading it. A kick takes most of the table. (A knock is not a vote: see knockRoom.)
  * Tune here, nowhere else. */
 export const VOTE_RULES: Record<ProposalKind, VoteRule> = {
   start: { mode: 'veto', needs: 'all', window: 5000 },
@@ -15,15 +15,14 @@ export const VOTE_RULES: Record<ProposalKind, VoteRule> = {
   open: { mode: 'veto', needs: 'all', window: 5000 },
   close: { mode: 'veto', needs: 'all', window: 5000 },
   kick: { mode: 'allow', needs: 'majority', window: 10000 },
-  admit: { mode: 'allow', needs: 'one', window: 60000 },
 };
 export const PROPOSAL_KINDS = Object.keys(VOTE_RULES) as ProposalKind[];
 
-export function newProposal(id: string, kind: ProposalKind, by: Seat | null, byName: string, now: number,
-  extra: { target?: Seat; knock?: string } = {}): Proposal {
+export function newProposal(id: string, kind: ProposalKind, by: Seat, byName: string, now: number,
+  extra: { target?: Seat } = {}): Proposal {
   const rule = VOTE_RULES[kind];
   return { id, kind, mode: rule.mode, needs: rule.needs, by, byName, ...extra, at: now, deadline: now + rule.window,
-    votes: by === null ? {} : { [by]: 'yes' } };
+    votes: { [by]: 'yes' } };
 }
 
 /** Live electorate: seated humans present right now, minus a kick's target.
@@ -35,7 +34,6 @@ export function voters(proposal: Proposal, present: ReadonlySet<Seat>): Seat[] {
 export function neededYes(needs: Proposal['needs'], electorate: number): number {
   switch (needs) {
     case 'all': return electorate;
-    case 'one': return 1;
     case 'two': return Math.min(2, electorate);
     case 'majority': return Math.floor(electorate / 2) + 1;
   }

@@ -35,7 +35,7 @@ import { hardAction } from './hard';
 import { onyxAction } from './onyx';
 import { waltAction } from './walt';
 
-export type Difficulty = 'easy' | 'medium' | 'hard' | 'onyx' | 'walt' | 'native-l1' | 'native-partner';
+export type Difficulty = 'easy' | 'medium' | 'hard' | 'onyx' | 'walt' | 'native-l1' | 'native-partner' | 'zeb';
 
 export function chooseAction(
   state: GameState,
@@ -62,6 +62,8 @@ export function chooseAction(
       return onyxAction(obs, actions, rand);
     case 'walt':
       return waltAction(obs, actions, rand);
+    case 'zeb':
+      throw new Error('Zeb decisions are asynchronous.');
     case 'native-l1':
     case 'native-partner':
       if (state.phase === 'playing') throw new Error('Native play must await its saved decision receipt.');

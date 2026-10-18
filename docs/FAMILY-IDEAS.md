@@ -83,6 +83,61 @@ retained under `~/.local/share/plunge-ideas/runs/`. These contain private family
 text; they are not repository files. Unload the local LaunchAgent to stop new builds.
 Do not delete an active run directory.
 
+## Inspect and recover previews
+
+`node scripts/ideas/admin.mjs inspect` reads all cards through the private admin
+API, including stopped cards. Add an idea id to read its conversation without
+claiming work, posting a reply, or exposing the builder token. These reads are
+unavailable to family invitations and never return invitation secrets.
+
+A failed final check now leaves its published request under observation. A
+successful rerun or new PR head can restore the preview after exact build
+verification. The conversation explains the failed check and successful recovery
+once per build/status. New family replies and failures while implementing a newer
+request cannot revive an old preview: `preview_revision` records which request
+produced the published work (migration `0010`). Historical failed builder cards
+are deliberately not guessed; inspect the failure before taking over their PR
+with `adopt`, which moves them into the hand-built lane.
+
+This recovery observes checks in ordinary code. It does not repeatedly rerun an
+LLM, weaken validation, or merge a feature. For broader friction-oriented triage
+and bounded operator repair, use the personal `plunge-idea-board` skill.
+
+## Hand-built lane
+
+For owner-directed board maintenance, the private admin helper supports
+`triage IDEA_ID --revision N --action note|close --message-file FILE [--title TITLE]`.
+Read the current card with `inspect` first. Triage refuses an active build or a
+changed request revision, and identical retries append only one operator note.
+Notes never impersonate a family request or approve access. Closing preserves
+the conversation, PR identity and run archives, clears preview readiness, and
+moves the card to the hand lane so later replies remain conversation instead of
+restarting the builder. To consolidate ideas, link the originals from the chosen
+card and close each original with a note pointing to that conversation.
+
+Some changes are made by hand (by Jason, or a session working with him) rather than
+by the automatic builder: anything outside its scope, like accounts. They still go
+to the family through the same board and the same in-app preview:
+
+```sh
+node scripts/ideas/admin.mjs adopt 42 --title "Let Benny log in" --body "What it does, in family words."
+node scripts/ideas/admin.mjs adopt 42 IDEA_ID   # link it to an existing card instead
+```
+
+`adopt` reads the open PR's head commit with `gh`, then calls `POST
+/api/ideas/admin/adopt` with the builder key. A new card speaks as the owner; an
+existing card keeps its author and conversation (a card the builder is working on
+is refused). Either way the card moves to the `hand` lane in **Checking your
+preview** with a short note, and prints its link. From there it is tracked like any
+builder card: the same `version.json` check marks it **Ready to try**, a push
+refreshes it, merging makes it **In the game**. A hand-built PR whose checks fail
+stays watched, so the next push brings it back to checking.
+
+The automatic builder never claims a hand-lane card, and the owner's access
+approval and `retry` don't apply to one. A family reply stays conversation for
+Jason (the card says so) instead of queueing a build. `ideas.lane` and the reply
+trigger change are migration `0008_idea_hand_lane.sql`.
+
 ## Activation
 
 The production workflow only deploys main. Review and merge this implementation

@@ -30,10 +30,15 @@ game stays saved. The home screen lists the tables that are live: who is at
 each, and whether to sit right down or knock. Anyone can knock, account or not.
 A table opened by a signed-in family member is listed; one opened without
 signing in stays private to its link. Listed tables start closed, and the table
-votes itself open when it wants walk-ins. Signed-in family (see **Your
-account**) sit under their account name, skip the name prompt, and always have
-their own chair at the standing **Family table** from any device.
+votes itself open when it wants walk-ins. Anyone signed in (see **Your
+account**) sits under their account name and skips the name prompt; signed-in
+family also always have their own chair at the standing **Family table** from any
+device, and can invite more family with a link.
 [The family table](docs/FAMILY-TABLE.md) describes the design.
+
+[Chat companions](docs/CHAT-COMPANIONS.md) documents the first Texas 42 MCP
+connection: passkey-approved OAuth and a separate named companion identity.
+Game actions through chat are a following milestone.
 
 The live table plays **straight 42** with regular bidding: 30–41, then marks.
 Each player bids once or passes, starting left of the shaker; the winner calls
@@ -63,8 +68,7 @@ asks first, then replays the same deal and shaker with the marks the hand began
 with. Both are also on the end-of-hand and game-over cards, and stop at the
 start of the hand: once the next hand is shaken, earlier hands stay as played.
 Retried hands count as practice and show a small **Practice** label: the first attempt's finished record and saved
-moves stay as written, the retry is kept in exported history, and it isn't added
-to finished-hand stats.
+moves stay as written, and the retry is kept as its own attempt in history and stats.
 
 Completed tricks stay visible for two seconds before gathering toward the winner,
 including tricks that end the hand or match. The result card waits until the trick
@@ -204,6 +208,16 @@ and retains pending captures in the tab; a localStorage outbox recovers unfinish
 IndexedDB writes after reload when storage is available. Simultaneous tabs append
 content-addressed captures without overwriting each other's branches; the existing
 single resume slot still belongs to the last tab that saved it.
+
+## Stats and your account
+
+Every hand attempt is recorded: solo hands on the device, including the moves a
+takeback undid, and family-room hands by the room itself. Signing in with the
+optional passkey account uploads the device's hands once each (never duplicated,
+never changed) and ties room hands to your seat, so one account's record spans
+every device and every table. The game only uploads when there is a new hand to
+send; an idle tab makes no requests. Full game history and Walt results stay on
+the device. See [optional accounts](docs/OPTIONAL-ACCOUNTS.md#stats).
 
 The finished-hand store was rescued from PR #7 / commit
 `03970be4ae9888e8e36b1ced6a2b9bca5cd4fb9a`. The staged-outbox design was checked

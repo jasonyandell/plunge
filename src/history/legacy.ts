@@ -1,26 +1,32 @@
 /**
- * The local stats log: an append-only record of finished hands, kept on the
- * device in IndexedDB and never uploaded anywhere.
+ * The local stats log: an append-only record of every hand attempt the human
+ * played, kept on the device in IndexedDB. Finished hands and the branches
+ * left behind by a takeback or an abandoned game alike: every move is a
+ * human-labeled 42 move. A signed-in device uploads the log to its account
+ * (src/history/stats-sync.ts); the log itself is never changed by that.
  *
  * Each hand is stored as its engine-validated replay code plus a few
- * denormalized fields for the dashboard topline. Everything else — tricks,
- * count, bids, agreement with Walt — is re-derived from the replay, so new
- * statistics apply retroactively to the whole log.
+ * denormalized fields. Everything else — tricks, count, bids, agreement with
+ * Walt — is re-derived from the replay, so new statistics apply
+ * retroactively to the whole log.
  *
  * Rescued from PR #7, commit 03970be4. The original analysis store is
  * preserved for compatibility; the current recorder does not run reviews.
  */
 import type { GameState } from '../engine';
 import { encodeReplay } from '../engine/replay-code';
+import { GAME_ID } from './hand-record';
 
 export interface HandRecord {
   readonly schema: 'plunge-hand-v1';
   /** `${gameId}:${handNumber}` — the natural append-only dedup key. */
   readonly id: string;
+  /** The game, or a retried hand's branch (`${sessionId}-r${attempt}`), so every attempt keeps its own record. */
   readonly gameId: string;
   readonly handNumber: number;
-  /** Engine-validated replay of the finished hand (src/engine/replay-code.ts). */
+  /** Engine-validated replay of the hand as far as it went (src/engine/replay-code.ts). */
   readonly code: string;
+  /** When the hand finished, or when its branch was left. */
   readonly endedAt: string;
   readonly marksBefore: readonly [number, number];
   readonly marksAfter: readonly [number, number];
@@ -33,13 +39,16 @@ export interface HandRecord {
    * there were some: the marks and game result then include practice.
    */
   readonly practiceHands?: readonly number[];
+  /** The app build that wrote the record (a commit SHA in deployed builds). */
+  readonly build?: string;
+  /** The exact Walt at the table: player name, source commit and wasm hash from its manifest. */
+  readonly walt?: { readonly player: string; readonly source_commit: string; readonly wasm_sha256: string };
 }
 
-const GAME_ID = /^[a-zA-Z0-9_-]{1,80}$/;
-
-/** The finished hand as a log record, or null when it cannot be replayed. */
-export function handRecordOf(g: GameState, gameId: string, player: string, practiceHands: readonly number[] = []): HandRecord | null {
-  if ((g.phase !== 'hand-over' && g.phase !== 'game-over') || !GAME_ID.test(gameId)) return null;
+/** The hand as a log record, or null when nothing has been played or it cannot be replayed. `details` are kept verbatim. */
+export function handRecordOf(g: GameState, gameId: string, player: string, practiceHands: readonly number[] = [],
+  details: Pick<HandRecord, 'build' | 'walt'> = {}): HandRecord | null {
+  if (!g.bids.length || !GAME_ID.test(gameId)) return null;
   const code = encodeReplay(g);
   if (!code) return null;
   const marksBefore: [number, number] = [g.marks[0], g.marks[1]];
@@ -57,24 +66,38 @@ export function handRecordOf(g: GameState, gameId: string, player: string, pract
     thrownIn: g.thrownIn,
     player,
     ...(practiceHands.length ? { practiceHands: [...practiceHands] } : {}),
+    ...details,
   };
 }
 
 let opened: Promise<IDBDatabase> | undefined;
-function db(): Promise<IDBDatabase> {
+/**
+ * The device's stats database. Version 2 adds the account-connection stores
+ * beside the original hands log (src/history/stats-sync.ts); existing hands
+ * are kept exactly as written.
+ */
+export function statsDb(): Promise<IDBDatabase> {
   return opened ??= new Promise((resolve, reject) => {
-    const request = indexedDB.open('plunge-stats', 1);
+    const request = indexedDB.open('plunge-stats', 2);
     request.onupgradeneeded = () => {
-      request.result.createObjectStore('hands', { keyPath: 'id' });
-      request.result.createObjectStore('analysis', { keyPath: 'id' });
+      const stores = request.result.objectStoreNames;
+      if (!stores.contains('hands')) request.result.createObjectStore('hands', { keyPath: 'id' });
+      if (!stores.contains('analysis')) request.result.createObjectStore('analysis', { keyPath: 'id' });
+      if (!stores.contains('meta')) request.result.createObjectStore('meta');
+      if (!stores.contains('sync')) request.result.createObjectStore('sync', { keyPath: 'key' });
     };
+    let blocked = false;
+    request.onblocked = () => { blocked = true; opened = undefined; reject(new Error('Close other Plunge tabs to finish updating the stats log.')); };
     request.onsuccess = () => {
+      // A connection that opens after its caller gave up is closed, never leaked.
+      if (blocked) { request.result.close(); return; }
       request.result.onversionchange = () => { request.result.close(); opened = undefined; };
       resolve(request.result);
     };
     request.onerror = () => { opened = undefined; reject(new Error('This browser could not open the stats log.')); };
   });
 }
+const db = statsDb;
 
 /** Append once; a hand already in the log is left exactly as first written. */
 export async function appendHand(record: HandRecord): Promise<void> {
@@ -97,7 +120,8 @@ export async function listHands(): Promise<HandRecord[]> {
   });
 }
 
-export async function recordFinishedHand(g: GameState, gameId: string, player: string, practiceHands: readonly number[] = []): Promise<void> {
-  const record = handRecordOf(g, gameId, player, practiceHands);
+export async function recordHand(g: GameState, gameId: string, player: string, practiceHands: readonly number[] = [],
+  details: Pick<HandRecord, 'build' | 'walt'> = {}): Promise<void> {
+  const record = handRecordOf(g, gameId, player, practiceHands, details);
   if (record) await appendHand(record);
 }

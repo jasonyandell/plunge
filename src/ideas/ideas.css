@@ -15,6 +15,10 @@
 .idea-meta {font-size:13px;color:#6b5840;}.idea-status {display:inline-block;font-size:13px;font-weight:600;border-radius:30px;padding:6px 11px;background:#e8e0cf;color:#55452e;}
 .idea-status.ready,.idea-status.shipped {background:#d9ece0;color:#205e49;}.idea-status.question {background:#f6e4b1;}.idea-status.failed {background:#f2dace;color:#74351e;}
 .idea-open {font-size:14px;color:#27705b;}.ideas-board-title {margin:34px 0 18px;font-weight:500;}
+.idea-share {margin:12px 0;}.idea-share-actions {display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;}
+.idea-share-link {display:inline-flex;align-items:center;min-height:44px;color:#205e49;}
+.idea-share-actions .text-btn {min-height:44px;color:#205e49;}.idea-share-actions .big-btn {flex:1;min-width:180px;}
+.idea-share a[aria-disabled=true] {opacity:.6;}.idea-share .idea-help {margin:4px 0;}
 .idea-conversation {list-style:none;padding:0;margin:24px 0;}.idea-conversation li {padding:16px;border-radius:12px;background:#eee5d2;margin-bottom:14px;}.idea-conversation .builder {background:#e0ece4;}
 .idea-conversation p {white-space:pre-wrap;margin:8px 0 0;}.idea-notice,.idea-error {padding:16px;border-radius:12px;background:#e2efe5;color:#204e3d;}.idea-error {background:#f7dfcf;color:#682b18;}
 .idea-result {margin-top:16px;padding-top:12px;border-top:1px solid #8ba794;}

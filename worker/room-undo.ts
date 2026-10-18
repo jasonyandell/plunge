@@ -26,6 +26,14 @@ export function upgradeRoom(room: SavedRoom): boolean {
   // Rooms saved before the table voted: the host was seat 0 and rooms were always open.
   for (const player of room.players) if (player && player.seen === undefined) { player.seen = 0; changed = true; }
   if (!room.admitted) { room.admitted = []; changed = true; }
+  // Rooms saved while a knock was a vote: the knock waits at the door instead.
+  const legacy = room.state.proposal as unknown as { kind: string; knock?: string; byName: string; at: number } | null | undefined;
+  if (legacy?.kind === 'admit') {
+    room.state = { ...room.state, proposal: null, knocks: [...(room.state.knocks ?? []).filter(entry => entry.visitor !== legacy.knock),
+      ...(legacy.knock ? [{ visitor: legacy.knock, name: legacy.byName, at: legacy.at }] : [])] };
+    changed = true;
+  }
+  if ((room.state.lastVote?.kind as string | undefined) === 'admit') { room.state = { ...room.state, lastVote: null }; changed = true; }
   if (!room.former) { room.former = []; changed = true; }
   if (changed) room.state = { ...room.state, game: upgraded, retry: room.state.retry ?? null,
     practiceHands: room.state.practiceHands ?? [], open: room.state.open ?? true,

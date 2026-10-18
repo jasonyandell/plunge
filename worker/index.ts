@@ -3,10 +3,11 @@ import { MAX_QUESTION_BYTES, OWNER_TOKEN, QUESTION_ID, publicQuestion, validQues
 import { ideasRequest, type IdeasDatabase } from './ideas';
 import { accountSession, accountsRequest, type AccountEnv } from './accounts';
 import { familyTableRequest, liveTablesRequest, roomRequest, type RoomsNamespace } from './rooms';
+import { statsRequest } from './stats';
 export { PlungeRoom } from './rooms';
 
 // PR previews deploy without QUESTIONS; their app keeps questions on the device.
-interface Env extends AccountEnv { QUESTIONS?: IdeasDatabase; IDEAS_ADMIN_TOKEN?: string; ROOMS?: RoomsNamespace; ASSETS: { fetch(request:Request):Promise<Response> } }
+export interface Env extends AccountEnv { QUESTIONS?: IdeasDatabase; IDEAS_ADMIN_TOKEN?: string; ROOMS?: RoomsNamespace; ASSETS: { fetch(request:Request):Promise<Response> } }
 interface Row { id:string; owner_hash:string; revision:number; payload:string; answer:string|null; answered_at:string|null }
 const json = (value: unknown, status=200) => Response.json(value,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const remote = (r:Row):RemoteQuestion => ({question:JSON.parse(r.payload) as Question,revision:r.revision,
@@ -34,10 +35,11 @@ export default {
     const url=new URL(request.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     if (url.pathname === '/api/account' || url.pathname.startsWith('/api/account/')) return accountsRequest(request,env);
+    if (url.pathname.startsWith('/api/stats/')) return statsRequest(request,env);
     if (url.pathname === '/api/rooms/family') return familyTableRequest(request, env.ROOMS, env.QUESTIONS, await accountSession(request, env));
     if (url.pathname === '/api/rooms/live') return liveTablesRequest(request, env.ROOMS, env.QUESTIONS);
     if (url.pathname === '/api/rooms' || url.pathname.startsWith('/api/rooms/'))
-      return roomRequest(request, env.ROOMS, env.QUESTIONS, request.method === 'POST' ? await accountSession(request, env) : null);
+      return roomRequest(request, env.ROOMS, env.QUESTIONS, request.method === 'POST' || url.pathname.endsWith('/socket') ? await accountSession(request, env) : null);
     if (url.pathname === '/api/ideas' || url.pathname.startsWith('/api/ideas/')) return ideasRequest(request, env);
     const match=/^\/api\/questions(?:\/([a-f0-9]{32}))?$/.exec(url.pathname);
     if (!match) return json({error:'Not found.'},404);

@@ -3,6 +3,7 @@ import { Screenshot } from './IdeaScreenshots';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { IdeaActivity } from './IdeaActivity';
 import { IdeaResult } from './IdeaResult';
+import { IdeaLink } from './IdeaLink';
 import { IdeaPreview, useIdeaPreview } from './IdeaPreview';
 import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
 import { LIVE_PLUNGE, type IdeaCard, type IdeaThread } from './model';
@@ -45,7 +46,8 @@ export function Ideas() {
   }, [token,selected]);
   const open = (id: string|null) => { history.pushState(null,'',location.pathname+location.search+(id ? `#idea=${id}` : '')); setSelected(id);setThread(null);setError(''); };
   const sent = (result: IdeaThread) => {
-    setSaved(selected && result.card.status==='building' ? 'Your reply is saved for the builder’s next turn.' : 'Saved. The builder will reply here. You can add another thought below.');
+    setSaved(selected && result.card.lane==='hand' ? 'Saved. Jason will see it here. You can add another thought below.'
+      : selected && result.card.status==='building' ? 'Your reply is saved for the builder’s next turn.' : 'Saved. The builder will reply here. You can add another thought below.');
     if(!selected) open(result.card.id);
     setThread(result);
   };
@@ -74,7 +76,7 @@ export function Ideas() {
       <p>Little fixes. Big ideas. A game that feels more like ours.</p></div>
     {QUESTIONS_LOCAL_ONLY ? <section class="idea-paper"><h2>Keep the conversation going</h2><p>This is a test version of Plunge. Your ideas and replies live together on the main game.</p>
       <a class="big-btn" href="/?ideas=1&demo=bidding">Try the family ideas demo</a><p><a href={ideasLink(selected ?? undefined)}>Open your live ideas</a></p></section>
-    : !name ? <section class="idea-paper"><h2>Come on in</h2><p>Sign in to use family access Jason has granted you.</p><a class="big-btn" href="/?account=1">Open your account</a><details><summary>Have a personal invite instead?</summary><p>You can still paste your invite here.</p>
+    : !name ? <section class="idea-paper"><h2>Come on in</h2><p>Sign in to use family access Jason has granted you.</p><a class="big-btn" href={`/?account=1${selected?`&ideaReturn=${selected}`:''}`}>Open your account</a><details><summary>Have a personal invite instead?</summary><p>You can still paste your invite here.</p>
       <form onSubmit={enter}><label>Your invite link<input autoComplete="off" type="password" value={invite} onInput={e=>setInvite(e.currentTarget.value)} /></label><button class="big-btn" type="submit">Open my ideas</button></form></details>
       {token && !error && <p role="status">Opening your ideas…</p>}</section>
     : <>
@@ -83,14 +85,13 @@ export function Ideas() {
         <button class="text-btn" type="button" disabled={busy} onClick={()=>open(null)}>← All ideas</button>
         {thread ? <section class="idea-paper"><div class="idea-meta"><span>{thread.card.name}’s idea</span><span>Idea {thread.card.number}</span></div>
           <h2>{thread.card.title}</h2>
+          <IdeaLink key={thread.card.id} id={thread.card.id} busy={busy}/>
           <IdeaActivity card={thread.card} now={now} connected={connected} />
           {thread.card.status==='shipped' && <a class="big-btn" href={LIVE_PLUNGE}>Play the updated game</a>}
-          {thread.card.status==='ready' && thread.card.preview && <button class="big-btn" type="button" disabled={busy} onClick={()=>trial.open(thread.card.id)}>Try your change →</button>}
-          <p class="idea-help">You can ask a question or clarify your idea below. {thread.card.status==='building' ? 'Replies will be picked up when this pass finishes.' : 'You can say “let’s talk it through first” before asking for changes.'}</p>
-          <ol class="idea-conversation" aria-label="Conversation">{thread.messages.map(message=><li key={message.id} class={message.role}><strong>{message.name}</strong><p>{message.body}</p><div class="screenshot-drafts">{message.screenshots?.map(image=><Screenshot key={image.id} image={image} token={token}/>)}</div>
-            <IdeaResult thread={thread} message={message} busy={busy} onTry={()=>trial.open(thread.card.id)} />
-          </li>)}</ol>
-          {owner && <section class="idea-approval" aria-label="Builder access"><h3>Builder access</h3>
+          {thread.card.status==='ready' && thread.card.preview && <IdeaLink key={`${thread.card.id}:demo`} id={thread.card.id} preview busy={busy} onOpen={()=>trial.open(thread.card.id)}/>}
+          <p class="idea-help">You can ask a question or clarify your idea below. {thread.card.lane==='hand' ? 'Jason is making this change by hand. Your replies go straight to him.' : thread.card.status==='building' ? 'Replies will be picked up when this pass finishes.' : 'You can say “let’s talk it through first” before asking for changes.'}</p>
+          <ol class="idea-conversation" aria-label="Conversation">{thread.messages.map(message=><li key={message.id} class={message.role}><strong>{message.name}</strong><p>{message.body}</p><div class="screenshot-drafts">{message.screenshots?.map(image=><Screenshot key={image.id} image={image} token={token}/>)}</div><IdeaResult thread={thread} message={message} busy={busy} onTry={()=>trial.open(thread.card.id)} /></li>)}</ol>
+          {owner && thread.card.lane!=='hand' && <section class="idea-approval" aria-label="Builder access"><h3>Builder access</h3>
             {thread.permissions?.scope==='repository' ? <p>Full project access is approved for this request.</p> : <>
               <p>Allow the builder to change any project file for the conversation above. New family replies need a fresh approval.</p>
               <button class="big-btn secondary" type="button" disabled={busy || !['queued','question','failed'].includes(thread.card.status)} onClick={()=>void approve()}>Approve full access</button>

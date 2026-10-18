@@ -21,23 +21,26 @@ import { codeFromHash, decodeHand } from './share';
 import { decodeObservation } from './observation-link';
 import { api, isNative, nativeMove, NATIVE_TABLE, type FlagRecord } from '../ai/native';
 import { anticipatedAuctions, auctionMove } from '../ai/auction';
+import { zebAuctionMove } from '../ai/zeb';
 import { AuctionPreparation } from '../ai/auction-preparation';
 import './app.css';
 import { retryEvidence } from '../ai/phone/records';
 import { recordHistory, retryHistory, exportHistory } from '../history/recorder';
 import { SoloHistory } from './SoloHistory';
+import { syncStats } from '../history/stats-sync';
 import { Questions } from './Questions';
 import { attachGame, syncQuestions } from '../questions/client';
+import { IdentityChip } from '../account/IdentityChip';
 
 export function App() {
   const [app, reduce] = useReducer((state: AppState, event: AppEvent) => {
     const next = reducer(state, event);
     // A shared table records its own canonical history (see useRoom).
     if (next.room || state.room) return next;
-    // Undo and replay never discard: the branch being left is recorded first.
-    // (Content-addressed, so an already-saved snapshot isn't duplicated.)
-    if ((event.type === 'undo' || event.type === 'restart-hand') && next.game !== state.game) {
-      void recordHistory(state).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
+    // Undo, replay and a new deal never discard: the branch being left is recorded first,
+    // hand included. (Content-addressed, so an already-saved snapshot isn't duplicated.)
+    if ((event.type === 'undo' || event.type === 'restart-hand' || event.type === 'new-game') && next.game !== state.game && state.game && !state.scenarioGame) {
+      void recordHistory(state, true).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
     }
     if (next.game !== state.game || next.settings !== state.settings) {
       void recordHistory(next).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
@@ -57,10 +60,14 @@ export function App() {
   const retryRecording = () => void retryHistory().then(() => setHistoryError(null)).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
   useEffect(() => {
     if (room.active) return;
-    void recordHistory(app).then(() => setHistoryError(null)).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
+    void recordHistory(app).then(() => {
+      setHistoryError(null);
+      // A finished hand joins the signed-in account's stats as soon as it is in the device log.
+      if (app.game && (app.game.phase === 'hand-over' || app.game.phase === 'game-over')) void syncStats().catch(() => {});
+    }).catch(() => setHistoryError('History is not saved. Keep this tab open, free device storage, then retry or export.'));
   }, [app.game, app.sessionId, app.nativeReceipts, app.auctionSurveys, app.settings]);
   useEffect(() => {
-    const evidenceFailure = () => setEvidenceError('A Walt result is only in this tab. Device storage is unavailable; keep the tab open and export your history.');
+    const evidenceFailure = () => setEvidenceError('A computer decision is only in this tab. Device storage is unavailable; keep the tab open and export your history.');
     window.addEventListener('plunge-history-storage-error', evidenceFailure);
     retryRecording();
     window.addEventListener('focus', retryRecording);
@@ -76,11 +83,13 @@ export function App() {
   const openQuestion = (id: string) => setQuestions({ id });
   useEffect(() => {
     const sync = () => void syncQuestions();
+    // Stats upload after each hand; focus and reconnect catch hands played offline. No timer: an idle tab sends nothing.
+    const stats = () => void syncStats().catch(() => {});
     const timer = setInterval(sync, 30000);
-    window.addEventListener('online', sync);
-    window.addEventListener('focus', sync);
-    sync();
-    return () => { clearInterval(timer); window.removeEventListener('online', sync); window.removeEventListener('focus', sync); };
+    window.addEventListener('online', sync); window.addEventListener('online', stats);
+    window.addEventListener('focus', sync); window.addEventListener('focus', stats);
+    sync(); stats();
+    return () => { clearInterval(timer); window.removeEventListener('online', sync); window.removeEventListener('online', stats); window.removeEventListener('focus', sync); window.removeEventListener('focus', stats); };
   }, []);
   useEffect(() => {
     const attach = () => { if (app.game) void attachGame(app.game, questionGameId(app)).then(() => syncQuestions()).catch(() => {}); };
@@ -91,7 +100,7 @@ export function App() {
 
   const preparation = useRef<AuctionPreparation>();
   useEffect(() => {
-    if (NATIVE_TABLE || !isNative(app.settings.difficulty) || app.screen !== 'table'
+    if (app.settings.difficulty === 'zeb' || NATIVE_TABLE || !isNative(app.settings.difficulty) || app.screen !== 'table'
       || app.scenarioGame || questions || app.game?.phase !== 'bidding') return;
     const current = new AuctionPreparation();
     preparation.current = current;
@@ -123,7 +132,9 @@ export function App() {
         // Think during the presentation pause, then reveal the bid at its usual pace.
         const started = performance.now();
         setThinking(seat);
-        void auctionMove(app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal,preparation.current?.evaluate).then(
+        void (app.settings.difficulty === 'zeb'
+          ? zebAuctionMove(app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal)
+          : auctionMove(app.game,seat,app.sessionId,app.auctionSurveys[`${app.game.handNumber}:${seat}`],controller.signal,preparation.current?.evaluate)).then(
           decision => {
             if (!alive) return;
             t = setTimeout(() => { if (alive) dispatch({type:'auction-ai',decision,epoch}); },
@@ -253,7 +264,7 @@ export function App() {
     </>;
     switch (app.screen) {
       case 'home':
-        return <Home app={app} dispatch={dispatch} onPriorHands={openSoloHistory} />;
+        return <Home app={app} dispatch={dispatch} onPriorHands={openSoloHistory} identity={<IdentityChip />} />;
       case 'how':
         return <HowTo dispatch={dispatch} />;
       case 'about':
@@ -264,7 +275,7 @@ export function App() {
         return app.game || app.scenarioGame ? (
           <Table app={app} dispatch={dispatch} thinking={thinking} onQuestion={openQuestion} onHistory={openSoloHistory} />
         ) : (
-          <Home app={app} dispatch={dispatch} onPriorHands={openSoloHistory} />
+          <Home app={app} dispatch={dispatch} onPriorHands={openSoloHistory} identity={<IdentityChip />} />
         );
     }
   })();

@@ -59,10 +59,10 @@ try {
   await a.getByText('Guest wants to close the table').waitFor({ timeout: 10000 }); await a.getByRole('button', { name: 'Fine' }).click();
   await until(async () => (await state(a))?.open === false, 10000, 'closed', a); check('The table closed by vote.');
   await c.goto(invite); await c.getByRole('textbox', { name: 'Your name' }).fill('Cousin'); await c.getByRole('button', { name: 'Join the table' }).click();
-  await c.getByText('Knocking…').waitFor({ timeout: 10000 }); await a.getByText('Cousin is knocking').waitFor({ timeout: 10000 });
+  await c.getByText('Knocking…').waitFor({ timeout: 10000 }); await a.getByText('Cousin is at the door').waitFor({ timeout: 10000 });
   await a.screenshot({ path: join(out, 'knock.png') }); await a.getByRole('button', { name: 'Let them in' }).click();
   await until(async () => (await state(c))?.seats?.[1]?.name === 'Cousin' && (await state(c)).seats[1].connected, 15000, 'cousin seated', c);
-  await c.getByRole('button', { name: 'Menu', exact: true }).waitFor({ timeout: 10000 }); check('Cousin knocked, one yes let them in, and they sit at the ordinary table.');
+  await c.getByRole('button', { name: 'Menu', exact: true }).waitFor({ timeout: 10000 }); check('Cousin knocked, the first answer let them in, and they sit at the ordinary table.');
   c.once('dialog', d => d.accept()); await c.getByRole('button', { name: 'Leave' }).click();
   await until(async () => (await state(a))?.seats[1] === null, 10000, 'cousin left', a); await until(async () => !c.url().includes('rooms=1'), 10000, 'cousin home'); check('Cousin left; the chair is Walt’s again.');
   const rev = (await state(a)).revision; await b.close();

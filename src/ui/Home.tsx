@@ -11,11 +11,14 @@ import { useEffect, useState } from 'preact/hooks';
 import { ClosedTableError, familyProbe, familyTable, lastRoom, liveTables, ROOMS_ENABLED, roomUrl, savedSeat, saveSeat } from '../room/client';
 import { tableNote, tableTitle } from '../room/view';
 import type { ListedTable } from '../room/protocol';
+import type { ComponentChildren } from 'preact';
 
 interface HomeProps {
   app: AppState;
   dispatch: (e: AppEvent) => void;
   onPriorHands?: () => void;
+  /** Who's here, in the card's corner. Passed in so Home stays hook-free. */
+  identity?: ComponentChildren;
 }
 
 interface MoreProps extends HomeProps {
@@ -23,7 +26,7 @@ interface MoreProps extends HomeProps {
   onHistory?: () => void;
 }
 
-const DIFFS: readonly Difficulty[] = ['native-partner', 'native-l1'];
+const DIFFS: readonly Difficulty[] = ['native-partner', 'zeb'];
 
 const openRooms = () => { const url = new URL(location.href); url.searchParams.set('rooms', '1'); location.assign(url.href); };
 /** The home screen asks who is playing this often while it is on screen. */
@@ -90,7 +93,7 @@ function FamilyEntry() {
 }
 
 /** The front door: one decision, everything else behind More. */
-export function Home({ app, dispatch, onPriorHands }: HomeProps) {
+export function Home({ app, dispatch, onPriorHands, identity }: HomeProps) {
   const paused = nelloPaused(app);
   // A finished game stays resumable while its last hand can still be undone or
   // replayed, so a reload doesn't strand those choices on the result card.
@@ -98,6 +101,7 @@ export function Home({ app, dispatch, onPriorHands }: HomeProps) {
   return (
     <div class="home">
       <div class="home-card">
+        {identity}
         <p class="eyebrow">Texas 42</p>
         <div class="home-dominoes" aria-hidden="true">
           <Domino id="64" /><Domino id="55" /><Domino id="42" />
@@ -150,15 +154,16 @@ export function More({ app, dispatch, onQuestions, onHistory }: MoreProps) {
           <HintsSwitch app={app} dispatch={dispatch} />
           <div class="setting">
             <span class="setting-label">Computer player</span>
-            <p class="setting-hint">Walt plays the three computer seats. Choose which version to use.</p>
+            <p class="setting-hint">Choose who plays the three computer seats in your solo game. Family tables use Walt.</p>
+            {app.settings.difficulty === 'zeb' && <p class="setting-hint">Zeb forecasts bids from the hand. New hands are freshly shuffled. Nel-O uses Walt.</p>}
             <div class="seg" role="radiogroup" aria-label="Computer player">
               {DIFFS.map((d) => (
                 <button
                   key={d}
                   type="button"
                   role="radio"
-                  aria-checked={app.settings.difficulty === d}
-                  class={`seg-btn${app.settings.difficulty === d ? ' on' : ''}`}
+                  aria-checked={app.settings.difficulty === d || (d === 'native-partner' && app.settings.difficulty === 'native-l1')}
+                  class={`seg-btn${app.settings.difficulty === d || (d === 'native-partner' && app.settings.difficulty === 'native-l1') ? ' on' : ''}`}
                   onClick={() => dispatch({ type: 'set-difficulty', difficulty: d })}
                 >
                   {isNative(d) ? nativeLabel(d) : d}
@@ -174,7 +179,7 @@ export function More({ app, dispatch, onQuestions, onHistory }: MoreProps) {
               <span class="switch-track" aria-hidden="true"><span /></span>
             </button>
             <p id="thinking-hint" class="setting-hint">
-              {DEEP_WORLDS} sampled deals for every computer move. May take longer. Bidding stays instant.
+              {app.settings.difficulty === 'zeb' ? 'Zeb uses 512 sampled deals per move instead of 160. May take longer.' : `${DEEP_WORLDS} sampled deals for every computer move. May take longer. Bidding stays instant.`}
               {app.settings.difficulty === 'native-partner' && ' Uses deeper analysis in place of the regular partner check.'}
             </p>
           </div>
@@ -194,7 +199,7 @@ export function More({ app, dispatch, onQuestions, onHistory }: MoreProps) {
             <p id="nello-preview-hint" class="setting-hint">Enable experimental Nel-O, including Walt’s counterexample defense. May take longer. Off removes Nel-O from the available declarations.</p>
           </div>}
           <p class="setting-hint native-intro">
-            {NATIVE_TABLE ? 'Walt runs on your Mac.' : 'Walt runs right on your device.'}
+            {app.settings.difficulty === 'zeb' ? 'Zeb runs right on your device.' : NATIVE_TABLE ? 'Walt runs on your Mac.' : 'Walt runs right on your device.'}
             {' '}It uses only its own hand and the public plays. After a hand,
             “See how it went” lets you inspect its estimates and share a move.
           </p>
@@ -204,7 +209,7 @@ export function More({ app, dispatch, onQuestions, onHistory }: MoreProps) {
           <h2 id="more-yours">Yours</h2>
           {onQuestions && <button type="button" class="more-row" onClick={onQuestions}>Your questions</button>}
           {onHistory && <button type="button" class="more-row" onClick={onHistory}>Export history</button>}
-          <p class="setting-hint">Game history and Walt results stay on this device. Export a backup before clearing browser data.</p>
+          <p class="setting-hint">Game history and computer decisions stay on this device. Export a backup before clearing browser data. Finished-hand stats connect to your account when you sign in.</p>
           <a class="more-row" href="?account=1">Your account · optional</a>
         </section>
 

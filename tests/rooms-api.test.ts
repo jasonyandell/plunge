@@ -185,12 +185,19 @@ it('closes the table by vote, lets a visitor knock and come in on one yes, and t
   const doorway = await wait(m => m.type === 'state') as RoomState; expect(doorway.visitors).toBe(1); expect(doorway.open).toBe(false);
   v.send(JSON.stringify({ type: 'action', id: 'cheeky', revision: doorway.revision, action: { type: 'next-hand' } }));
   expect(((await wait(m => m.type === 'error')) as Extract<RoomMessage, { type: 'error' }>).message).toContain('Take a seat');
+  // The knock lands mid-vote; the vote and the doorbell are answered separately.
+  const busy = await a.until(m => m.visitors === 1);
+  a.socket.send(JSON.stringify({ type: 'propose', id: 'busy', revision: busy.revision, kind: 'open' }));
+  await b.until(m => m.proposal?.id === 'busy');
   v.send(JSON.stringify({ type: 'knock', id: 'knock', name: 'Cousin' }));
-  const knocking = await b.until(m => m.proposal?.kind === 'admit');
-  expect(knocking.proposal).toMatchObject({ byName: 'Cousin', knock: visitorId, mode: 'allow', needs: 'one' });
-  b.socket.send(JSON.stringify({ type: 'vote', id: 'let-in', proposal: 'knock', vote: 'yes' }));
-  const letIn = await wait(m => m.type === 'state' && m.lastVote?.knock === visitorId) as RoomState;
-  expect(letIn.lastVote).toMatchObject({ kind: 'admit', outcome: 'passed' });
+  const knocking = await b.until(m => !!m.knocks?.some(entry => entry.visitor === visitorId));
+  expect(knocking.proposal).toMatchObject({ id: 'busy', kind: 'open' });
+  expect(knocking.knocks).toEqual([{ visitor: visitorId, name: 'Cousin', at: expect.any(Number) }]);
+  b.socket.send(JSON.stringify({ type: 'vote', id: 'stay-shut', proposal: 'busy', vote: 'no' }));
+  b.socket.send(JSON.stringify({ type: 'door', id: 'let-in', visitor: visitorId, yes: true }));
+  const letIn = await wait(m => m.type === 'state' && !!m.knocks?.some(entry => entry.visitor === visitorId && entry.answer)) as RoomState;
+  expect(letIn.knocks![0]!.answer).toMatchObject({ by: 'Door partner', yes: true });
+  expect(letIn.open).toBe(false);
   const stillClosed = await post(`/${host.roomId}/join`, { name: 'Cousin', knock: 'fedcba9876543210' }); expect(stillClosed.status).toBe(403);
   const admitted = await post(`/${host.roomId}/join`, { name: 'Cousin', knock: visitorId }); expect(admitted.status).toBe(200);
   const cousin = await admitted.json() as RoomCredentials; expect(cousin.seat).toBe(1);
