@@ -27,13 +27,13 @@ interface MoreProps extends HomeProps {
 }
 
 const openRooms = () => { const url = new URL(location.href); url.searchParams.set('rooms', '1'); location.assign(url.href); };
-/** The home screen asks who is playing this often while it is on screen. */
+/** The expanded table list refreshes while it is on screen. */
 const LIST_EVERY = 30000;
 
 /** Family entry points: the tables anyone can find (sit down or knock), the standing
  * table for signed-in family, the last table this browser sat at, and invite rooms.
  * Its own component so Home stays hook-free. */
-function FamilyEntry() {
+function FamilyEntry({ compact = false }: { compact?: boolean }) {
   const [family, setFamily] = useState(false);
   const [tables, setTables] = useState<ListedTable[]>([]);
   const [familyError, setFamilyError] = useState<string | null>(null);
@@ -43,13 +43,14 @@ function FamilyEntry() {
   const seated = (roomId: string) => { try { return savedSeat(roomId, localStorage) !== null; } catch { return false; } };
   useEffect(() => { let live = true; void familyProbe().then(value => { if (live) setFamily(value.family); }); return () => { live = false; }; }, []);
   useEffect(() => {
+    if (compact) return;
     let live = true;
     const refresh = () => { if (document.visibilityState !== 'hidden') void liveTables().then(list => { if (live) setTables(list); }).catch(() => { /* The list is a convenience. */ }); };
     refresh();
     const timer = setInterval(refresh, LIST_EVERY);
     document.addEventListener('visibilitychange', refresh);
     return () => { live = false; clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
-  }, []);
+  }, [compact]);
   const openFamilyTable = async () => {
     if (opening) return;
     setOpening(true); setFamilyError(null);
@@ -66,12 +67,18 @@ function FamilyEntry() {
   const shown = tables.filter(table => !table.standing || family || table.seats.some(seat => seat?.connected));
   const standingListed = shown.some(table => table.standing);
   const hasTable = shown.length > 0 || family || Boolean(remembered);
-  return <section class="home-section home-together" aria-labelledby="home-together-title">
-    <div class="home-section-heading">
-      <h2 id="home-together-title">Play together</h2>
+  if (compact) return <>
+    <button type="button" class="text-btn home-family" disabled={opening}
+      aria-label={!family && !remembered ? 'Play with family · Experimental' : undefined}
+      onClick={() => family ? void openFamilyTable() : remembered ? location.assign(roomUrl(remembered)) : openRooms()}>
+      {opening ? 'Opening the table…' : family ? 'Family table' : remembered ? 'Back to your family table' : 'Play with family'}
       <small class="preview-badge">Experimental</small>
-    </div>
-    <p class="home-description">{family ? 'Your family’s table is a tap away.' : 'Join a table, or invite someone to yours.'}</p>
+    </button>
+    {familyError && <p class="setting-hint" role="alert">{familyError}</p>}
+  </>;
+  return <section class="more-section" aria-labelledby="home-together-title">
+    <h2 id="home-together-title">Family tables <small class="preview-badge">Experimental</small></h2>
+    <p class="setting-hint">{family ? 'Your family’s table is a tap away.' : 'Join a table, or invite someone to yours.'}</p>
     {shown.length > 0 && <ul class="home-tables" aria-label="Tables">
       {shown.map(table => <li key={table.roomId}><button type="button" class="home-table" disabled={opening}
         onClick={() => table.standing && family ? void openFamilyTable() : location.assign(roomUrl(table.roomId))}>
@@ -97,48 +104,42 @@ function FamilyEntry() {
   </section>;
 }
 
-/** The front door: family first, your solo game, then a chance to look back. */
-export function Home({ app, dispatch, onPriorHands, identity }: HomeProps) {
+/** Keep the original welcome and one immediate choice to play. */
+export function Home({ app, dispatch, identity }: HomeProps) {
   const paused = nelloPaused(app);
   // A finished game stays resumable while its last hand can still be undone or
   // replayed, so a reload doesn't strand those choices on the result card.
   const resumable = app.game !== null && (app.game.phase !== 'game-over' || app.showTrick || canUndo(app) || canRestart(app));
   return (
     <div class="home">
-      <div class="home-card front-card">
-        <div class="home-topline"><p class="eyebrow">Texas 42</p>{identity}</div>
-        <header class="home-brand">
-          <div><h1 class="title">Plunge</h1><p class="tagline">Pull up a chair.</p></div>
-          <div class="home-dominoes" aria-hidden="true">
-            <Domino id="64" /><Domino id="55" /><Domino id="42" />
-          </div>
-        </header>
+      <div class="home-card">
+        {identity}
+        <p class="eyebrow">Texas 42</p>
+        <div class="home-dominoes" aria-hidden="true">
+          <Domino id="64" /><Domino id="55" /><Domino id="42" />
+        </div>
+        <h1 class="title">Plunge</h1>
+        <p class="tagline">Pull up a chair.</p>
+        <p class="home-welcome">{paused ? <>Your Nel-O hand is saved.<br />{NATIVE_TABLE ? 'Resume Nel-O in your browser.' : 'Enable Nel-O in Settings to resume.'}</> : <>You and Gran against Earl and Ruby.<br />First to seven marks wins.</>}</p>
 
-        {ROOMS_ENABLED && <FamilyEntry />}
-        <section class="home-section home-solo" aria-labelledby="home-solo-title">
-          <h2 id="home-solo-title">Play solo</h2>
-          <p class="home-description">You and Gran against Earl and Ruby.</p>
-          {resumable && (
-            <button type="button" class="big-btn" disabled={paused} onClick={() => dispatch({ type: 'resume' })}>
-              Resume your game
-            </button>
-          )}
-          {paused && <p class="setting-hint">Your Nel-O hand is saved. {NATIVE_TABLE ? 'Resume it in the browser with Nel-O enabled.' : 'Turn on Nel-O in Settings & more to resume.'}</p>}
+        {resumable ? (
+          <button type="button" class="big-btn" disabled={paused} onClick={() => dispatch({ type: 'resume' })}>
+            Resume your game
+          </button>
+        ) : (
           <button
             type="button"
-            class={resumable || ROOMS_ENABLED ? 'big-btn secondary' : 'big-btn'}
+            class="big-btn"
             onClick={() => dispatch({ type: 'new-game', seed: Date.now().toString(36), sessionId: crypto.randomUUID() })}
           >
             Deal me in
           </button>
-          {app.game && onPriorHands && <button type="button" class="text-btn" aria-haspopup="dialog" onClick={onPriorHands}>Prior hands</button>}
-        </section>
+        )}
 
-        <a class="home-stats" href="?stats=1">
-          <span class="home-stats-heading"><strong>Stats · Play again</strong><small class="preview-badge">Preview</small></span>
-          <span class="home-description">Look back at your hands. Try a different move.</span>
-          <span class="home-stats-arrow" aria-hidden="true">→</span>
+        <a class="text-btn home-stats-link" href="?stats=1">
+          Stats · Play again <small class="preview-badge">Preview</small>
         </a>
+        {ROOMS_ENABLED && <FamilyEntry compact />}
 
         <div class="link-row home-links">
           <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'how' })}>
@@ -154,7 +155,7 @@ export function Home({ app, dispatch, onPriorHands, identity }: HomeProps) {
 }
 
 /** Settings, your saved things, and the rest of Plunge. */
-export function More({ app, dispatch, onQuestions, onHistory }: MoreProps) {
+export function More({ app, dispatch, onQuestions, onHistory, onPriorHands }: MoreProps) {
   return (
     <div class="home">
       <div class="home-card more-card">
@@ -162,6 +163,13 @@ export function More({ app, dispatch, onQuestions, onHistory }: MoreProps) {
           &larr; Back
         </button>
         <h1 class="more-title">More</h1>
+
+        {app.game && <section class="more-section" aria-labelledby="more-game">
+          <h2 id="more-game">Your game</h2>
+          <button type="button" class="more-row" onClick={() => dispatch({ type: 'new-game', seed: Date.now().toString(36), sessionId: crypto.randomUUID() })}>Deal me in</button>
+          {onPriorHands && <button type="button" class="more-row" aria-haspopup="dialog" onClick={onPriorHands}>Prior hands</button>}
+        </section>}
+        {ROOMS_ENABLED && <FamilyEntry />}
 
         <section class="more-section" aria-labelledby="more-settings">
           <h2 id="more-settings">Settings</h2>

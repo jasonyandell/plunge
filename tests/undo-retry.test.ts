@@ -19,7 +19,7 @@ import { encodeReplay } from '../src/engine/replay-code';
 import { attachGame, saveQuestion } from '../src/questions/client';
 import { listQuestions } from '../src/questions/storage';
 import { DeclareSheet, GameOverSheet, HandOverSheet, RestartConfirm } from '../src/ui/sheets';
-import { Home } from '../src/ui/Home';
+import { Home, More } from '../src/ui/Home';
 
 beforeAll(() => {
   vi.stubGlobal('window', new EventTarget());
@@ -617,7 +617,8 @@ describe('a finished game after reload', () => {
   };
   const resume = (app: AppState): AppState => {
     const h = home(app);
-    expect(h.buttons.map((b) => b.text).slice(0, 2)).toEqual(['Resume your game', 'Deal me in']);
+    expect(h.buttons[0]!.text).toBe('Resume your game');
+    expect(h.buttons.some((b) => b.text === 'Deal me in')).toBe(false);
     h.buttons[0]!.onClick();
     expect(h.sent).toEqual([{ type: 'resume' }]);
     return reducer(app, h.sent[0]!);
@@ -639,10 +640,11 @@ describe('a finished game after reload', () => {
     const card = buttons(flatten(GameOverSheet({ g: resumed.game!, dispatch: () => {},
       onUndo: canUndo(resumed) ? () => {} : undefined, onRestart: canRestart(resumed) ? () => {} : undefined }))).map((b) => b.text);
     expect(card).toEqual(expect.arrayContaining(['Play again', 'Undo my last move', 'Play this hand again']));
-    // "Deal me in" still starts a fresh game from Home.
-    const fresh = home(loaded);
-    fresh.buttons[1]!.onClick();
-    expect(fresh.sent[0]).toMatchObject({ type: 'new-game' });
+    // Starting fresh remains available behind More, without crowding Resume.
+    const fresh: AppEvent[] = [];
+    buttons(More({ app: loaded, dispatch: e => fresh.push(e) }))
+      .find(b => b.text === 'Deal me in')!.onClick();
+    expect(fresh[0]).toMatchObject({ type: 'new-game' });
 
     const undone = resume(reload(undo(resumed)));
     expect(undone.game!.phase).toBe('playing');
