@@ -60,7 +60,19 @@ try {
   const humanTurn = async () => { for (const [seat, page] of Object.entries(pages)) { const s = await state(page); if (s?.game?.phase === 'bidding' && s.game.turn === Number(seat)) return page; } return null; };
   let bidder = null;
   await until(async () => { bidder = await humanTurn(); if (bidder) return true; return (await state(a)).game.phase !== 'bidding'; }, 60000, 'human bid turn', a);
-  if (bidder) { await bidder.getByRole('dialog', { name: 'Your bid' }).waitFor({ timeout: 10000 }); await bidder.getByRole('button', { name: 'Help me bid', exact: true }).click(); await bidder.getByRole('heading', { name: new RegExp(model + ' (suggests|would)') }).waitFor({ timeout: 30000 }); await bidder.screenshot({ path: join(out, 'bid-hint.png') }); await bidder.getByRole('button', { name: 'Close hint', exact: true }).click(); check(`The family bidding hint comes from ${model}.`); }
+  if (bidder) {
+    await bidder.getByRole('dialog', { name: 'Your bid' }).waitFor({ timeout: 10000 });
+    await bidder.getByRole('button', { name: 'Help me bid', exact: true }).click();
+    await bidder.getByRole('heading', { name: new RegExp(model + ' (suggests|would)') }).waitFor({ timeout: 30000 });
+    if (model === 'Zeb') {
+      await bidder.getByText('Compare trumps', { exact: true }).click();
+      await bidder.getByLabel('Explore a target', { exact: true }).selectOption('36');
+      await bidder.getByText('Estimated chance of making 36', { exact: true }).waitFor();
+      if (await bidder.getByRole('table').getByRole('row').count() !== 10) throw new Error('Missing family forecast declarations.');
+    }
+    await bidder.screenshot({ path: join(out, 'bid-hint.png') });
+    await bidder.getByRole('button', { name: 'Close hint', exact: true }).click(); check(`The family bidding hint comes from ${model}.`);
+  }
   await until(async () => { await humansPass(); return (await state(a)).game.phase !== 'bidding'; }, 90000, 'auction done', a);
   check(`The auction finished (${(await state(a)).game.phase}); ${model} bid for the empty chairs.`);
   await until(async () => {

@@ -30,6 +30,14 @@ Nel-O; those contracts explicitly retain Walt's existing implementation. Move
 review shows Zeb’s saved weighted estimates without inventing raw success counts.
 A fresh recheck remains explicitly labeled Walt analysis.
 
+Auction advice leads with one recommendation and a reason tied to the actual
+auction: the forecast cutoff, support for a partner, a forced bid, or the
+one-mark policy limit. **Compare trumps** ranks all nine declarations for an
+explorable 30–42 point target and labels ties. Changing that target neither
+changes the recommendation nor places a bid; the notebook preserves the explored
+target and original forecast. A human-requested hint can compare trumps even
+behind a partner's bid, while live computer partner passes remain immediate.
+
 Vite bundles Zeb's WASM URL explicitly. The existing service worker caches both
 players from first launch, including the worker code and WASM. Validation:
 

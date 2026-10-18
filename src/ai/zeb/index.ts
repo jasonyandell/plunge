@@ -53,11 +53,13 @@ export function zebAuctionAction(g: GameState, forecast: Forecast[]): Action {
 }
 
 export async function zebAuctionMove(g: GameState, seat: Seat, gameId: string, previous?: AuctionEvidence, signal?: AbortSignal,
-  evaluate = async (request: AuctionRequest): Promise<ZebForecast> => await runZeb({kind:'forecast',request:{hand:request.hand,seed:request.seed,worlds:ZEB_WORLDS}},signal) as ZebForecast): Promise<AuctionDecision> {
+  evaluate = async (request: AuctionRequest): Promise<ZebForecast> => await runZeb({kind:'forecast',request:{hand:request.hand,seed:request.seed,worlds:ZEB_WORLDS}},signal) as ZebForecast,
+  options: { comparePartnerPass?: boolean } = {}): Promise<AuctionDecision> {
   if (signal?.aborted) throw new DOMException('Stopped', 'AbortError');
   if (g.turn !== seat) throw new Error('Not this bidder’s turn.');
   const key = auctionKey(g, gameId), pass = partnerAuctionPass(g);
-  if (pass) return { key, action: pass, survey: null };
+  // Human advice may explore trumps while preserving the partner-pass recommendation.
+  if (pass && !options.comparePartnerPass) return { key, action: pass, survey: null };
   const request = auctionRequest(g, gameId);
   const reused = previous?.schema === 'zeb-auction-v1' && previous.version === PLAYERS.zeb.version && previous.seed === request.seed && previous.seat === seat
     && JSON.stringify(previous.hand) === JSON.stringify(request.hand) ? previous : null;

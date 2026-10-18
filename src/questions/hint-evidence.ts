@@ -22,6 +22,8 @@ export interface BookHintEvidence {
 }
 export interface ForecastHintEvidence {
   kind: 'bid' | 'trump'; source: 'zeb'; model: PlayerIdentity; survey: ZebSurvey | null; action: Action; heading: string; explanation: string;
+  /** Absent from earlier saved forecasts. */
+  explored_target?: number; comparison_open?: boolean;
 }
 export type HintEvidence = MoveHintEvidence | BookHintEvidence | ForecastHintEvidence;
 const hash = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
@@ -67,6 +69,8 @@ export function validHint(value: unknown, g: GameState, seed: number): HintEvide
     if (!['bid','trump'].includes(h.kind) || !validPlayerIdentity(h.model) || h.model.character !== 'zeb'
       || g.phase !== (h.kind === 'bid' ? 'bidding' : 'declaring') || !text(h.heading)
       || !legalActions(g).some(a => same(a, h.action))) throw new Error('Invalid forecast hint.');
+    if ((h.explored_target !== undefined || h.comparison_open !== undefined)
+      && (!integer(h.explored_target,30,42) || typeof h.comparison_open !== 'boolean')) throw new Error('Invalid forecast comparison.');
     const s = h.survey;
     if (s) {
       if (s.schema !== 'zeb-auction-v1' || s.seat !== 0 || s.seed !== seed
@@ -79,7 +83,8 @@ export function validHint(value: unknown, g: GameState, seed: number): HintEvide
       const high = [...g.bids].reverse().find(b => b.bid.kind !== 'pass');
       if (h.kind !== 'bid' || h.action.type !== 'bid' || h.action.bid.kind !== 'pass' || high?.seat !== 2) throw new Error('Missing forecast.');
     }
-    return { kind: h.kind, source: 'zeb', model: h.model, survey: s, action: h.action, heading: h.heading, explanation: h.explanation };
+    return { kind: h.kind, source: 'zeb', model: h.model, survey: s, action: h.action, heading: h.heading, explanation: h.explanation,
+      ...(h.explored_target === undefined ? {} : { explored_target: h.explored_target, comparison_open: h.comparison_open! }) };
   }
   if (!['bid','trump'].includes(h.kind) || g.phase !== (h.kind === 'bid' ? 'bidding' : 'declaring')
     || !hash(h.book_id) || typeof h.profile !== 'string' || h.profile.length > 200 || h.policy_bid !== 30

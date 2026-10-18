@@ -6,6 +6,7 @@ import { legalDominoes } from '../engine';
 import { tileOfId, idOfTile } from '../ai/walt/requests';
 import { MoveScores } from './MoveScores';
 import { BookDetails } from './BiddingHint';
+import { ForecastDetails } from './ForecastDetails';
 import { Domino } from './Domino';
 import { bidLabel, declLabel, trumpChip, ledChip, SEAT_NAMES } from './store';
 import { TrickHistory } from './TrickHistory';
@@ -37,10 +38,7 @@ export function SavedHint({ question, complete }: { question: Question; complete
           </div>)}
         </div>}
         <TrickHistory g={snapshot} /></details>}
-    </> : h.source === 'zeb' ? <>
-      <h3>{h.heading}</h3><p>{h.model.name} · {h.model.version}</p><p>{h.explanation}</p>
-      {h.survey && <p>{h.survey.worlds} sampled deals · forecast model {h.survey.version}</p>}
-    </> : <>
+    </> : h.source === 'zeb' ? <ForecastDetails g={snapshot} hint={h} /> : <>
       <BookDetails hint={h.advice} g={snapshot} captured={h} />
       {game && <p class="hint-fact">{h.kind === 'bid' ? `Your actual bid: ${bidLabel(game.bids.find(b => b.seat === 0)!.bid)}.`
         : `You chose ${game.declaration ? declLabel(game.declaration) : 'no declaration'}.`}</p>}

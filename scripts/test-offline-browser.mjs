@@ -88,8 +88,19 @@ try {
         await bid.getByRole('button',{name:'Help me bid',exact:true}).click();
         await page.getByRole('heading',{name:/Zeb suggests/}).waitFor({timeout:30000});
         await page.screenshot({path:join(out,'zeb-bid-hint.png')});
+        const recommendation = await page.getByRole('heading',{name:/Zeb suggests/}).innerText();
+        const before = await page.evaluate(() => localStorage.getItem('plunge:save:v1'));
+        await page.getByText('Compare trumps',{exact:true}).click();
+        await page.getByLabel('Explore a target',{exact:true}).selectOption('36');
+        await page.getByText('Estimated chance of making 36',{exact:true}).waitFor();
+        if (await page.getByRole('table').getByRole('row').count() !== 10) throw new Error('Missing forecast declarations.');
+        if (await page.getByRole('heading',{name:/Zeb suggests/}).innerText() !== recommendation
+          || await page.evaluate(() => localStorage.getItem('plunge:save:v1')) !== before) throw new Error('Exploring trumps changed the recommendation or game.');
+        await page.screenshot({path:join(out,'zeb-compare-trumps.png')});
         await page.getByRole('button',{name:'Why this hint?',exact:true}).click();
         await page.getByRole('dialog',{name:'Saved question',exact:true}).waitFor();
+        if (await page.getByLabel('Explore a target',{exact:true}).inputValue() !== '36') throw new Error('The saved hint lost its explored target.');
+        await page.getByText('Estimated chance of making 36',{exact:true}).waitFor();
         await page.getByRole('button',{name:'Close questions',exact:true}).click();
         hintChecked=true;
       }
