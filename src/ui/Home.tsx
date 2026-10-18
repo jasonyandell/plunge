@@ -16,6 +16,7 @@ import type { ComponentChildren } from 'preact';
 interface HomeProps {
   app: AppState;
   dispatch: (e: AppEvent) => void;
+  onPriorHands?: () => void;
   /** Who's here, in the card's corner. Passed in so Home stays hook-free. */
   identity?: ComponentChildren;
 }
@@ -92,7 +93,7 @@ function FamilyEntry() {
 }
 
 /** The front door: one decision, everything else behind More. */
-export function Home({ app, dispatch, identity }: HomeProps) {
+export function Home({ app, dispatch, onPriorHands, identity }: HomeProps) {
   const paused = nelloPaused(app);
   // A finished game stays resumable while its last hand can still be undone or
   // replayed, so a reload doesn't strand those choices on the result card.
@@ -123,6 +124,7 @@ export function Home({ app, dispatch, identity }: HomeProps) {
           Deal me in
         </button>
         {ROOMS_ENABLED && <FamilyEntry />}
+        {app.game && onPriorHands && <button type="button" class="text-btn" aria-haspopup="dialog" onClick={onPriorHands}>Prior hands</button>}
 
         <div class="link-row home-links">
           <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'how' })}>

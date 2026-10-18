@@ -7,8 +7,10 @@ export function TrickHistory({
   onTapPlay,
   selected,
   actionLabel = 'ask Walt',
+  seatNames = SEAT_NAMES,
 }: {
   g: GameState;
+  seatNames?: readonly string[];
   actionLabel?: string;
   onTapPlay?: ((trick: number, play: number, target: HTMLButtonElement) => void) | undefined;
   selected?: { trick: number; play: number } | null | undefined;
@@ -18,19 +20,20 @@ export function TrickHistory({
       {g.tricks.map((t, i) => {
         const ledSeat = t.plays[0]?.seat;
         return (
-          <div class="hist-row" key={i}>
+          <div class="hist-row" key={i} role="group"
+            aria-label={`Trick ${i + 1}${ledSeat === undefined ? '' : `, led by ${seatNames[ledSeat]}`}, won by ${seatNames[t.winner]}, ${t.points} points`}>
             <span class="hist-num">{i + 1}</span>
             <div class="hist-plays">
               {t.plays.map((p, j) => {
                 const isSel = selected != null && selected.trick === i && selected.play === j;
                 const cls = `hist-cell${p.seat === t.winner ? ' hist-won' : ''}${isSel ? ' hist-sel' : ''}`;
-                const title = `${SEAT_NAMES[p.seat]}${p.seat === ledSeat ? ' led' : ''}${
+                const title = `${seatNames[p.seat]}${p.seat === ledSeat ? ' led' : ''}${
                   p.seat === t.winner ? ' — won the trick' : ''
                 }`;
                 const inner = (
                   <>
                     <span class="hist-who">
-                      {SEAT_NAMES[p.seat]?.[0]}
+                      {seatNames === SEAT_NAMES ? seatNames[p.seat]?.[0] : seatNames[p.seat]}
                       {p.seat === ledSeat && (
                         <span class="hist-led-dot" aria-hidden="true">
                           &bull;
