@@ -20,6 +20,7 @@ import { attachGame, saveQuestion } from '../src/questions/client';
 import { listQuestions } from '../src/questions/storage';
 import { DeclareSheet, GameOverSheet, HandOverSheet, RestartConfirm } from '../src/ui/sheets';
 import { Home, More } from '../src/ui/Home';
+import { NewGameButton } from '../src/ui/NewGameButton';
 
 beforeAll(() => {
   vi.stubGlobal('window', new EventTarget());
@@ -462,6 +463,7 @@ function flatten(v: unknown): unknown {
 function buttons(v: unknown, out: Array<{ text: string; onClick: () => void }> = []) {
   if (Array.isArray(v)) { for (const x of v) buttons(x, out); return out; }
   if (!v || typeof v !== 'object') return out;
+  if ((v as VNode).type === NewGameButton) return buttons(NewGameButton((v as VNode).props as unknown as Parameters<typeof NewGameButton>[0]), out);
   const node = v as { type: unknown; props: { children?: unknown; onClick?: () => void } };
   if (node.type === 'button' && node.props.onClick) out.push({ text: text(node.props.children), onClick: node.props.onClick });
   buttons(node.props?.children, out);
@@ -640,10 +642,11 @@ describe('a finished game after reload', () => {
     const card = buttons(flatten(GameOverSheet({ g: resumed.game!, dispatch: () => {},
       onUndo: canUndo(resumed) ? () => {} : undefined, onRestart: canRestart(resumed) ? () => {} : undefined }))).map((b) => b.text);
     expect(card).toEqual(expect.arrayContaining(['Play again', 'Undo my last move', 'Play this hand again']));
-    // Starting fresh remains available behind More, without crowding Resume.
+    // Starting fresh is available on Home and behind More after reload.
+    expect(home(loaded).buttons.some(b => b.text === 'Start a new game')).toBe(true);
     const fresh: AppEvent[] = [];
     buttons(More({ app: loaded, dispatch: e => fresh.push(e) }))
-      .find(b => b.text === 'Deal me in')!.onClick();
+      .find(b => b.text === 'Start a new game')!.onClick();
     expect(fresh[0]).toMatchObject({ type: 'new-game' });
 
     const undone = resume(reload(undo(resumed)));

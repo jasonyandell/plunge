@@ -3,8 +3,8 @@
 .room-intro { line-height: 1.6; }
 .room-label { display: flex; flex-direction: column; gap: 8px; text-align: left; font-size: 14px; margin: 18px 0; }
 .room-label input { font: inherit; font-size: 17px; min-height: 48px; width: 100%; border: 1px solid #a88f69; border-radius: 10px; padding: 10px; background: #fffaf0; color: #302316; }
-.room-bar { display: flex; align-items: center; gap: 5px; padding: 3px 8px; background: #21170e; font-size: 12px; }
-.room-bar > span { flex: 1; min-width: 0; }
+.room-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 3px 8px; background: #21170e; font-size: 12px; }
+.room-bar > span { flex: 1 1 100px; min-width: 0; overflow-wrap: anywhere; }
 .room-bar small { display: block; color: var(--butterscotch); font-size: 10px; }
 .room-bar button, .room-error button { min-height: 44px; padding: 6px 8px; background: none; color: var(--cream); border: 1px solid #e9c07a40; border-radius: 8px; font: inherit; }
 .room-bar button:disabled { opacity: .4; }

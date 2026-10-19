@@ -3,6 +3,7 @@
  */
 
 import { PlayerPicker } from './PlayerPicker';
+import { NewGameButton } from './NewGameButton';
 import { DEEP_WORLDS, NATIVE_TABLE } from '../ai/native';
 import { canRestart, canUndo, nelloPaused, type AppEvent, type AppState } from './store';
 import { Domino } from './Domino';
@@ -136,6 +137,8 @@ export function Home({ app, dispatch, identity }: HomeProps) {
           </button>
         )}
 
+        {resumable && <NewGameButton app={app} dispatch={dispatch} />}
+
         <a class="text-btn home-stats-link" href="?stats=1">
           Stats · Play again <small class="preview-badge">Preview</small>
         </a>
@@ -166,7 +169,7 @@ export function More({ app, dispatch, onQuestions, onHistory, onPriorHands }: Mo
 
         {app.game && <section class="more-section" aria-labelledby="more-game">
           <h2 id="more-game">Your game</h2>
-          <button type="button" class="more-row" onClick={() => dispatch({ type: 'new-game', seed: Date.now().toString(36), sessionId: crypto.randomUUID() })}>Deal me in</button>
+          <NewGameButton app={app} dispatch={dispatch} className="more-row" />
           {onPriorHands && <button type="button" class="more-row" aria-haspopup="dialog" onClick={onPriorHands}>Prior hands</button>}
         </section>}
         {ROOMS_ENABLED && <FamilyEntry />}

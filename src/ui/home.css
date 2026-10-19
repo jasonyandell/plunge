@@ -9,7 +9,8 @@
 }
 
 .home-card {
-  width: min(400px, 94vw);
+  width: min(400px, 100%);
+  min-width: 0;
   color: var(--brown-9);
   background: linear-gradient(145deg, #fff7e8, var(--cream));
   border: 1px solid #fff4dd;
@@ -94,7 +95,7 @@
 .more-section .native-intro { margin: 14px 0 8px; }
 .home button:focus-visible { outline-color: var(--teal-ink); }
 /* One play button and compact shortcuts; the details live behind More. */
-.home-family { display: inline-flex; align-items: center; gap: 2px; margin-top: 10px; min-height: 44px; }
+.home-family { display: inline-flex; align-items: center; justify-content: center; flex-wrap: wrap; max-width: 100%; gap: 2px; margin-top: 10px; min-height: 44px; }
 .home-tables { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
 .home-table { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; align-items: center; width: 100%; min-height: 56px; padding: 10px 12px; border: 1px solid #8c6d3b40; border-radius: 12px; background: #286f6514; color: var(--brown-9); font: inherit; text-align: left; cursor: pointer; }
 .home-table strong { font-size: 15px; overflow-wrap: anywhere; }
