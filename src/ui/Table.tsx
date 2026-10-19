@@ -12,6 +12,7 @@ import { playIndex } from '../engine/play-index';
 
 import { PlayerBadge } from './PlayerBadge';
 import { PlayerPicker } from './PlayerPicker';
+import { NewGameButton } from './NewGameButton';
 import { handPlayers, playerLabel, usesForecastBidding } from '../ai/players';
 import { useEffect, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
@@ -19,6 +20,7 @@ import type { CompletedTrick, GameState, PlayRecord, Seat } from '../engine';
 import { legalDominoes } from '../engine';
 import { Domino } from './Domino';
 import { Tally } from './Tally';
+import { YourBid } from './YourBid';
 import type { AppEvent, AppState } from './store';
 import {
   HUMAN_SEAT, SEAT_NAMES, TRICK_HOLD_MS, bidLabel, contractLabel, declLabel, ledChip, trumpChip,
@@ -185,7 +187,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
         <div class="hand-area">
           <div class="hand-heading">
             <p class={`hand-caption${humanTurn && !showingLast ? ' your-turn' : ''}`} role="status">
-              <strong class="you-label">You</strong>
+              <span class="hand-identity"><strong class="you-label">You</strong><YourBid g={g} seat={HUMAN_SEAT} /></span>
               <span>{humanTurn && !showingLast
                 ? g.currentTrick.length === 0 ? 'Your turn to lead' : 'Your turn to play'
                 : 'Your hand'}</span>
@@ -291,6 +293,7 @@ function GameMenu({ app, dispatch, onClose, onHome, extra }: {
         {extra}
         <button type="button" class="big-btn" onClick={onClose}>Keep playing</button>
         <button type="button" class="big-btn secondary" onClick={onHome}>Back to home</button>
+        {!app.scenarioGame && <NewGameButton app={app} dispatch={dispatch} onStarted={onClose} />}
       </div>
     </div>
   );
