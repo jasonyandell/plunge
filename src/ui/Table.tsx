@@ -7,7 +7,7 @@ import { playIndex } from '../engine/play-index';
  * your left, Gran (2) — your partner — across the top, Ruby (3) to your right.
  *
  * Portrait layout keeps the suit panels and labeled hand visible. The middle
- * table flexes to the available height; hand tiles cap at 58px wide.
+ * table flexes to the available height; your horizontal tiles form rows of four.
  */
 
 import { PlayerBadge } from './PlayerBadge';
@@ -198,7 +198,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
           {humanSitsOut ? (
             <div class="hand sit-out">
               {humanHand.map((id) => (
-                <Domino key={id} faceDown orientation="v" />
+                <Domino key={id} faceDown orientation="h" />
               ))}
               <p class="sit-note">You're sitting this one out — Nel-O.</p>
             </div>
@@ -208,7 +208,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
                 <Domino
                   key={id}
                   id={id}
-                  orientation="v"
+                  orientation="h"
                   state={humanTurn && app.settings.showHints ? (legal.has(id) ? 'legal' : 'illegal') : 'idle'}
                   interactive={humanTurn && !app.settings.showHints}
                   onTap={() => {
