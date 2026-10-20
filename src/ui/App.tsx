@@ -82,6 +82,12 @@ export function App() {
   }).catch(() => setHistoryError('History export failed. Keep this tab open and retry.'));
 
   const [questions, setQuestions] = useState<{ id: string | null } | null>(null);
+  const [screenIdea, setScreenIdea] = useState(false);
+  useEffect(() => {
+    const changed = (event: Event) => setScreenIdea((event as CustomEvent<boolean>).detail);
+    window.addEventListener('plunge-idea-active', changed);
+    return () => window.removeEventListener('plunge-idea-active', changed);
+  }, []);
   const openQuestion = (id: string) => setQuestions({ id });
   useEffect(() => {
     const sync = () => void syncQuestions();
@@ -103,17 +109,17 @@ export function App() {
   const preparation = useRef<AuctionPreparation>();
   useEffect(() => {
     if (!usesPreparedDeals(app.settings.difficulty) || NATIVE_TABLE || !isNative(app.settings.difficulty) || app.screen !== 'table'
-      || app.scenarioGame || questions || app.game?.phase !== 'bidding') return;
+      || app.scenarioGame || questions || screenIdea || app.game?.phase !== 'bidding') return;
     const current = new AuctionPreparation();
     preparation.current = current;
     return () => { current.close(); preparation.current = undefined; };
   }, [app.sessionId, app.game?.handNumber, app.game?.phase === 'bidding', app.screen,
-    app.scenarioGame !== null, app.settings.difficulty, questions !== null]);
+    app.scenarioGame !== null, app.settings.difficulty, questions !== null, screenIdea]);
   useEffect(() => {
-    if (app.game?.turn === HUMAN_SEAT && !questions) {
+    if (app.game?.turn === HUMAN_SEAT && !questions && !screenIdea) {
       preparation.current?.prepare(anticipatedAuctions(app.game, app.sessionId, HUMAN_SEAT));
     } else preparation.current?.pause();
-  }, [app.game, app.sessionId, app.screen, app.settings.difficulty, questions !== null, app.scenarioGame]);
+  }, [app.game, app.sessionId, app.screen, app.settings.difficulty, questions !== null, app.scenarioGame, screenIdea]);
 
   // The same shared player runs through a native transport or a browser worker.
   const [thinking, setThinking] = useState<Seat | null>(null);
@@ -121,7 +127,7 @@ export function App() {
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     setNativeError(null);
-    if (questions) return;
+    if (questions || screenIdea) return;
     const seat = pendingAiSeat(app);
     // Every response carries the generation it was started in; after an undo or
     // replay the reducer drops it even if this cleanup hasn't run yet.
@@ -165,7 +171,7 @@ export function App() {
       return () => clearTimeout(t);
     }
     return undefined;
-  }, [app, retry, questions]);
+  }, [app, retry, questions, screenIdea]);
 
   // Persist settings + in-progress game. (A shared hand opened from a link
   // is never part of the save — the player's own game stays underneath.) Commit

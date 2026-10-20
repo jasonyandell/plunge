@@ -23,6 +23,7 @@ jobs:
       - run: node scripts/test-family-discovery-browser.mjs
       - run: node scripts/test-hand-pause-browser.mjs
       - run: node scripts/test-idea-accept-browser.mjs
+      - run: node scripts/test-screen-idea-browser.mjs
       - run: node scripts/test-mcp-browser.mjs
       - run: npm run test:offline:browser
       - run: npm run test:zeb:browser

@@ -83,6 +83,13 @@ stays fixed; the finished hand is attached afterward. No login required.
 See [the question notebook guide](docs-question-notebook.md) for the private
 research inbox and deployment details.
 
+Hold the screen, or choose **Share an idea**, to capture what you see, mark a
+spot, and add a note. Solo play pauses while the idea is open. **Save on this
+device** keeps the picture and note through closing or reloading, even offline.
+Open **Share an idea** again and choose **Make an idea card** when connected;
+it uses your signed-in family account or personal invite. Saved drafts do not
+upload automatically. Preview captures stay on the preview's device storage.
+
 The shaker (last bidder) must bid at least 30 when the first three players pass.
 This applies to new hands and resumed auctions; hands already in play keep
 their recorded rules. Question links preserve the house rule (`v1f`), while

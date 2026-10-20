@@ -96,14 +96,19 @@ function ScreenIdea({onClose}:{onClose:()=>void}) {
     // Clone the screen before displaying the feedback dialog.
     const picture = captureScreen().catch(()=>null);
     dialog.current?.showModal();
-    void Promise.all([draftStore(DRAFT).catch(()=>({...readDraft(DRAFT),screenshots:[]})),picture]).then(([previous,image])=>{
+    void Promise.all([draftStore(DRAFT).catch(()=>({...readDraft(DRAFT),screenshots:[]})),picture]).then(async([previous,image])=>{
       if(disposed)return;
       if(previous && (previous.body || previous.screenshots.length)) {
         setDraft(previous);setResumed(true);
         return;
       }
       if(!image)setError('This browser could not capture the screen. You can still describe it or add a screenshot.');
-      setDraft({id:crypto.randomUUID().replaceAll('-',''),body:'',screenshots:image?[image]:[]});
+      const captured={id:crypto.randomUUID().replaceAll('-',''),body:'',screenshots:image?[image]:[]};
+      // Save before opening markup: a reload or closed tab must not lose the capture.
+      try{await draftStore(DRAFT,captured);}
+      catch{if(!disposed)setError('Your browser could not save this draft. Keep this page open until you send it.');}
+      if(disposed)return;
+      setDraft(captured);
       setMark(!!image);
     });
     return()=>{disposed=true;if(focus instanceof HTMLElement && focus.isConnected)focus.focus();};
@@ -111,8 +116,8 @@ function ScreenIdea({onClose}:{onClose:()=>void}) {
   return <dialog ref={dialog} data-idea-tools class="screenshot-dialog idea-paper screen-idea-dialog" aria-labelledby="screen-idea-title"
     onCancel={event=>{if(event.target!==event.currentTarget)return;event.preventDefault();if(!busy)onClose();}}>
     <h2 id="screen-idea-title">An idea about this screen</h2>
-    {saved ? <><p role="status">{saved==='preview'?'Saved on this device for this preview. Nothing was sent to the family.':'Your idea was sent. You can follow the conversation on your card.'}</p>
-      {saved!=='preview' && <a href={ideasLink(saved)} target="_blank" rel="noopener noreferrer">Open your idea card</a>}
+    {saved ? <><p role="status">{saved==='preview'?'Saved on this device for this preview. Nothing was sent to the family.':saved==='device'?'Saved on this device. Open Share an idea about this screen again when you’re connected, then make your idea card.':'Your idea was sent. You can follow the conversation on your card.'}</p>
+      {saved!=='preview' && saved!=='device' && <a href={ideasLink(saved)} target="_blank" rel="noopener noreferrer">Open your idea card</a>}
       {saved==='preview' && <button type="button" class="text-btn" disabled={busy} onClick={async()=>{
         setBusy(true);
         try{await draftStore(DRAFT,null);localStorage.removeItem(DRAFT);onClose();}
@@ -123,7 +128,7 @@ function ScreenIdea({onClose}:{onClose:()=>void}) {
       <p>Mark what you mean, then add a few words. You can also describe it without drawing.</p>
       {resumed && <p role="status">Your unfinished idea is here, with the picture you saved earlier.</p>}
       {!draft ? <p role="status">Taking a picture of the screen…</p> : !mark && <Composer token={token} selected={null} startingDraft={draft} storageKey={DRAFT} previewOnly={QUESTIONS_LOCAL_ONLY}
-        onBusy={setBusy} onError={setError} onSent={thread=>setSaved(thread.card.id)} onPreviewSaved={()=>setSaved('preview')}/>}
+        onBusy={setBusy} onError={setError} onSent={thread=>setSaved(thread.card.id)} onPreviewSaved={()=>setSaved('preview')} onSavedLocally={()=>setSaved('device')}/>}
       {!QUESTIONS_LOCAL_ONLY && <details><summary>Need family access?</summary>
         <p><a href="/?account=1" target="_blank" rel="noopener noreferrer">Sign in in another tab</a>, then try sending again. Or paste your personal invite here.</p>
         <label>Invite link<input type="password" autoComplete="off" value={invite} onInput={event=>setInvite(event.currentTarget.value)} /></label>
@@ -139,7 +144,10 @@ function ScreenIdea({onClose}:{onClose:()=>void}) {
     <button type="button" class="big-btn secondary" disabled={busy} autoFocus onClick={onClose}>{saved?'Back to Plunge':'Close · keep draft'}</button>
     {mark && draft?.screenshots[0] && <MarkScreenshot picture={draft.screenshots[0]} onError={setError} onCancel={()=>setMark(false)} onDone={picture=>{
       // Start the composer with the marked picture before any typing begins.
-      setDraft({...draft,screenshots:[picture]});setMark(false);
+      const marked={...draft,screenshots:[picture]};
+      setBusy(true);
+      void draftStore(DRAFT,marked).catch(()=>setError('Your browser could not save this draft. Keep this page open until you send it.'))
+        .finally(()=>{setDraft(marked);setMark(false);setBusy(false);});
     }}/>}
   </dialog>;
 }
