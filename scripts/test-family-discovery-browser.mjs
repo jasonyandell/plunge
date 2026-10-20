@@ -40,9 +40,20 @@ try {
     const response = await fetch(origin + '/api/rooms/family', { method: 'POST', headers: { Origin: origin, Cookie: `__Host-plunge-session=${token}` } });
     assert.equal(response.status, 200); seats.push(await response.json());
   }
-  const phone = async seat => {
+  const phone = async (seat, account) => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
     const page = await context.newPage(); page.setDefaultTimeout(15000);
+    // Account endpoints are restricted to the production origin. Dispatch those to
+    // this local worker under that origin; provisioned sessions never leave Miniflare.
+    await page.route('**/api/**', async route => {
+      const request = route.request(), url = new URL(request.url());
+      if (!account && !url.pathname.startsWith('/api/account')) return route.continue();
+      const headers = { ...request.headers(), ...(account ? { cookie: `__Host-plunge-session=${account.repeat(64)}` } : {}) };
+      const target = 'https://plunge.texas42.workers.dev' + url.pathname + url.search;
+      headers.origin = 'https://plunge.texas42.workers.dev';
+      const response = await mf.dispatchFetch(target, { method: request.method(), headers, ...(request.postData() ? { body: request.postData() } : {}) });
+      await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
+    });
     await page.addInitScript(seat => {
       if (seat) { localStorage.setItem('plunge:room:' + seat.roomId, JSON.stringify(seat)); localStorage.setItem('plunge:room:last', seat.roomId); }
       const Real = WebSocket;
@@ -90,5 +101,43 @@ try {
   await knocker.waitForFunction(() => !!window.__room?.game && window.__room.seats.some(s => s?.name === 'Cousin' && s.connected));
   assert.equal(await knocker.evaluate(() => window.__room.sessionId), before.session);
   console.log('PASS: family-play page finds the same table; a closed door still requires a person to let the newcomer in.');
+  // A full table still belongs to its authenticated players on a fresh phone.
+  const returning = await phone(undefined, '2');
+  await returning.goto(origin);
+  await returning.getByRole('region', { name: 'People playing now' }).getByRole('button', { name: /Rejoin$/ }).click();
+  await returning.waitForFunction(() => !!window.__room?.game);
+  assert.equal(await returning.evaluate(() => JSON.parse(localStorage.getItem('plunge:room:' + window.__room.roomId)).seat), seats[1].seat);
+  assert.equal(await returning.evaluate(() => window.__room.seats.filter(Boolean).length), 4);
+  assert.equal(await returning.evaluate(() => window.__room.sessionId), before.session);
+  console.log('PASS: authenticated Mom rejoins a full table from a fresh phone, in her existing chair and hand.');
+  // An old guest key cannot override the signed-in account on this browser.
+  const guestKey = await guest.evaluate(id => JSON.parse(localStorage.getItem('plunge:room:' + id)), seats[0].roomId);
+  await returning.evaluate(key => localStorage.setItem('plunge:room:' + key.roomId, JSON.stringify(key)), guestKey);
+  await returning.reload();
+  await returning.waitForFunction(seat => window.__room?.seats.filter(Boolean).length === 4 && JSON.parse(localStorage.getItem('plunge:room:' + window.__room.roomId)).seat === seat, seats[1].seat);
+  const signedOut = await phone();
+  await signedOut.goto(origin);
+  await signedOut.getByRole('region', { name: 'People playing now' }).getByRole('button', { name: /View table$/ }).click();
+  const signIn = signedOut.getByRole('link', { name: 'Already have an account? Sign in to find your chair →' });
+  await signIn.waitFor();
+  const signInPath = await signIn.getAttribute('href');
+  assert.equal(signInPath, '/?account=1&roomReturn=' + seats[0].roomId);
+  await signIn.click();
+  await signedOut.getByRole('link', { name: 'Continue without signing in' }).waitFor();
+  // The same account destination after authentication preserves the original invite.
+  await returning.goto(origin + signInPath);
+  const back = returning.getByRole('link', { name: 'Continue to the table as Mom' });
+  await back.waitFor();
+  assert.equal(await back.getAttribute('href'), '/?rooms=1#room=' + seats[0].roomId);
+  await back.click();
+  await returning.waitForFunction(() => !!window.__room?.game);
+  // Direct invites also use an available account without asking for a name.
+  await returning.evaluate(() => localStorage.clear());
+  await returning.goto(room);
+  assert.equal(await returning.getByRole('textbox', { name: 'Your name', exact: true }).count(), 0);
+  await returning.getByRole('button', { name: 'Join the table as Mom', exact: true }).click();
+  await returning.waitForFunction(seat => !!window.__room?.game && JSON.parse(localStorage.getItem('plunge:room:' + window.__room.roomId)).seat === seat, seats[1].seat);
+  await returning.screenshot({ path: join(out, 'account-rejoined-full-table.png') });
+  console.log('PASS: account wins over an old guest key; a full-table invitation offers sign-in and keeps its return destination.');
   console.log('Screenshots:', out);
 } finally { clearTimeout(deadline); await browser.close(); await mf.dispose(); }
