@@ -58,6 +58,9 @@ self.addEventListener('fetch', (e) => {
       || url.pathname.startsWith('/oauth/') || url.pathname.startsWith('/.well-known/oauth-')) return;
   // The deploy beacon must always come from the network (deploy-aware reload).
   if (url.pathname === '/version.json') return;
+  // The /lab/ game pages are separate experiments: never cached, and their
+  // navigations must not overwrite the Plunge shell held as /index.html.
+  if (url.pathname.startsWith('/lab/')) return;
 
   // Page loads: network-first so a fresh deploy shows up, the saved game when
   // offline or slow. The network copy is never cached: the saved page must

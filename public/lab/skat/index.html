@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skat vs Walt</title>
+<style>
+  :root {
+    --felt: #1f5e3a; --felt-2: #184b2e; --ink: #f3f1e8; --muted: #b9cbbd;
+    --card: #fffdf6; --card-ink: #1b1b1b; --red: #c0262d; --accent: #f2c14e; --bad: #ff8a80; --good: #9be7a1;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--felt); color: var(--ink); font: 15px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 10px 16px 24px; }
+  h1 { font-size: 20px; margin: 4px 0 2px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
+  button { font: inherit; border: 0; border-radius: 8px; padding: 8px 12px; background: var(--accent); color: #222; cursor: pointer; }
+  button.secondary { background: #2d7a4f; color: var(--ink); }
+  button.sel { outline: 3px solid #fff; }
+  button:disabled { opacity: .45; cursor: default; }
+  select { font: inherit; border-radius: 8px; padding: 6px; }
+  .info { background: var(--felt-2); border-radius: 10px; padding: 8px 10px; margin: 8px 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 4px 12px; font-size: 14px; }
+  .info b { color: var(--accent); }
+  .table { position: relative; background: var(--felt-2); border-radius: 14px; min-height: 210px; margin: 8px 0; padding: 8px; }
+  .seat { position: absolute; font-size: 13px; color: var(--muted); text-align: center; }
+  .seat.left { left: 8px; top: 8px; } .seat.right { right: 8px; top: 8px; } .seat.me { left: 0; right: 0; bottom: 6px; }
+  .seat .nm { color: var(--ink); font-weight: 600; }
+  .seat.turn .nm { color: var(--accent); }
+  .trick { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -54%); width: 170px; height: 120px; }
+  .trick .card { position: absolute; }
+  .trick .p-left { left: 0; top: 6px; } .trick .p-right { right: 0; top: 6px; } .trick .p-me { left: 50%; transform: translateX(-50%); bottom: 0; }
+  .card { width: 48px; height: 70px; border-radius: 7px; background: var(--card); color: var(--card-ink); display: inline-flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 700; font-size: 17px; box-shadow: 0 1px 3px rgba(0,0,0,.4); user-select: none; border: 2px solid transparent; }
+  .card .s { font-size: 21px; line-height: 1; }
+  .card.red { color: var(--red); }
+  .card.trump { background: #fff4cc; }
+  .card.small { width: 34px; height: 48px; font-size: 13px; } .card.small .s { font-size: 15px; }
+  .hand { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin: 8px 0; min-height: 74px; }
+  .hand .card.legal { cursor: pointer; border-color: var(--accent); }
+  .hand .card.legal:hover { transform: translateY(-4px); }
+  .hand .card.dim { opacity: .5; }
+  .hand .card.picked { transform: translateY(-8px); border-color: #e53935; }
+  .msg { min-height: 22px; text-align: center; font-weight: 600; margin: 4px 0; }
+  .msg.good { color: var(--good); } .msg.bad { color: var(--bad); }
+  .panel { background: var(--felt-2); border-radius: 10px; padding: 8px 10px; margin: 8px 0; }
+  .panel h2 { font-size: 15px; margin: 0 0 6px; }
+  .row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .log { font-size: 13px; color: var(--muted); max-height: 160px; overflow: auto; }
+  .hidden { display: none !important; }
+  details { font-size: 13px; color: var(--muted); margin-top: 10px; }
+  details p { margin: 6px 0; }
+  @media (max-width: 420px) {
+    .card { width: 40px; height: 60px; font-size: 15px; } .card .s { font-size: 18px; }
+    .trick { width: 150px; height: 110px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Skat vs Walt</h1>
+  <div class="sub">Skat's play phase — 3 players, 32 cards, declarer needs 61 of 120 card points. Two Walt bots fill the other chairs.</div>
+
+  <div class="bar">
+    <button id="newDecl">New game: I declare</button>
+    <button id="newDef" class="secondary">New game: I defend</button>
+    <label style="font-size:13px">Walt <select id="strength">
+      <option value="std">standard</option>
+      <option value="fast">fast</option>
+    </select></label>
+  </div>
+
+  <div class="info" id="info"></div>
+
+  <div class="panel hidden" id="pickup">
+    <h2>You declare. Choose trump and discard 2 cards into the skat.</h2>
+    <div class="row" id="gameBtns"></div>
+    <div class="sub" id="pickupHint" style="margin-top:6px"></div>
+    <button id="startPlay" style="margin-top:4px">Play</button>
+  </div>
+
+  <div class="table" id="table">
+    <div class="seat left" id="seatL"></div>
+    <div class="seat right" id="seatR"></div>
+    <div class="trick" id="trick"></div>
+    <div class="seat me" id="seatM"></div>
+  </div>
+  <div class="msg" id="msg"></div>
+  <div class="hand" id="hand"></div>
+
+  <div class="panel">
+    <h2>Last trick</h2>
+    <div class="row" id="lastTrick"><span class="sub">—</span></div>
+  </div>
+  <div class="panel">
+    <h2>Tricks</h2>
+    <div class="log" id="log"></div>
+  </div>
+
+  <details>
+    <summary>Rules used and how Walt plays</summary>
+    <p>Suit games: the four jacks (♣J ♠J ♥J ♦J) then A 10 K Q 9 8 7 of the trump suit are trumps. Grand: only jacks are trumps. Follow the led suit (jacks belong to the trump suit); if you can't, play anything. A 11, 10 10, K 4, Q 3, J 2. The declarer's 2 discarded skat cards count for the declarer at the end.</p>
+    <p>No auction: the strongest hand declares, picks up the skat, and chooses its game. Forehand (the seat after the dealer) leads trick 1. Schneider, schwarz, null and game value are ignored — it's win (61+) or lose.</p>
+    <p>Walt decides by sampling the deals it cannot rule out from its own chair (respecting hand sizes and revealed voids; the skat is unknown to defenders), choosing one card across all of them, and modelling each other seat as a level-0 player deciding from its own chair. It searches a few plies with those minds, then plays out with a simple lawful rule policy; in the last tricks it searches to the end. It never looks at your cards.</p>
+  </details>
+</main>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
