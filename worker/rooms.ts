@@ -372,6 +372,14 @@ export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
   touch(room, connected, now);
   upgradeRoom(room);
   settleRoom(room, connected, now);
+  // Two phones can tap Ready before either receives the other's proposal. Both
+  // intents refer to the exact completed-hand revision, so the second is a yes
+  // to that readiness check. Older-hand, undo, and unrelated stale asks still fail.
+  const readiness = room.state.proposal;
+  if (command.type === 'propose' && command.kind === 'next-hand' && readiness?.kind === 'next-hand'
+    && Number.isSafeInteger(command.revision) && command.revision === readiness.baseRevision) {
+    command = { type: 'vote', id: command.id, proposal: readiness.id, vote: 'yes' };
+  }
   if (command.type === 'vote') {
     const proposal = room.state.proposal;
     if (!proposal || proposal.id !== command.proposal) throw new Error('That vote has already closed.');
@@ -411,7 +419,7 @@ export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
       const player = room.players[seat]!;
       room.state = { ...room.state, proposal: newProposal(command.id, command.kind, seat, player.name, now,
         change?.kind === 'switch' ? { player: change.to, endsGame: change.endsGame, electorate: [...seated(room, connected)].sort() }
-          : command.kind === 'next-hand' ? { electorate: [...seated(room, connected)].sort() }
+          : command.kind === 'next-hand' ? { electorate: [...seated(room, connected)].sort(), baseRevision: room.state.revision }
           : command.kind === 'kick' && command.target !== undefined ? { target: command.target } : {}) };
     } else if (command.type === 'thinking') {
       const game = room.state.game;

@@ -281,7 +281,7 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
   const dispatch = (e: AppEvent): void => {
     if (!active) { reduce(e); return; }
     switch (e.type) {
-      // Tapping the same button as the person who asked is the second yes.
+      // The result button records this person as ready for the next hand.
       case 'human': if (!table) return; if (e.action.type === 'next-hand') agreeOr('next-hand'); else act(e.action); return;
       case 'new-game': if (table) agreeOr('start'); return;
       case 'undo': if (table) propose('undo'); return;

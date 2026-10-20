@@ -35,6 +35,8 @@ export interface Proposal {
   endsGame?: boolean;
   /** Model changes and next-hand readiness keep the people who were asked: disconnecting is not agreement. */
   electorate?: Seat[];
+  /** The hand snapshot that opened readiness, so simultaneous Ready taps join it. */
+  baseRevision?: number;
   at: number; deadline: number;
   votes: Partial<Record<Seat, Vote>>;
 }

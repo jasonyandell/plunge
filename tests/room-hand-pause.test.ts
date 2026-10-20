@@ -54,3 +54,16 @@ it('starts a fresh readiness check when someone joins during the result', () => 
   expect(room.state.proposal).toBeNull();
   expect(room.state.game).toBe(game);
 });
+
+it('counts simultaneous Ready taps against the same hand, without accepting unrelated stale asks or dealing twice', () => {
+  const { room, now } = completedHand(), hand = room.state.game!.handNumber, revision = room.state.revision;
+  const ready = (seat: Seat) => commandRoom(room, seat, { type: 'propose', kind: 'next-hand', id: `ready-${seat}`, revision }, all, now + 1);
+  ready(0); ready(2);
+  expect(room.state.proposal!.votes).toEqual({ 0: 'yes', 2: 'yes' });
+  expect(() => commandRoom(room, 3, { type: 'propose', kind: 'undo', id: 'old-undo', revision }, all, now + 1)).toThrow(/changed/);
+  expect(() => commandRoom(room, 3, { type: 'propose', kind: 'next-hand', id: 'older-ready', revision: revision - 1 }, all, now + 1)).toThrow(/changed/);
+  ready(1); ready(3);
+  expect(room.state.game!.handNumber).toBe(hand + 1);
+  expect(ready(3)).toBe('duplicate');
+  expect(room.state.game!.handNumber).toBe(hand + 1);
+});

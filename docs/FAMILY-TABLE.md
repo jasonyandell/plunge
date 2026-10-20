@@ -81,6 +81,8 @@ A knock is not on this list: see Doors.
   The result stays until everyone asked is ready. The ask can expire without
   advancing the hand. A newcomer or an explicit departure cancels readiness
   so the changed group can choose Ready afresh; a reconnect preserves it.
+- Simultaneous Ready asks from the exact same completed-hand revision join the
+  same readiness check; older or unrelated stale asks remain rejected.
 - Votes are keyed to the proposal id rather than the table revision.
   The revision guard protects game moves against stale state; a vote's
   precondition is the proposal's identity, and two votes cast at the same

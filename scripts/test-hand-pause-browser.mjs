@@ -68,7 +68,8 @@ try {
   assert.equal(await host.locator('.played-domino').count(), finished.game.tricks.at(-1).plays.length);
   for (const page of pages) await page.getByRole('dialog', { name: 'Hand over', exact: true }).waitFor();
   const ready = page => page.getByRole('button', { name: 'Ready for the next hand', exact: true });
-  await ready(host).click(); await ready(pages[2]).click();
+  await Promise.all([ready(host).click(), ready(pages[2]).click()]);
+  await host.waitForFunction(() => window.__room.proposal?.votes[0] === 'yes' && window.__room.proposal?.votes[2] === 'yes');
   await host.getByRole('button', { name: 'Waiting for others…', exact: true }).waitFor();
   await host.waitForTimeout(5500);
   for (const page of pages) { assert.equal(await page.getByRole('dialog', { name: 'Hand over', exact: true }).count(), 1); }

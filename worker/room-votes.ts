@@ -20,7 +20,7 @@ export const VOTE_RULES: Record<ProposalKind, VoteRule> = {
 export const PROPOSAL_KINDS = Object.keys(VOTE_RULES) as ProposalKind[];
 
 export function newProposal(id: string, kind: ProposalKind, by: Seat, byName: string, now: number,
-  extra: { target?: Seat; player?: import('../src/ai/players').PlayerId; endsGame?: boolean; electorate?: Seat[] } = {}): Proposal {
+  extra: { target?: Seat; player?: import('../src/ai/players').PlayerId; endsGame?: boolean; electorate?: Seat[]; baseRevision?: number } = {}): Proposal {
   const rule = VOTE_RULES[kind];
   return { id, kind, mode: rule.mode, needs: rule.needs, by, byName, ...extra, at: now, deadline: now + rule.window,
     votes: { [by]: 'yes' } };
