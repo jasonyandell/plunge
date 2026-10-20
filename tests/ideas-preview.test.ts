@@ -17,7 +17,7 @@ beforeAll(async()=>{
   mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['QUESTIONS']});
   const db=await mf.getD1Database('QUESTIONS');
   env={QUESTIONS:db,IDEAS_ADMIN_TOKEN:'a'.repeat(64),ASSETS:{fetch:async()=>new Response('app')}};
-  for(const file of ['0002_family_ideas.sql','0003_accounts.sql','0004_idea_authorizations.sql','0005_idea_screenshots.sql','0008_idea_hand_lane.sql']) {
+  for(const file of ['0002_family_ideas.sql','0003_accounts.sql','0004_idea_authorizations.sql','0005_idea_screenshots.sql','0008_idea_hand_lane.sql','0010_idea_preview_revision.sql','0011_idea_releases.sql']) {
     const [tables,trigger]=(await readFile(new URL(`../migrations/${file}`,import.meta.url),'utf8')).split('CREATE TRIGGER');
     for(const statement of tables!.split(';').filter(s=>s.replace(/--.*$/gm,'').trim()))await db.prepare(statement).run();
     if(trigger)await db.prepare(`CREATE TRIGGER${trigger}`).run();
@@ -51,7 +51,7 @@ it('limits cross-origin access to this preview and to ideas, with no session-coo
   expect((await use(token,'/me','https://evil.test')).status).toBe(403);
   expect((await use(token,'/me','https://plunge-pr-59.texas42.workers.dev')).status).toBe(403);
   expect((await request('/me','GET',undefined,{Origin:preview,Cookie:`__Host-plunge-session=${session}`})).status).toBe(401);
-  for(const path of ['/admin/claim',`/${idea}/approve`,'/account'])expect((await use(token,path,preview,'POST',{})).status).toBe(403);
+  for(const path of ['/admin/claim',`/${idea}/approve`,`/${idea}/accept`,'/account'])expect((await use(token,path,preview,'POST',{})).status).toBe(403);
   const preflight=await request('/me','OPTIONS',undefined,{Origin:preview,'Access-Control-Request-Method':'GET'});
   expect(preflight.status).toBe(204);expect(preflight.headers.get('Access-Control-Allow-Origin')).toBe(preview);
   expect((await request('/me','OPTIONS',undefined,{Origin:'https://evil.test','Access-Control-Request-Method':'GET'})).status).toBe(403);

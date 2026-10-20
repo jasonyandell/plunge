@@ -6,6 +6,7 @@ export interface IdeaCard {
   pr: number | null; sha: string | null; preview: string | null;
   /** `hand`: made by hand and linked to its PR; replies are conversation, never a build. */
   lane?: 'builder' | 'hand';
+  releaseStatus?: 'queued'|'releasing'|'deploying'|null;
   activity?: {lastSeenAt:number|null;observedAt:number};
 }
 export interface IdeaMessage {
@@ -13,7 +14,8 @@ export interface IdeaMessage {
   /** Server-derived association with the frozen request answered by a completed run. */
   result?: { revision: number; requestId: string };
 }
-export interface IdeaThread { card: IdeaCard; messages: IdeaMessage[]; permissions?: {scope:'limited'|'repository';accountId:string|null;source:'default'|'owner'|'approval'} }
+export interface IdeaRelease {id:string;revision:number;pr:number;sha:string;status:'queued'|'releasing'|'deploying'|'shipped'|'blocked';note:string}
+export interface IdeaThread { release?:IdeaRelease|null; card: IdeaCard; messages: IdeaMessage[]; permissions?: {scope:'limited'|'repository';accountId:string|null;source:'default'|'owner'|'approval'} }
 export const IDEA_ID = /^[a-f0-9]{32}$/;
 export const IDEA_TOKEN = /^[a-f0-9]{64}$/;
 export const IDEA_STATUS: Record<IdeaStatus, string> = {

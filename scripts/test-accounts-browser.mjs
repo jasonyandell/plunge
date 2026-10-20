@@ -19,6 +19,7 @@ for(const statement of (await readFile('migrations/0005_idea_screenshots.sql','u
 const [laneSql,laneTrigger]=(await readFile('migrations/0008_idea_hand_lane.sql','utf8')).split('CREATE TRIGGER');
 for(const statement of laneSql.split(';').filter(s=>s.replace(/--.*$/gm,'').trim()))await db.prepare(statement).run();await db.prepare(`CREATE TRIGGER${laneTrigger}`).run();
 for(const statement of (await readFile('migrations/0010_idea_preview_revision.sql','utf8')).split(';').filter(s=>s.replace(/--.*$/gm,'').trim()))await db.prepare(statement).run();
+for(const statement of (await readFile('migrations/0011_idea_releases.sql','utf8')).split(';').filter(s=>s.replace(/--.*$/gm,'').trim()))await db.prepare(statement).run();
 for(const statement of (await readFile('migrations/0005_listed_tables.sql','utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
 for(const file of ['0004_family_table.sql','0006_hands.sql','0007_account_invites.sql','0009_family_link.sql'])for(const statement of (await readFile(`migrations/${file}`,'utf8')).split(';').filter(s=>s.trim()))await db.prepare(statement).run();
 const browser=await chromium.launch();

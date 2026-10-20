@@ -1,3 +1,4 @@
+import { acceptIdea, activeRelease, currentRelease, releaseAdmin } from './idea-releases';
 import { screenshotBytes, validateScreenshots, type StoredScreenshot } from '../src/ideas/screenshots';
 import { accountSession } from './accounts';
 import { IDEA_ID, IDEA_TOKEN, previewFor, type IdeaCard } from '../src/ideas/model';
@@ -14,7 +15,7 @@ interface Run { id: string; idea_id: string; revision: number; through_seq: numb
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 const BUILD_LEASE_MS=180000;
 const watchable = "(status IN ('checking','ready') OR (status='failed' AND (lane='hand' OR preview_revision=revision)))";
-const cards = `SELECT i.number,i.id,m.name,i.title,i.context,i.created,i.updated,i.revision,i.status,i.pr,i.sha,i.preview,i.lane,CASE WHEN i.status='building' AND i.run_id IS NOT NULL THEN i.lease_until-${BUILD_LEASE_MS} ELSE NULL END heartbeat_at FROM ideas i JOIN idea_members m ON m.id=i.member_id`;
+const cards = `SELECT i.number,i.id,m.name,i.title,i.context,i.created,i.updated,i.revision,i.status,i.pr,i.sha,i.preview,i.lane,(SELECT status FROM idea_releases r WHERE r.idea_id=i.id AND r.status IN ('queued','releasing','deploying') LIMIT 1) releaseStatus,CASE WHEN i.status='building' AND i.run_id IS NOT NULL THEN i.lease_until-${BUILD_LEASE_MS} ELSE NULL END heartbeat_at FROM ideas i JOIN idea_members m ON m.id=i.member_id`;
 type CardRow=IdeaCard & {heartbeat_at:number|null};
 function activityCard(row:CardRow):IdeaCard {
   const {heartbeat_at,...card}=row;
@@ -59,7 +60,7 @@ async function thread(db: IdeasDatabase, idea: string, through = Number.MAX_SAFE
     FROM idea_messages x LEFT JOIN idea_members m ON m.id=x.member_id
     LEFT JOIN idea_runs r ON r.id=x.id AND r.idea_id=x.idea_id AND r.state='done' AND x.role='builder'
     WHERE x.idea_id=? AND x.seq<=? ORDER BY x.seq`).bind(idea, through).all<{id:string;role:string;name:string;body:string;created:string;screenshots:string;result_revision:number|null;request_id:string|null}>();
-  return { card:activityCard(card), messages:messages.map(({screenshots,result_revision,request_id,...message})=>({...message,screenshots:JSON.parse(screenshots),
+  return { card:activityCard(card), release:await currentRelease(db,idea), messages:messages.map(({screenshots,result_revision,request_id,...message})=>({...message,screenshots:JSON.parse(screenshots),
     ...(result_revision!==null && request_id ? {result:{revision:result_revision,requestId:request_id}} : {})})), permissions:await authorization(db,idea,card.revision,through) };
 }
 export async function ideasRequest(request: Request, env: IdeasEnv, previewAccount?: Awaited<ReturnType<typeof accountSession>>): Promise<Response> {
@@ -90,10 +91,15 @@ export async function ideasRequest(request: Request, env: IdeasEnv, previewAccou
       const { results } = await db.prepare(`${cards} WHERE i.number<? ORDER BY i.number DESC LIMIT 51`).bind(before).all<CardRow>();
       return json({ cards: results.slice(0, 50).map(activityCard), next: results.length > 50 ? results[49]!.number : null });
     }
-    const match = /^\/([a-f0-9]{32})(\/(?:messages|approve))?$/.exec(path);
+    const match = /^\/([a-f0-9]{32})(\/(?:messages|approve|accept))?$/.exec(path);
     if (!match) return json({ error: 'Not found.' }, 404);
     const idea = match[1]!;
     if (request.method === 'GET' && !match[2]) { const found = await thread(db, idea); return found ? json(found) : json({ error: 'Idea not found.' }, 404); }
+    if(match[2]==='/accept' && request.method==='POST') {
+      if(previewAccount || !session?.owner)return json({error:'Sign in to the owner account in the main game to accept this preview.'},403);
+      const result=await acceptIdea(db,idea,session.id,await body(request));
+      return result ?? json(await thread(db,idea));
+    }
     if(match[2]==='/approve' && request.method==='POST') {
       if(!session?.owner)return json({error:'Sign in to the owner account to approve this request.'},403);
       // Explicit same-origin proof is required even if an invite or admin bearer is also present.
@@ -117,7 +123,7 @@ export async function ideasRequest(request: Request, env: IdeasEnv, previewAccou
       if(!saved || current.card.revision!==approval.revision)return json({error:'This idea changed or is already building. Refresh it and review the latest request.'},409);
       return json(current);
     }
-    if (request.method !== 'PUT' || match[2]==='/approve') return json({ error: 'Method not allowed.' }, 405);
+    if (request.method !== 'PUT' || (match[2] && match[2]!=='/messages')) return json({ error: 'Method not allowed.' }, 405);
     const data = await body(request,1_100_000), now = new Date().toISOString();
     const uploads=validateScreenshots(data.screenshots);
     const messageKey=match[2] ? id(data.id) : idea;
@@ -144,7 +150,14 @@ export async function ideasRequest(request: Request, env: IdeasEnv, previewAccou
     if (!await db.prepare('SELECT id FROM ideas WHERE id=?').bind(idea).first()) return json({error:'Idea not found.'},404);
     const count = await db.prepare('SELECT COUNT(*) n FROM idea_messages WHERE member_id=? AND created>?').bind(member.id, new Date(Date.now() - 3600000).toISOString()).first<{n:number}>();
     if ((count?.n ?? 0) >= 40) return json({error:'Please give the builder a little time before sending more.'},429);
-    await db.prepare("INSERT OR IGNORE INTO idea_messages(id,idea_id,member_id,role,body,created,account_id,screenshots) VALUES(?,?,?,'family',?,?,?,?)").bind(messageId,idea,member.id,text,now,authorizingAccount,screenshots).run();
+    const saved=await db.prepare(`INSERT OR IGNORE INTO idea_messages(id,idea_id,member_id,role,body,created,account_id,screenshots)
+      SELECT ?,?,?, 'family',?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM idea_releases WHERE idea_id=? AND status IN ('queued','releasing','deploying')) RETURNING id`)
+      .bind(messageId,idea,member.id,text,now,authorizingAccount,screenshots,idea).first();
+    if(!saved) {
+      const duplicate=await db.prepare('SELECT idea_id,member_id FROM idea_messages WHERE id=?').bind(messageId).first<{idea_id:string;member_id:string}>();
+      if(duplicate?.idea_id===idea && duplicate.member_id===member.id)return json(await thread(db,idea));
+      return json({error:'This preview is being added to the game. Your reply is saved on this device; send it after the release finishes.'},409);
+    }
     return json(await thread(db,idea));
   } catch (error) {
     if (error instanceof SyntaxError || (error instanceof Error && /message|identifier/i.test(error.message))) return json({ error: error.message }, 400);
@@ -162,6 +175,7 @@ async function screenshotResponse(db:IdeasDatabase,imageId:string,runId?:string)
     'X-Content-Type-Options':'nosniff','Content-Disposition':'inline; filename="screenshot.jpg"'}});
 }
 async function adminRequest(request: Request, path: string, db: IdeasDatabase): Promise<Response> {
+  if(path==='/admin/releases'||path.startsWith('/admin/releases/'))return releaseAdmin(db,path,request.method,request.method==='POST'?await body(request):{});
   if (path === '/admin/cards' && request.method === 'GET') {
     return json((await db.prepare(`${cards} ORDER BY i.number`).all<CardRow>()).results.map(activityCard));
   }
@@ -173,10 +187,11 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
   const imageMatch=/^\/admin\/runs\/([a-f0-9]{32})\/attachments\/([a-f0-9]{32})$/.exec(path);
   if(imageMatch && request.method==='GET')return await screenshotResponse(db,imageMatch[2]!,imageMatch[1]!);
   if (path === '/admin/tracked' && request.method === 'GET') {
-    return json((await db.prepare(`${cards} WHERE i.pr IS NOT NULL AND ${watchable} ORDER BY i.number`).all<CardRow>()).results.map(activityCard));
+    return json((await db.prepare(`${cards} WHERE i.pr IS NOT NULL AND ${watchable} AND NOT EXISTS(SELECT 1 FROM idea_releases r WHERE r.idea_id=i.id AND r.status IN ('queued','releasing','deploying')) ORDER BY i.number`).all<CardRow>()).results.map(activityCard));
   }
   if (request.method !== 'POST') return json({error:'Method not allowed.'},405);
   const data = await body(request), now = new Date().toISOString();
+  if(typeof data.id==='string' && await activeRelease(db,data.id))return json({error:'This idea is being released. Wait for that release to finish.'},409);
   if (path === '/admin/triage') {
     const idea=id(data.id), action=data.action, message=field(data.message,3000);
     const title=data.title===undefined ? null : field(data.title,100);

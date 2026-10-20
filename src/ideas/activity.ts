@@ -8,6 +8,7 @@ export function ideaActivity(card:IdeaCard,elapsedMs=0,connected=true) {
   const lastSeen=age===null?'':age<10000?'Checked in just now.':age<60000?`Checked in ${Math.floor(age/1000)} seconds ago.`
     :`Checked in ${Math.floor(age/60000)} ${age<120000?'minute':'minutes'} ago.`;
   if(!connected)return {tone:'quiet',label:'Updates unavailable',detail:'Reconnect to check whether the builder is working.',lastSeen};
+  if(card.releaseStatus)return {tone:'waiting',label:'Accepted',detail:card.releaseStatus==='deploying'?'The update is being released to everyone’s game.':'Waiting for the release check.',lastSeen:''};
   if(card.status==='building') {
     if(age===null)return {tone:'quiet',label:'Waiting for an update',detail:'Your idea is saved. We have not received a check-in yet.',lastSeen};
     if(age>=ACTIVITY_FRESH_MS)return {tone:'quiet',label:'No recent update',detail:'We cannot confirm the builder is still working. Your idea is saved.',lastSeen};
