@@ -25,7 +25,10 @@ const ASK: Record<VoteResult['kind'], string> = { player: 'changing the computer
 export function describeResult(r: VoteResult, model = 'Walt'): string {
   if (r.outcome === 'passed' && r.kind === 'player') return `${r.endsGame ? 'Game ended · ' : ''}${playerLabel(r.player)} selected · Ready for a new game`;
   if (r.outcome === 'passed') return r.kind === 'kick' ? `${r.targetName ?? 'A chair'} stepped out · ${model} plays that seat` : `${DONE[r.kind]} · ${r.byName} asked, the table agreed`;
+  if (r.outcome === 'failed' && r.kind === 'next-hand') return r.noFrom
+    ? `${r.noFrom} is not ready yet. The result stays here.` : 'Still waiting for everyone. Choose Ready again when you are done reading.';
   if (r.outcome === 'failed') return r.noFrom ? `${r.noFrom} said no to ${ASK[r.kind]}` : `Nobody answered ${r.byName} about ${ASK[r.kind]}`;
+  if (r.kind === 'next-hand') return 'The table changed. Choose Ready again when you are done reading.';
   return `Nothing left for ${ASK[r.kind]}`;
 }
 function useCountdown(deadline: number): number {
@@ -48,16 +51,17 @@ export function VoteBar({ proposal, seat, seats, vote, pending }: {
   const text = proposal.kind === 'kick' && proposal.target !== undefined
     ? `${proposal.byName} asks ${seats[proposal.target]?.name ?? 'that chair'} to step out` : describeProposal(proposal);
   // The same arithmetic as the coordinator, over the seats it would count.
-  const present = proposal.kind === 'player' && proposal.electorate ? proposal.electorate.length
+  const fixed = (proposal.kind === 'player' || proposal.kind === 'next-hand') && proposal.electorate;
+  const present = fixed ? fixed.length
     : seats.filter((s, i) => s && s.connected && !s.away && i !== proposal.target).length;
-  const yes = proposal.kind === 'player' && proposal.electorate
-    ? proposal.electorate.filter(seat => proposal.votes[seat] === 'yes').length
+  const yes = fixed
+    ? fixed.filter(seat => proposal.votes[seat] === 'yes').length
     : Object.values(proposal.votes).filter(v => v === 'yes').length;
   const more = Math.max(0, neededYes(proposal.needs, present) - yes);
   const nextHand = proposal.kind === 'next-hand';
   const note = proposal.kind === 'player' ? `${proposal.endsGame ? 'Everyone returns to the lobby. ' : ''}Everyone here must say yes · ${seconds}s`
     : proposal.mode === 'veto' ? `Goes ahead in ${seconds}s unless someone says no`
-    : nextHand ? `Shakes when ${more === 1 ? 'one more person is' : `${more} more people are`} ready · ${seconds}s`
+    : nextHand ? `Waiting for ${more === 1 ? 'one more person' : `${more} more people`} · The result stays until everyone is ready`
     : `Needs ${more === 1 ? 'a yes' : `${more} more yes`} within ${seconds}s`;
   return <div class={`vote-bar vote-${proposal.mode}`} role="status" data-proposal={proposal.id} data-kind={proposal.kind}>
     <div class="vote-text"><strong>{text}</strong><span>{note}{yes > 1 ? ` · ${yes} yes` : ''}</span></div>

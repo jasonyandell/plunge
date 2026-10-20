@@ -23,6 +23,8 @@ interface SheetProps {
 interface AuctionSheetProps extends SheetProps { player?: 'walt' | 'zeb'; bookSeat?: Seat; showHints: boolean; sessionId: string; questionGameId?: string; onQuestion: (id: string) => void }
 
 interface EndSheetProps extends SheetProps {
+  /** Shared hands wait for each person to finish reading the result. */
+  nextHandReady?: boolean | undefined;
   modelSummary?: string;
   /** Swap to the hand-review card (trick-by-trick history). */
   onReview?: (() => void) | undefined;
@@ -224,7 +226,7 @@ function declTitle(d: Declaration): string {
 // Hand over / game over
 // ---------------------------------------------------------------------------
 
-export function HandOverSheet({ g, dispatch, onReview, onHistory, scenario, practice, onUndo, onRestart, modelSummary }: EndSheetProps) {
+export function HandOverSheet({ g, dispatch, onReview, onHistory, scenario, practice, onUndo, onRestart, modelSummary, nextHandReady }: EndSheetProps) {
   const copy = handOverCopy(g);
   return (
     <div class="overlay">
@@ -245,11 +247,13 @@ export function HandOverSheet({ g, dispatch, onReview, onHistory, scenario, prac
           <button
             type="button"
             class="big-btn"
+            disabled={nextHandReady === true}
             onClick={() => dispatch({ type: 'human', action: { type: 'next-hand' } })}
           >
-            Shake the next hand
+            {nextHandReady === undefined ? 'Shake the next hand' : nextHandReady ? 'Waiting for others…' : 'Ready for the next hand'}
           </button>
         )}
+        {nextHandReady !== undefined && <p class="setting-hint" role="status">Take your time. The result stays until everyone here is ready.</p>}
         {onReview && (
           <button type="button" class="text-btn" onClick={onReview}>
             See how it went

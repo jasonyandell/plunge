@@ -229,7 +229,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
       {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet bookSeat={app.room?.localSeat ?? 0} player={usesForecastBidding(app.settings.difficulty) ? 'zeb' : 'walt'} key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
       {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet bookSeat={app.room?.localSeat ?? 0} player={usesForecastBidding(app.settings.difficulty) ? 'zeb' : 'walt'} key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
       {g.phase === 'hand-over' && !showingLast && !review && (
-        <HandOverSheet modelSummary={handPlayers(app.playerEvents, g.handNumber).map(p => `${p.name} · ${p.version}`).join(' + ')}
+        <HandOverSheet nextHandReady={app.room ? app.room.table?.proposal?.kind === 'next-hand' && app.room.table.proposal.votes[app.room.localSeat] === 'yes' : undefined} modelSummary={handPlayers(app.playerEvents, g.handNumber).map(p => `${p.name} · ${p.version}`).join(' + ')}
           g={g}
           dispatch={dispatch}
           onReview={g.tricks.length > 0 ? () => setReview(true) : undefined}

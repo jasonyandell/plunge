@@ -33,7 +33,7 @@ export interface Proposal {
   player?: PlayerId;
   /** The coordinator's consequence, shown beside every vote. */
   endsGame?: boolean;
-  /** Model changes keep the people who were asked: disconnecting is not agreement. */
+  /** Model changes and next-hand readiness keep the people who were asked: disconnecting is not agreement. */
   electorate?: Seat[];
   at: number; deadline: number;
   votes: Partial<Record<Seat, Vote>>;

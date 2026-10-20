@@ -4,14 +4,14 @@ import type { Proposal, ProposalKind, ProposalMode } from '../src/room/protocol'
 
 export interface VoteRule { mode: ProposalMode; needs: 'all' | 'two' | 'majority'; window: number }
 /** Low stakes pass unless someone objects within five seconds. Shaking the next
- * hand takes a second person, so nobody loses the result card while still
+ * hand waits for everyone asked, so nobody loses the result card while still
  * reading it. A kick takes most of the table. (A knock is not a vote: see knockRoom.)
  * Tune here, nowhere else. */
 export const VOTE_RULES: Record<ProposalKind, VoteRule> = {
   player: { mode: 'allow', needs: 'all', window: 90000 },
   start: { mode: 'veto', needs: 'all', window: 5000 },
   restart: { mode: 'veto', needs: 'all', window: 5000 },
-  'next-hand': { mode: 'allow', needs: 'two', window: 90000 },
+  'next-hand': { mode: 'allow', needs: 'all', window: 90000 },
   undo: { mode: 'veto', needs: 'all', window: 5000 },
   open: { mode: 'veto', needs: 'all', window: 5000 },
   close: { mode: 'veto', needs: 'all', window: 5000 },
@@ -26,10 +26,10 @@ export function newProposal(id: string, kind: ProposalKind, by: Seat, byName: st
     votes: { [by]: 'yes' } };
 }
 
-/** Routine votes use the people present now, minus a kick's target. Model
- * changes retain the original electorate: disconnecting never supplies consent. */
+/** Routine votes use the people present now, minus a kick's target. Model changes and next-hand
+ * readiness retain the original electorate: disconnecting never supplies consent. */
 export function voters(proposal: Proposal, present: ReadonlySet<Seat>): Seat[] {
-  return [...(proposal.kind === 'player' && proposal.electorate ? proposal.electorate : present)]
+  return [...((proposal.kind === 'player' || proposal.kind === 'next-hand') && proposal.electorate ? proposal.electorate : present)]
     .filter(seat => seat !== proposal.target).sort();
 }
 /** Yes votes a proposal needs from an electorate of this size. */

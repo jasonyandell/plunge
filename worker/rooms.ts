@@ -143,6 +143,13 @@ export function claimSeat(room: SavedRoom, seat: Seat, account: { id: string; na
   room.state = { ...room.state, revision: room.state.revision + 1 }; room.updated = now;
   return true;
 }
+/** A changed group needs a fresh readiness check; the finished hand stays put. */
+function clearHandReadiness(room: SavedRoom): void {
+  const proposal = room.state.proposal;
+  if (proposal?.kind !== 'next-hand') return;
+  room.state = { ...room.state, proposal: null, lastVote: { revision: room.state.revision + 1,
+    kind: proposal.kind, byName: proposal.byName, outcome: 'moot' } };
+}
 /** Sitting down works any time; a hand in progress just hands you the seat's dominoes.
  * A signed-in account gets its own chair back from any device; family always has one at the standing table. */
 export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), now = Date.now(), knock?: string, account?: string, family = false, seatToken?: string, restoreOnly = false): RoomCredentials {
@@ -174,6 +181,7 @@ export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), n
   const seat = ([2, 1, 3, 0] as const).find(seat => !room.players[seat]);
   if (seat === undefined) throw new Error('All four chairs are reserved. If one is yours, sign in with the account you used there or open the browser you played in. Otherwise, someone at the table needs to leave or use Table → Ask to step out.');
   room.players[seat] = { name: cleanName(name), token, seen: now, ...(account ? { account } : {}) };
+  clearHandReadiness(room);
   room.state = { ...room.state, revision: room.state.revision + 1, thinkingSeat: null,
     knocks: (room.state.knocks ?? []).filter(entry => entry.visitor !== knock) };
   room.updated = now;
@@ -271,6 +279,8 @@ function applyProposal(room: SavedRoom, proposal: Proposal, now: number): boolea
     }
     case 'start': case 'restart': startGame(room); return true;
     case 'next-hand': {
+      // A saved two-person or timed proposal cannot skip the new result pause.
+      if (proposal.mode !== 'allow' || proposal.needs !== 'all' || !proposal.electorate) return false;
       const legal = legalActions(room.state.game!).find(action => action.type === 'next-hand');
       if (!legal) return false;
       advance(room, legal, now, false); return true;
@@ -287,7 +297,10 @@ function vacate(room: SavedRoom, seat: Seat, reason: 'kicked' | 'left'): void {
   room.players[seat] = null;
   room.former = [...(room.former ?? []).slice(-31), { token: player.token, reason }];
   const proposal = room.state.proposal;
-  if (proposal) {
+  if (proposal?.kind === 'next-hand') {
+    // Leaving changes the group; a lost connection never signals readiness.
+    clearHandReadiness(room);
+  } else if (proposal) {
     const votes = { ...proposal.votes }; delete votes[seat];
     room.state = { ...room.state, proposal: { ...proposal, votes } };
   }
@@ -398,6 +411,7 @@ export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
       const player = room.players[seat]!;
       room.state = { ...room.state, proposal: newProposal(command.id, command.kind, seat, player.name, now,
         change?.kind === 'switch' ? { player: change.to, endsGame: change.endsGame, electorate: [...seated(room, connected)].sort() }
+          : command.kind === 'next-hand' ? { electorate: [...seated(room, connected)].sort() }
           : command.kind === 'kick' && command.target !== undefined ? { target: command.target } : {}) };
     } else if (command.type === 'thinking') {
       const game = room.state.game;
