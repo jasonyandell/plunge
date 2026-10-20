@@ -68,7 +68,7 @@ For each run the coordinator:
 4. Runs typecheck, the complete application test suite, and a production build.
    Only passing changes are committed and pushed. GitHub credentials stay with
    the coordinator; the agent has no publishing task. It creates a draft PR and
-   never merges one. PR titles and implementation summaries are public; the
+   does not merge as part of building a preview. PR titles and implementation summaries are public; the
    original family conversation stays in the private board.
 5. On subsequent invocations, checks GitHub tests and deployment. The service
    independently fetches that PR's fixed `version.json` and checks both the PR
@@ -82,6 +82,36 @@ JSONL, test output, source checkouts, result files and publication receipts are
 retained under `~/.local/share/plunge-ideas/runs/`. These contain private family
 text; they are not repository files. Unload the local LaunchAgent to stop new builds.
 Do not delete an active run directory.
+
+## Accept a preview into the game
+
+A signed-in owner opens a ready idea card and taps **Accept into the game**.
+This is separate from **Approve full access**, which only grants builder file access.
+Acceptance records the owner and exact idea revision, PR, and preview commit in
+`idea_releases` (migration `0011`). Invitations and delegated preview sessions
+cannot accept releases. The main app requires its owner session and same-origin request.
+
+The trusted Mac coordinator consumes these explicit acceptances without an LLM.
+It rechecks the owner grant, current request, PR head/base, mergeability, CI, and
+hosted preview identity, then merges only that head using `--match-head-commit`.
+A draft is marked ready only for this accepted release. No other preview merges.
+Pending checks wait; changed previews, conflicts, and failed checks appear on the
+card for attention. Updating code requires reviewing and accepting the new preview.
+
+The card says **Accepted** while waiting, then shows release progress. **In the game**
+and **Play the updated game** appear only after production reports the merge commit
+or a verified descendant. A failed deployment stays visible as needing attention.
+Replies wait during release; drafts stay on the device. Retries reuse the acceptance,
+and an interrupted merge is reconciled with GitHub before another merge attempt.
+The coordinator uses a short lease, and its normal scheduler resumes pending releases.
+The Mac must be awake and online, as for preview builds.
+
+After deploying this change, update the stable coordinator checkout while it is idle
+and restart the existing LaunchAgent; deploying the website alone does not update
+that local process. Verify `node --test scripts/test-idea-releases.mjs` and
+`node scripts/test-idea-accept-browser.mjs` (after building). Browser integration uses
+real local D1 and owner sessions, with simulated GitHub/version results; it never
+merges a real family idea as part of a test.
 
 ## Inspect and recover previews
 

@@ -15,13 +15,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: node --test scripts/test-preview.mjs scripts/test-ideas-builder.mjs scripts/test-prepare-mcp.mjs scripts/test-production-profile.mjs
+      - run: node --test scripts/test-preview.mjs scripts/test-ideas-builder.mjs scripts/test-idea-releases.mjs scripts/test-prepare-mcp.mjs scripts/test-production-profile.mjs
       - run: python3 scripts/test-update-walt.py
       - run: npm test
       - run: PLUNGE_ROOMS=experimental npm run build
       - run: npx playwright install --with-deps chromium
       - run: node scripts/test-family-discovery-browser.mjs
       - run: node scripts/test-hand-pause-browser.mjs
+      - run: node scripts/test-idea-accept-browser.mjs
       - run: node scripts/test-mcp-browser.mjs
       - run: npm run test:offline:browser
       - run: npm run test:zeb:browser

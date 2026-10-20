@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { StringDecoder } from 'node:string_decoder';
+import { releaseAccepted } from './releases.mjs';
 import { archiveScreenshots } from './screenshots.mjs';
 import { conversationUpdates, failureMessage } from './feedback.mjs';
 import { loadIdeaSession, sessionRecorder, coordinate, concurrency } from './runtime.mjs';
@@ -252,7 +253,11 @@ export async function main() {
   process.on('SIGTERM',stop);process.on('SIGINT',stop);
   try {
     await coordinate({limit:concurrency(config),signal:controller.signal,
-      inspect:()=>inspectPreviews(config),
+      inspect:async()=>{
+        await releaseAccepted({service:(path,data)=>service(config,path,data),gh:args=>gh(args,{timeout:30000}),
+          version:async origin=>{const response=await fetch(`${origin}/version.json`,{cache:'no-store',signal:AbortSignal.timeout(10000)});if(!response.ok)throw new Error('Version check failed.');return response.json();}});
+        await inspectPreviews(config);
+      },
       claim:excludeIdeaIds=>service(config,'claim',{runId:uid(),supportsScreenshots:true,excludeIdeaIds,...(config.onlyIdea?{ideaId:config.onlyIdea}:{})}),
       build:job=>buildOne(config,job,stateDir)});
   } finally {

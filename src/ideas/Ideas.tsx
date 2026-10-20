@@ -73,6 +73,17 @@ export function Ideas() {
     } catch(e) {if(generation.current===epoch)setError(e instanceof Error?e.message:'Could not approve. Please retry.');}
     finally{setBusy(false);}
   };
+  const accepting=!!thread?.release && ['queued','releasing','deploying'].includes(thread.release.status);
+  const accept = async () => {
+    if(!thread || busy || accepting)return;
+    const {id,revision,pr,sha}=thread.card,epoch=generation.current;
+    setBusy(true);setError('');
+    try {
+      const result=await ideasApi<IdeaThread>(token,`/${id}/accept`,{revision,pr,sha},'POST');
+      if(generation.current===epoch){setThread(result);setSaved('Accepted. You can follow the release on this card.');}
+    } catch(e) {if(generation.current===epoch)setError(e instanceof Error?e.message:'Could not accept yet. Please retry.');}
+    finally{setBusy(false);}
+  };
   const enter = (event: Event) => {event.preventDefault();const key=inviteToken(invite);
     if(!key) {setError('Paste the invite link Jason shared with you.');return;}
     try {localStorage.setItem(TOKEN_KEY,key);} catch { /* Visit-only login. */ }
@@ -103,7 +114,14 @@ export function Ideas() {
           <h2>{ideaPresentation(thread.card).title}</h2>
           <ul class="idea-tags" aria-label="Topics">{ideaPresentation(thread.card).tags.map(tag=><li key={tag}>{tag}</li>)}</ul>
           <IdeaLink key={thread.card.id} id={thread.card.id} busy={busy}/>
-          <IdeaActivity card={thread.card} now={now} connected={connected} />
+          {accepting ? <p role="status" class="idea-notice">{thread.release!.note}</p> : <IdeaActivity card={thread.card} now={now} connected={connected} />}
+          {thread.release?.status==='blocked' && thread.release.revision===thread.card.revision && thread.release.sha===thread.card.sha && thread.card.status!=='shipped' && <p role="status" class="idea-notice">{thread.release.note}</p>}
+          {thread.card.status==='ready' && !accepting && <section class="idea-approval" aria-label="Accept this preview">
+            {owner ? QUESTIONS_LOCAL_ONLY ? <a class="big-btn" href={ideasLink(thread.card.id)} target="_blank" rel="noopener noreferrer">Open the main game to accept</a> : <>
+              <button class="big-btn" type="button" disabled={busy} onClick={()=>void accept()}>Accept into the game</button>
+              <p class="idea-help">Use the preview you tried in everyone’s game. The card will show when it is live.</p>
+            </> : <p class="idea-help">Jason can accept this preview into everyone’s game from his account.</p>}
+          </section>}
           {thread.card.status==='shipped' && <a class="big-btn" href={LIVE_PLUNGE}>Play the updated game</a>}
           {hasIdeaDemo(thread.card) && <IdeaLink key={`${thread.card.id}:demo`} id={thread.card.id} preview busy={busy} onOpen={()=>trial.open(thread.card.id)}/>}
           <p class="idea-help">You can ask a question or clarify your idea below. {thread.card.lane==='hand' ? 'Jason is making this change by hand. Your replies go straight to him.' : thread.card.status==='building' ? 'Replies will be picked up when this pass finishes.' : 'You can say “let’s talk it through first” before asking for changes.'}</p>
@@ -115,7 +133,7 @@ export function Ideas() {
               {thread.card.status==='building' && <p class="idea-help">You can approve when the current build finishes.</p>}
             </>}
           </section>}
-          <Composer key={selected} token={token} selected={selected} onBusy={setBusy} onSent={sent} onError={setError} />
+          {accepting ? <p class="idea-help">You can add another reply after the release finishes. Any draft stays saved on this device.</p> : <Composer key={selected} token={token} selected={selected} onBusy={setBusy} onSent={sent} onError={setError} />}
         </section> : <p role="status">Opening that idea…</p>}
       </> : <>
         <IdeasBoard view={boardView} onView={setBoardView} cards={cards} loaded={loaded} busy={busy} now={now} connected={connected} onOpen={open} onTry={id=>{open(id);trial.open(id);}} />
