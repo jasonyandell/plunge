@@ -115,7 +115,7 @@ export function Ideas() {
           <ul class="idea-tags" aria-label="Topics">{ideaPresentation(thread.card).tags.map(tag=><li key={tag}>{tag}</li>)}</ul>
           <IdeaLink key={thread.card.id} id={thread.card.id} busy={busy}/>
           {accepting ? <p role="status" class="idea-notice">{thread.release!.note}</p> : <IdeaActivity card={thread.card} now={now} connected={connected} />}
-          {thread.release?.status==='blocked' && <p role="status" class="idea-notice">{thread.release.note}</p>}
+          {thread.release?.status==='blocked' && thread.release.revision===thread.card.revision && thread.release.sha===thread.card.sha && thread.card.status!=='shipped' && <p role="status" class="idea-notice">{thread.release.note}</p>}
           {thread.card.status==='ready' && !accepting && <section class="idea-approval" aria-label="Accept this preview">
             {owner ? QUESTIONS_LOCAL_ONLY ? <a class="big-btn" href={ideasLink(thread.card.id)} target="_blank" rel="noopener noreferrer">Open the main game to accept</a> : <>
               <button class="big-btn" type="button" disabled={busy} onClick={()=>void accept()}>Accept into the game</button>
