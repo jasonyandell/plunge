@@ -53,6 +53,29 @@ async function person(n,name,owner) {
  const page=await context.newPage();await page.goto(origin+'/fixture-login');return page;
 }
 try {
+ {
+  // A finger, not a mouse: holding on plain text must open feedback, not the
+  // phone's text selection or callout (iPhone Safari claims the hold first).
+  const touch=await person(2,'Rose',0);
+  touch.setDefaultTimeout(10000);
+  await touch.goto(origin);
+  const tagline=touch.getByText('Pull up a chair.',{exact:true});
+  await tagline.waitFor();
+  const style=await tagline.evaluate(e=>{const s=getComputedStyle(e);return {select:s.userSelect||s.webkitUserSelect,callout:s.webkitTouchCallout};});
+  assert.equal(style.select,'none');
+  if(style.callout!==undefined)assert.equal(style.callout,'none');
+  assert.equal(await touch.getByRole('textbox').count(),0);
+  if(browser.browserType().name()==='chromium') {
+   const box=await tagline.boundingBox(),point={x:box.x+box.width/2,y:box.y+box.height/2};
+   const cdp=await touch.context().newCDPSession(touch);
+   await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});
+   await touch.waitForTimeout(900);
+   await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+   await touch.getByRole('heading',{name:'Mark where you mean',exact:true}).waitFor();
+   assert.equal(await touch.evaluate(()=>String(getSelection())),'');
+  }
+  await touch.context().close();
+ }
  const page=await person(1,'Jason',1);
  await page.clock.setFixedTime(new Date('2026-10-17T12:00:00Z'));
  page.setDefaultTimeout(10000);
