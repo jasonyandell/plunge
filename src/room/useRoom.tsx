@@ -23,6 +23,7 @@ import { relativeSeat, roomHistory } from './view';
 import { describeResult, Doorbell, VoteBar } from './VoteBar';
 import { rememberTableName, tableName, whoAmI } from '../account/me';
 import { RoomHistory } from './RoomHistory';
+import { ActiveTables } from './ActiveTables';
 import './room.css';
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -325,8 +326,9 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
       <a href="?account=1">Keep your name and the hands you play here? Sign in →</a><button onClick={dismissOffer}>Not now</button></div>}
   </> : null;
   const screen = !identity ? <div class="home"><div class="home-card"><p class="eyebrow">Plunge · Experimental</p><h1 class="title">Play with family</h1>
-      <p class="room-intro">{roomId ? 'Pull up a chair at this family table. The selected computer player covers empty chairs.' : 'Invite your family, then choose Walt or Zeb for the empty chairs.'}</p>
+      <p class="room-intro">{roomId ? 'Pull up a chair. You can join while the hand is being played.' : 'Join the people already playing, or open a table of your own.'}</p>
       {notice && <p class="room-notice" role="status">{notice}</p>}
+      {!roomId && <ActiveTables family={family} />}
       <form onSubmit={e => { e.preventDefault(); void open(); }}>{member === null && <label class="room-label">Your name<input maxLength={20} value={name} onInput={e => setName(e.currentTarget.value)} autoComplete="nickname" placeholder="Name at the table" /></label>}
         <button class="big-btn" disabled={opening || member === undefined}>{opening ? 'Opening…' : `${roomId ? 'Join the table' : 'Open a family table'}${member ? ` as ${member}` : ''}`}</button></form>
       <p class="setting-hint">{member && family ? 'A table you open is listed on the home screen for anyone to find. It starts closed, so newcomers knock until the table votes it open.'

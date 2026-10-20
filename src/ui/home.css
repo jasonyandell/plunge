@@ -102,6 +102,10 @@
 .home-table span { grid-column: 1; font-size: 12px; color: #725a40; line-height: 1.4; overflow-wrap: anywhere; }
 .home-table em { grid-column: 2; grid-row: 1 / span 2; font-style: normal; font-weight: 650; color: var(--teal-ink); white-space: nowrap; }
 .home-table:disabled { opacity: .5; cursor: default; }
+.active-tables { margin-top: 14px; text-align: left; }
+.active-tables h2 { margin: 0; font-size: 15px; color: var(--brown-9); }
+.active-tables .home-tables { margin-top: 8px; }
+.active-tables .setting-hint { margin: 8px 0 12px; }
 .home-links { margin-top: 14px; padding-top: 4px; border-top: 1px solid #8c6d3b30; }
 .home-links .text-btn { min-height: 44px; }
 .home-stats-link { display: flex; align-items: center; justify-content: center; min-height: 44px; }
