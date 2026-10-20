@@ -22,8 +22,9 @@ undoing the last human move, changing the computer player, starting over, openin
 or closing the table, and
 asking someone to step out. Low-stakes votes go ahead after five seconds unless
 anyone says no; alone with computers they go ahead at once. Shaking the next hand
-waits for a second person to tap it, so nobody loses the result card while
-they are still reading it. A closed table lets
+waits for everyone asked to tap Ready, so nobody loses the result card while
+they are still reading it. Disconnecting or letting the readiness check expire
+does not deal the next hand. A closed table lets
 newcomers knock, and one yes from anyone present lets them in. Asking someone to
 step out needs most of the table. Earlier attempts stay in history. For Nel-O,
 win a bid of one mark or more and choose Nel-O; your partner sits out. Your solo
