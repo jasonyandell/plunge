@@ -4,6 +4,7 @@
 
 import { PlayerPicker } from './PlayerPicker';
 import { NewGameButton } from './NewGameButton';
+import { ActiveTables } from '../room/ActiveTables';
 import { DEEP_WORLDS, NATIVE_TABLE } from '../ai/native';
 import { canRestart, canUndo, nelloPaused, type AppEvent, type AppState } from './store';
 import { Domino } from './Domino';
@@ -69,6 +70,7 @@ function FamilyEntry({ compact = false }: { compact?: boolean }) {
   const standingListed = shown.some(table => table.standing);
   const hasTable = shown.length > 0 || family || Boolean(remembered);
   if (compact) return <>
+    <ActiveTables family={family} onJoin={table => table.standing && family ? void openFamilyTable() : location.assign(roomUrl(table.roomId))} />
     <button type="button" class="text-btn home-family" disabled={opening}
       aria-label={!family && !remembered ? 'Play with family · Experimental' : undefined}
       onClick={() => family ? void openFamilyTable() : remembered ? location.assign(roomUrl(remembered)) : openRooms()}>
