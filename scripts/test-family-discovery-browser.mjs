@@ -122,7 +122,12 @@ try {
   await signIn.waitFor();
   const signInPath = await signIn.getAttribute('href');
   assert.equal(signInPath, '/?account=1&roomReturn=' + seats[0].roomId);
-  await signIn.click();
+  await signedOut.getByRole('textbox', { name: 'Your name', exact: true }).fill('Another guest');
+  await signedOut.getByRole('button', { name: 'Join the table', exact: true }).click();
+  await signedOut.getByText(/All four chairs are reserved/).waitFor();
+  for (const width of [320, 375, 390, 428]) { await signedOut.setViewportSize({ width, height: 844 }); assert.equal(await signedOut.evaluate(() => document.documentElement.scrollWidth), width); }
+  await signedOut.screenshot({ path: join(out, 'full-table-sign-in.png'), fullPage: true });
+  await signedOut.getByRole('link', { name: 'Sign in to find your chair →', exact: true }).click();
   await signedOut.getByRole('link', { name: 'Continue without signing in' }).waitFor();
   // The same account destination after authentication preserves the original invite.
   await returning.goto(origin + signInPath);
@@ -132,12 +137,13 @@ try {
   await back.click();
   await returning.waitForFunction(() => !!window.__room?.game);
   // Direct invites also use an available account without asking for a name.
-  await returning.evaluate(() => localStorage.clear());
-  await returning.goto(room);
-  assert.equal(await returning.getByRole('textbox', { name: 'Your name', exact: true }).count(), 0);
-  await returning.getByRole('button', { name: 'Join the table as Mom', exact: true }).click();
-  await returning.waitForFunction(seat => !!window.__room?.game && JSON.parse(localStorage.getItem('plunge:room:' + window.__room.roomId)).seat === seat, seats[1].seat);
-  await returning.screenshot({ path: join(out, 'account-rejoined-full-table.png') });
+  const invitee = await phone(undefined, '2');
+  await invitee.goto(room);
+  await invitee.getByRole('button', { name: 'Join the table as Mom', exact: true }).waitFor();
+  assert.equal(await invitee.getByRole('textbox', { name: 'Your name', exact: true }).count(), 0);
+  await invitee.getByRole('button', { name: 'Join the table as Mom', exact: true }).click();
+  await invitee.waitForFunction(seat => !!window.__room?.game && JSON.parse(localStorage.getItem('plunge:room:' + window.__room.roomId)).seat === seat, seats[1].seat);
+  await invitee.screenshot({ path: join(out, 'account-rejoined-full-table.png') });
   console.log('PASS: account wins over an old guest key; a full-table invitation offers sign-in and keeps its return destination.');
   console.log('Screenshots:', out);
 } finally { clearTimeout(deadline); await browser.close(); await mf.dispose(); }
