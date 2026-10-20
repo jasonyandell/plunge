@@ -66,12 +66,25 @@ try {
   const closed = new Promise(r => server.close(r)); server.closeAllConnections(); await closed;
   await ctx.setOffline(true);
   await page.reload();
+  // Screen ideas remain useful with the server gone, including a complete reload.
+  await page.getByRole('button', { name: 'Share an idea', exact: true }).click();
+  await page.getByRole('button', { name: 'Done marking', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Your idea', exact: true }).fill('An idea saved with no connection.');
+  const offlinePicture = await page.getByAltText('Screenshot 1 to send').getAttribute('src');
+  await page.getByRole('button', { name: 'Save on this device', exact: true }).click();
+  await page.getByText(/^Saved on this device\. Open Share an idea/).waitFor();
+  await page.reload();
+  await page.getByRole('button', { name: 'Share an idea', exact: true }).click();
+  if (await page.getByRole('textbox', { name: 'Your idea', exact: true }).inputValue() !== 'An idea saved with no connection.'
+    || await page.getByAltText('Screenshot 1 to send').getAttribute('src') !== offlinePicture) throw new Error('Offline screen idea did not survive reload.');
+  await page.getByRole('button', { name: 'Close · keep draft', exact: true }).click();
+  check('Captured and saved a screen idea with the server gone; picture and note survived offline reload.');
   if(player==='Zeb') {
-    await page.getByRole('button',{name:'More',exact:true}).click();
+    await page.getByRole('button',{name:'Settings & more',exact:true}).click();
     await page.getByRole('radio',{name:'Zeb',exact:true}).click();
     await page.getByRole('button',{name:'← Back',exact:true}).click();
     await page.reload();
-    await page.getByRole('button',{name:'More',exact:true}).click();
+    await page.getByRole('button',{name:'Settings & more',exact:true}).click();
     if(await page.getByRole('radio',{name:'Zeb',exact:true}).getAttribute('aria-checked')!=='true')throw new Error('Zeb selection was not saved.');
     await page.screenshot({path:join(out,'zeb-settings.png')});
     await page.getByRole('button',{name:'← Back',exact:true}).click();
@@ -146,7 +159,7 @@ try {
   stage='switch offline';
   const other = player === 'Zeb' ? 'Walt' : 'Zeb';
   await page.reload(); // Home retains the game between hands.
-  await page.getByRole('button', { name: 'More', exact: true }).click();
+  await page.getByRole('button', { name: 'Settings & more', exact: true }).click();
   const beforeSwitch = await page.evaluate(() => localStorage.getItem('plunge:save:v1'));
   await page.getByRole('radio', { name: other, exact: true }).click();
   await page.getByRole('dialog', { name: `Switch to ${other}?`, exact: true }).waitFor();

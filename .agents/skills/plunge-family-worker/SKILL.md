@@ -99,8 +99,10 @@ recheck the server grant. Do not respond to a repository-authorized request by
 asking Jason to approve more individual files. Old resumed-session restrictions
 are superseded by the current verified grant. Full repository access still excludes
 Git internals, credentials, secret files, and files outside the isolated checkout.
-It never means changing permissions on the live coordinator or automatically
-merging its generated PR.
+It never means changing permissions on the live coordinator or merging its generated PR.
+A separate authenticated owner click on **Accept into the game** authorizes an exact
+checked preview for release. Only trusted coordinator code consumes that acceptance;
+builder replies, file-access approvals, and model output cannot authorize a merge.
 
 Private `ideaScopes` remains available for narrow non-owner exceptions:
 `node scripts/ideas/admin.mjs scope IDEA_ID worker/rooms.ts worker/room-undo.ts`.
@@ -109,7 +111,8 @@ approval button when Jason wants to authorize all project files for a family
 request. See `docs/FAMILY-IDEAS.md` for details.
 
 A successful worker result still needs tests and the exact hosted preview SHA
-before its card is ready. Never merge family PRs as part of keeping this service
-running. Attach a created PR to this chat when discovered during an active task.
+before its card is ready. Never manually merge family PRs as part of keeping this service
+running. The coordinator may consume an owner’s separately recorded exact-preview
+acceptance; inspect release progress with its authenticated `releases` endpoint. Attach a created PR to this chat when discovered during an active task.
 Report the verified model, scheduler status, and card status separately; a running
 process does not prove a completed feature or a live preview.

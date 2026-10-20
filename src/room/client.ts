@@ -63,9 +63,9 @@ export async function liveTables(): Promise<ListedTable[]> {
   const body = await response.json() as { tables?: unknown };
   return Array.isArray(body.tables) ? body.tables as ListedTable[] : [];
 }
-export async function enterRoom(name: string, roomId?: string, knock?: string): Promise<RoomCredentials> {
+export async function enterRoom(name: string, roomId?: string, knock?: string, saved?: { seatToken: string; restoreOnly?: boolean }): Promise<RoomCredentials> {
   const response = await fetch(roomId ? `/api/rooms/${roomId}/join` : '/api/rooms', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, ...(knock ? { knock } : {}) }),
+    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, ...(knock ? { knock } : {}), ...saved }),
   });
   const body = await response.json() as RoomCredentials & { error?: string; closed?: boolean };
   if (response.status === 403 && body.closed) throw new ClosedTableError(body.error ?? 'This table is closed.');

@@ -19,7 +19,7 @@ export function rotateGame(g: GameState, viewer: Seat): GameState {
 
 /** What the recorder keeps for a shared table: canonical seats, hints off, the table's Nel-O rule. */
 export function roomHistory(room: RoomState, localSeat: Seat) {
-  return { ...initialApp(), screen: 'table' as const, playerEvents: room.playerEvents ?? [], settings: { ...DEFAULT_SETTINGS, difficulty: playerId(room.player), showHints: false, nelloPreview: room.game?.config.nello === 'open' },
+  return { ...initialApp(), screen: 'table' as const, playerEvents: room.playerEvents ?? [], settings: { ...DEFAULT_SETTINGS, difficulty: playerId(room.player), showHints: false, nelloEnabled: room.game?.config.nello === 'open' },
     seed: room.seed, game: room.game, sessionId: room.sessionId, nativeReceipts: room.nativeReceipts, auctionSurveys: room.auctionSurveys,
     epoch: room.revision, retry: room.retry ?? null, practiceHands: room.practiceHands ?? [],
     room: { mode: 'shared-room' as const, localSeat, revision: room.revision,

@@ -22,7 +22,7 @@ async function migrate(file:string){
 beforeAll(async()=>{
   mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['QUESTIONS']});
   env={QUESTIONS:await mf.getD1Database('QUESTIONS'),IDEAS_ADMIN_TOKEN:admin,ASSETS:{fetch:async()=>new Response('app')}};
-  for(const file of ['0002_family_ideas.sql','0003_accounts.sql','0004_idea_authorizations.sql','0005_idea_screenshots.sql','0008_idea_hand_lane.sql','0010_idea_preview_revision.sql'])await migrate(file);
+  for(const file of ['0002_family_ideas.sql','0003_accounts.sql','0004_idea_authorizations.sql','0005_idea_screenshots.sql','0008_idea_hand_lane.sql','0010_idea_preview_revision.sql','0011_idea_releases.sql'])await migrate(file);
   for(const [account,name,token,role] of [[owner,'Jason',ownerToken,1],[mom,'Mom',momToken,0]] as const){
     await env.QUESTIONS!.prepare('INSERT INTO accounts(id,name,owner,created) VALUES(?,?,?,0)').bind(account,name,role).run();
     await grantFamily(env.QUESTIONS!,account,true);

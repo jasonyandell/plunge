@@ -7,11 +7,12 @@ import { playIndex } from '../engine/play-index';
  * your left, Gran (2) — your partner — across the top, Ruby (3) to your right.
  *
  * Portrait layout keeps the suit panels and labeled hand visible. The middle
- * table flexes to the available height; hand tiles cap at 58px wide.
+ * table flexes to the available height; your horizontal tiles form rows of four.
  */
 
 import { PlayerBadge } from './PlayerBadge';
 import { PlayerPicker } from './PlayerPicker';
+import { NewGameButton } from './NewGameButton';
 import { handPlayers, playerLabel, usesForecastBidding } from '../ai/players';
 import { useEffect, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
@@ -19,9 +20,10 @@ import type { CompletedTrick, GameState, PlayRecord, Seat } from '../engine';
 import { legalDominoes } from '../engine';
 import { Domino } from './Domino';
 import { Tally } from './Tally';
+import { YourBid } from './YourBid';
 import type { AppEvent, AppState } from './store';
 import {
-  HUMAN_SEAT, SEAT_NAMES, nelloAvailable, TRICK_HOLD_MS, bidLabel, contractLabel, declLabel, ledChip, trumpChip,
+  HUMAN_SEAT, SEAT_NAMES, TRICK_HOLD_MS, bidLabel, contractLabel, declLabel, ledChip, trumpChip,
   canRestart, canUndo, liveDispatch, questionGameId,
 } from './store';
 import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet, RestartConfirm } from './sheets';
@@ -185,7 +187,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
         <div class="hand-area">
           <div class="hand-heading">
             <p class={`hand-caption${humanTurn && !showingLast ? ' your-turn' : ''}`} role="status">
-              <strong class="you-label">You</strong>
+              <span class="hand-identity"><strong class="you-label">You</strong><YourBid g={g} seat={HUMAN_SEAT} /></span>
               <span>{humanTurn && !showingLast
                 ? g.currentTrick.length === 0 ? 'Your turn to lead' : 'Your turn to play'
                 : 'Your hand'}</span>
@@ -196,7 +198,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
           {humanSitsOut ? (
             <div class="hand sit-out">
               {humanHand.map((id) => (
-                <Domino key={id} faceDown orientation="v" />
+                <Domino key={id} faceDown orientation="h" />
               ))}
               <p class="sit-note">You're sitting this one out — Nel-O.</p>
             </div>
@@ -206,7 +208,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
                 <Domino
                   key={id}
                   id={id}
-                  orientation="v"
+                  orientation="h"
                   state={humanTurn && app.settings.showHints ? (legal.has(id) ? 'legal' : 'illegal') : 'idle'}
                   interactive={humanTurn && !app.settings.showHints}
                   onTap={() => {
@@ -227,7 +229,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
       {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet bookSeat={app.room?.localSeat ?? 0} player={usesForecastBidding(app.settings.difficulty) ? 'zeb' : 'walt'} key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
       {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet bookSeat={app.room?.localSeat ?? 0} player={usesForecastBidding(app.settings.difficulty) ? 'zeb' : 'walt'} key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
       {g.phase === 'hand-over' && !showingLast && !review && (
-        <HandOverSheet modelSummary={handPlayers(app.playerEvents, g.handNumber).map(p => `${p.name} · ${p.version}`).join(' + ')}
+        <HandOverSheet nextHandReady={app.room ? app.room.table?.proposal?.kind === 'next-hand' && app.room.table.proposal.votes[app.room.localSeat] === 'yes' : undefined} modelSummary={handPlayers(app.playerEvents, g.handNumber).map(p => `${p.name} · ${p.version}`).join(' + ')}
           g={g}
           dispatch={dispatch}
           onReview={g.tricks.length > 0 ? () => setReview(true) : undefined}
@@ -251,7 +253,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
       )}
       {(g.phase === 'hand-over' || g.phase === 'game-over') && review && (
           <NativeReview key={scenario ? (app.scenarioFlag?.id ?? g.dealt.flat().join('')) : `${app.sessionId}:${app.epoch}:${g.handNumber}`}
-            g={g} nelloPreview={nelloAvailable(app.settings)} onBack={() => setReview(false)} sessionId={app.sessionId} questionGameId={branch}
+            g={g} onBack={() => setReview(false)} sessionId={app.sessionId} questionGameId={branch}
             receipts={scenario ? {} : app.nativeReceipts} initialFlag={app.scenarioFlag} onQuestion={onQuestion} />
       )}
       {menuOpen && (
@@ -292,6 +294,7 @@ function GameMenu({ app, dispatch, onClose, onHome, extra }: {
         <button type="button" class="big-btn" onClick={onClose}>Keep playing</button>
         <button type="button" class="big-btn secondary" onClick={()=>{onClose();requestAnimationFrame(()=>window.dispatchEvent(new Event('plunge-screen-idea')));}}>Share an idea about this screen</button>
         <button type="button" class="big-btn secondary" onClick={onHome}>Back to home</button>
+        {!app.scenarioGame && <NewGameButton app={app} dispatch={dispatch} onStarted={onClose} />}
       </div>
     </div>
   );
@@ -415,7 +418,7 @@ function seatBadges(g: GameState, seat: Seat) {
   );
 }
 
-function OpponentTop({ g, thinking, note }: { g: GameState; thinking: Seat | null; note?: string | null }) {
+export function OpponentTop({ g, thinking, note, names = SEAT_NAMES }: { g: GameState; thinking: Seat | null; note?: string | null; names?: readonly string[] }) {
   const seat: Seat = 2;
   const hand = g.hands[seat] ?? [];
   const sitsOut = g.sittingOut === seat;
@@ -423,7 +426,7 @@ function OpponentTop({ g, thinking, note }: { g: GameState; thinking: Seat | nul
   return (
     <div class={`seat seat-top${active ? ' active' : ''}${thinking === seat ? ' seat-thinking' : ''}`}>
       <div class="seat-name">
-        {SEAT_NAMES[seat]} <span class="seat-tag">Your partner</span>{note && <span class="seat-tag seat-note">{note}</span>} {seatBadges(g, seat)} {bidBubble(g, seat)}
+        {names[seat]} <span class="seat-tag">Your partner</span>{note && <span class="seat-tag seat-note">{note}</span>} {seatBadges(g, seat)} {bidBubble(g, seat)}
       </div>
       <div class={`mini-row${sitsOut ? ' sitting' : ''}`}>
         {hand.map((id) => (
@@ -435,14 +438,14 @@ function OpponentTop({ g, thinking, note }: { g: GameState; thinking: Seat | nul
   );
 }
 
-function OpponentSide({ g, seat, thinking, note }: { g: GameState; seat: Seat; thinking: Seat | null; note?: string | null }) {
+export function OpponentSide({ g, seat, thinking, note, names = SEAT_NAMES }: { g: GameState; seat: Seat; thinking: Seat | null; note?: string | null; names?: readonly string[] }) {
   const hand = g.hands[seat] ?? [];
   const sitsOut = g.sittingOut === seat;
   const active = g.turn === seat;
   return (
     <div class={`seat seat-${POS[seat]}${active ? ' active' : ''}${thinking === seat ? ' seat-thinking' : ''}`}>
       <div class="seat-name">
-        {SEAT_NAMES[seat]}{note && <span class="seat-tag seat-note">{note}</span>} {seatBadges(g, seat)} {bidBubble(g, seat)}
+        {names[seat]}{note && <span class="seat-tag seat-note">{note}</span>} {seatBadges(g, seat)} {bidBubble(g, seat)}
       </div>
       <div class={`mini-col${sitsOut ? ' sitting' : ''}`}>
         {hand.map((id) => (
@@ -456,12 +459,13 @@ function OpponentSide({ g, seat, thinking, note }: { g: GameState; seat: Seat; t
 
 // ---------------------------------------------------------------------------
 
-function TrickArea({
+export function TrickArea({
   g,
   plays,
   winner,
   gathering,
   thinking,
+  names = SEAT_NAMES,
   onQuestion,
 }: {
   g: GameState;
@@ -469,6 +473,7 @@ function TrickArea({
   winner: Seat | null;
   gathering: boolean;
   thinking: Seat | null;
+  names?: readonly string[];
   onQuestion?: ((play: number, target: HTMLElement) => void) | undefined;
 }) {
   const leader = plays[0]?.seat ?? null;
@@ -482,13 +487,13 @@ function TrickArea({
     <div class="trick">
       {partnerCallsTrump && g.turn !== null && g.declarer !== null && (
         <div class="trick-note">
-          {SEAT_NAMES[g.turn]} is calling trump for {g.declarer === HUMAN_SEAT ? 'you' : SEAT_NAMES[g.declarer]}&hellip;
+          {names[g.turn]} is calling trump for {g.declarer === HUMAN_SEAT ? 'you' : names[g.declarer]}&hellip;
         </div>
       )}
       {!partnerCallsTrump && !gathering && thinking !== null && thinking !== HUMAN_SEAT && (
         <div class="trick-note thinking-note" role="status">
           <span class="thinking-words">
-            <strong>{SEAT_NAMES[thinking]}</strong>
+            <strong>{names[thinking]}</strong>
             <span>{g.phase === 'bidding' ? 'Choosing a bid' : g.phase === 'declaring' ? 'Choosing trump' : 'Thinking it over'}</span>
           </span>
           <span class="thinking-pips" aria-hidden="true">
@@ -511,12 +516,12 @@ function TrickArea({
             .join(' ')}
         >
           {onQuestion ? <button class="played-domino" type="button" disabled={gathering}
-            aria-label={`About ${p.seat === HUMAN_SEAT ? 'your' : SEAT_NAMES[p.seat] + '’s'} ${p.domino.split('').join('–')}`}
+            aria-label={`About ${p.seat === HUMAN_SEAT ? 'your' : names[p.seat] + '’s'} ${p.domino.split('').join('–')}`}
             onClick={event => onQuestion(i, event.currentTarget)}>
             <Domino id={p.domino} orientation="h" className="trick-dom" />
           </button> : <Domino id={p.domino} orientation="h" className="trick-dom" />}
           {p.seat === leader && (
-            <span class="led-tag">{p.seat === HUMAN_SEAT ? 'You' : SEAT_NAMES[p.seat]} led</span>
+            <span class="led-tag">{p.seat === HUMAN_SEAT ? 'You' : names[p.seat]} led</span>
           )}
         </div>
       ))}

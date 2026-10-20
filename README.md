@@ -22,8 +22,9 @@ undoing the last human move, changing the computer player, starting over, openin
 or closing the table, and
 asking someone to step out. Low-stakes votes go ahead after five seconds unless
 anyone says no; alone with computers they go ahead at once. Shaking the next hand
-waits for a second person to tap it, so nobody loses the result card while
-they are still reading it. A closed table lets
+waits for everyone asked to tap Ready, so nobody loses the result card while
+they are still reading it. Disconnecting or letting the readiness check expire
+does not deal the next hand. A closed table lets
 newcomers knock, and one yes from anyone present lets them in. Asking someone to
 step out needs most of the table. Earlier attempts stay in history. For Nel-O,
 win a bid of one mark or more and choose Nel-O; your partner sits out. Your solo
@@ -81,6 +82,13 @@ home screen holds notes, short links, and later explanations. Original evidence
 stays fixed; the finished hand is attached afterward. No login required.
 See [the question notebook guide](docs-question-notebook.md) for the private
 research inbox and deployment details.
+
+Hold the screen, or choose **Share an idea**, to capture what you see, mark a
+spot, and add a note. Solo play pauses while the idea is open. **Save on this
+device** keeps the picture and note through closing or reloading, even offline.
+Open **Share an idea** again and choose **Make an idea card** when connected;
+it uses your signed-in family account or personal invite. Saved drafts do not
+upload automatically. Preview captures stay on the preview's device storage.
 
 The shaker (last bidder) must bid at least 30 when the first three players pass.
 This applies to new hands and resumed auctions; hands already in play keep

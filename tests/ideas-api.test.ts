@@ -27,6 +27,7 @@ beforeAll(async()=>{
   for(const statement of laneSql!.split(';').filter(s=>s.replace(/--.*$/gm,'').trim()))await db.prepare(statement).run();
   await db.prepare(`CREATE TRIGGER${laneTrigger}`).run();
   for(const statement of (await readFile(new URL('../migrations/0010_idea_preview_revision.sql',import.meta.url),'utf8')).split(';').filter(s=>s.replace(/--.*$/gm,'').trim()))await db.prepare(statement).run();
+  for(const statement of (await readFile(new URL('../migrations/0011_idea_releases.sql',import.meta.url),'utf8')).split(';').filter(s=>s.replace(/--.*$/gm,'').trim()))await db.prepare(statement).run();
   env={QUESTIONS:db,IDEAS_ADMIN_TOKEN:admin,ASSETS:{fetch:async()=>new Response('app')}};
   mom=await (await call('/admin/members','POST',{name:'Mom'},admin)).json() as typeof mom;
   dad=await (await call('/admin/members','POST',{name:'Dad'},admin)).json() as typeof dad;

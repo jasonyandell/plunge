@@ -58,12 +58,15 @@ about the host is stored.
 Every change to the table is a proposal. The room holds at most one, settles it
 as a pure function of the proposal, the people present and the clock, and then
 applies the same effect code a direct command used to run. Computer players never vote and
-absent people never block; the target of a kick does not vote on it.
+people already absent are not asked; the target of a kick does not vote on it.
+Next-hand readiness and model changes retain the people originally asked, so
+disconnecting during the vote never supplies consent.
 
 | Kind | Mode | Window | Needs |
 |---|---|---|---|
-| start, restart, undo, open, close, player | veto | 5 s | nobody says no |
-| next hand | allow | 90 s | a second person (alone with computers, just you) |
+| start, restart, undo, open, close | veto | 5 s | nobody says no |
+| next hand | allow | 90 s | everyone asked (alone with computers, just you) |
+| player | allow | 90 s | everyone asked |
 | kick | allow | 10 s | most of the table |
 
 A knock is not on this list: see Doors.
@@ -74,8 +77,12 @@ A knock is not on this list: see Doors.
 - **Allow** proposals fail at the deadline unless enough yes votes arrive, and
   fail early on any no. The next hand is one of these on purpose: one person
   shaking must not take the result card away from people still reading it, so
-  tapping **Shake the next hand** after someone else did counts as the second
-  yes, and the ask quietly expires if nobody joins it.
+  each person taps **Ready for the next hand** and sees **Waiting for others…**.
+  The result stays until everyone asked is ready. The ask can expire without
+  advancing the hand. A newcomer or an explicit departure cancels readiness
+  so the changed group can choose Ready afresh; a reconnect preserves it.
+- Simultaneous Ready asks from the exact same completed-hand revision join the
+  same readiness check; older or unrelated stale asks remain rejected.
 - Votes are keyed to the proposal id rather than the table revision.
   The revision guard protects game moves against stale state; a vote's
   precondition is the proposal's identity, and two votes cast at the same

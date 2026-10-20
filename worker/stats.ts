@@ -13,6 +13,7 @@ import type { HandRecord } from '../src/history/legacy';
 import { accountSession, type AccountEnv } from './accounts';
 import type { IdeasDatabase } from './ideas';
 import { json, readJson } from './http';
+import { statsBrowseRequest } from './stats-browse';
 export interface SeatPlayer { seat: number; account?: string | null; device?: string | null; name?: string | null }
 /** `raw` is the record exactly as the client sent it, stored verbatim; `record` its checked fields. */
 export interface HandEntry { record: HandRecord; raw?: unknown; roomId?: string | null; walt?: string | null; players: readonly SeatPlayer[] }
@@ -39,6 +40,7 @@ export function handStatements(db: IdeasDatabase, entries: readonly HandEntry[],
  */
 export async function statsRequest(request: Request, env: AccountEnv): Promise<Response> {
   const url = new URL(request.url), db = env.QUESTIONS;
+  if (url.pathname === '/api/stats/browse') return statsBrowseRequest(request, env);
   if (url.pathname !== '/api/stats/hands' || request.method !== 'PUT') return json({ error: 'Not found.' }, 404);
   if (!db) return json({ error: 'This preview keeps stats on your device only.', local_only: true }, 503);
   if (request.headers.get('Origin') !== url.origin) return json({ error: 'Please use the Plunge app.' }, 403);

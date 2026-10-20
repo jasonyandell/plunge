@@ -91,7 +91,7 @@ describe('room presentation and recorder boundaries', () => {
     settleRoom(room, connected, room.state.holdUntil + 6001);
     const undone = roomHistory(roomSnapshot(room, connected), 2);
     expect(undone.game!.handResult).toBeNull();
-    expect(undone.settings.nelloPreview).toBe(true);
+    expect(undone.settings.nelloEnabled).toBe(true);
     await recordHistory(undone);
     finish();
     const retried = roomHistory(roomSnapshot(room, connected), 2);

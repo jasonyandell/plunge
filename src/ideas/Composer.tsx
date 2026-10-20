@@ -4,10 +4,9 @@ import type { IdeaThread } from './model';
 import { MAX_SCREENSHOTS } from './screenshots';
 import { draftStore, preparePicture, screenshotUrl, type PictureDraft } from './screenshot-client';
 import { MarkScreenshot } from './IdeaScreenshots';
-import { QUESTIONS_LOCAL_ONLY } from '../questions/mode';
-export function Composer({token,selected,onBusy,onSent,onError,startingDraft,storageKey,onPreviewSaved}: {
+export function Composer({token,selected,onBusy,onSent,onError,startingDraft,storageKey,onPreviewSaved,onSavedLocally,previewOnly=false}: {
   token:string;selected:string|null;onBusy:(busy:boolean)=>void;onSent:(thread:IdeaThread)=>void;onError:(error:string)=>void;
-  startingDraft?:PictureDraft;storageKey?:string;onPreviewSaved?:()=>void;
+  startingDraft?:PictureDraft;storageKey?:string;onPreviewSaved?:()=>void;onSavedLocally?:()=>void;previewOnly?:boolean;
 }) {
   const key=storageKey ?? `plunge:idea-draft:${selected ?? 'new'}`;
   const [draft,setDraft]=useState<PictureDraft>(()=>startingDraft ?? ({...readDraft(key),screenshots:[]})),[busy,setBusy]=useState(false),[loaded,setLoaded]=useState(false),[mark,setMark]=useState<number|null>(null);
@@ -26,11 +25,17 @@ export function Composer({token,selected,onBusy,onSent,onError,startingDraft,sto
     event.preventDefault();if(busy||!loaded||(!draft.body.trim()&&!draft.screenshots.length))return;lock(true);onError('');
     try {
       await writes.current;
-      if(QUESTIONS_LOCAL_ONLY){await draftStore(key,draft);onPreviewSaved?.();return;}
+      if(previewOnly){await draftStore(key,draft);onPreviewSaved?.();return;}
       const result=await ideasApi<IdeaThread>(token,`/${selected ?? draft.id}${selected ? '/messages' : ''}`,{id:draft.id,body:draft.body,screenshots:draft.screenshots,context:deviceContext()});
       try{await draftStore(key,null);localStorage.removeItem(key);}catch{/* Already saved on server. */}
       setDraft({id:newId(),body:'',screenshots:[]});setNotice('');onSent(result);
     }catch(e){onError(e instanceof Error?e.message:'Could not save. Please retry.');}
+    finally{lock(false);}
+  };
+  const saveLocally=async()=>{
+    if(busy||!loaded)return;lock(true);onError('');
+    try{await writes.current;await draftStore(key,draft);onSavedLocally?.();}
+    catch{onError('Your browser could not save this draft. Keep this page open until you send it.');}
     finally{lock(false);}
   };
   return <form onSubmit={send}><label>{selected?'Keep the conversation going':'Your idea'}
@@ -40,10 +45,12 @@ export function Composer({token,selected,onBusy,onSent,onError,startingDraft,sto
       <button class="text-btn" type="button" disabled={busy} onClick={()=>{setMark(index);onBusy(true);}}>Mark where you mean</button><button class="text-btn" type="button" disabled={busy} onClick={()=>edit({...draft,screenshots:draft.screenshots.filter((_,i)=>i!==index)})}>Remove screenshot {index+1}</button></div></div>)}</div>
     <input ref={picker} type="file" disabled={busy||!loaded} accept="image/png,image/jpeg,image/webp" hidden aria-label="Choose screenshot" onChange={event=>{const file=event.currentTarget.files?.[0];event.currentTarget.value='';void add(file);}}/>
     <button class="big-btn secondary" type="button" disabled={busy||!loaded||draft.screenshots.length>=MAX_SCREENSHOTS} onClick={()=>picker.current?.click()}>Add a screenshot</button>
-    <p class="idea-help">Show us what you mean. Add up to two pictures, and mark a spot if you like. {!QUESTIONS_LOCAL_ONLY && 'Your family can see them after you send.'}</p>
+    <p class="idea-help">Show us what you mean. Add up to two pictures, and mark a spot if you like. {!previewOnly && 'Your family can see them after you send.'}</p>
     {notice && <p role="status">{notice}</p>}
-    {QUESTIONS_LOCAL_ONLY && <p class="idea-help">This preview saves your idea on this device only. It won’t send it to the family.</p>}
-    <button class="big-btn" disabled={busy||!loaded||(!draft.body.trim()&&!draft.screenshots.length)}>{busy?'Saving…':QUESTIONS_LOCAL_ONLY?'Save preview idea':selected?'Send reply':'Make an idea card'}</button>
+    {previewOnly && <p class="idea-help">This preview saves your idea on this device only. It won’t send it to the family.</p>}
+    {onSavedLocally && !previewOnly && <><p class="idea-help">Offline? Save here and send it when you’re connected again.</p>
+      <button class="big-btn secondary" type="button" disabled={busy||!loaded||(!draft.body.trim()&&!draft.screenshots.length)} onClick={()=>void saveLocally()}>Save on this device</button></>}
+    <button class="big-btn" disabled={busy||!loaded||(!draft.body.trim()&&!draft.screenshots.length)}>{busy?'Saving…':previewOnly?'Save preview idea':selected?'Send reply':'Make an idea card'}</button>
     {mark!==null && draft.screenshots[mark] && <MarkScreenshot picture={draft.screenshots[mark]!} onError={onError} onCancel={()=>{setMark(null);onBusy(false);}} onDone={picture=>{edit({...draft,screenshots:draft.screenshots.map((old,i)=>i===mark?picture:old)});setMark(null);onBusy(false);}}/>}
   </form>;
 }

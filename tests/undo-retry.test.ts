@@ -19,7 +19,8 @@ import { encodeReplay } from '../src/engine/replay-code';
 import { attachGame, saveQuestion } from '../src/questions/client';
 import { listQuestions } from '../src/questions/storage';
 import { DeclareSheet, GameOverSheet, HandOverSheet, RestartConfirm } from '../src/ui/sheets';
-import { Home } from '../src/ui/Home';
+import { Home, More } from '../src/ui/Home';
+import { NewGameButton } from '../src/ui/NewGameButton';
 
 beforeAll(() => {
   vi.stubGlobal('window', new EventTarget());
@@ -219,7 +220,7 @@ describe('play this hand again', () => {
     thrown = untilYou(pass(untilYou(replayed)));
     expect(reducer(thrown, { type: 'human', action: { type: 'next-hand' } }).game!.dealt)
       .toEqual(reducer(untilYou(pass(untilYou(app))), { type: 'human', action: { type: 'next-hand' } }).game!.dealt);
-    expect(DEFAULT_SETTINGS).toEqual({ difficulty: 'native-partner', preset: 'tournament', thinkDeeper: false, nelloPreview: false, showHints: true });
+    expect(DEFAULT_SETTINGS).toEqual({ difficulty: 'native-partner', preset: 'tournament', thinkDeeper: false, nelloEnabled: true, showHints: true });
   });
 
   it('confirms before replaying; Cancel does nothing', () => {
@@ -462,6 +463,7 @@ function flatten(v: unknown): unknown {
 function buttons(v: unknown, out: Array<{ text: string; onClick: () => void }> = []) {
   if (Array.isArray(v)) { for (const x of v) buttons(x, out); return out; }
   if (!v || typeof v !== 'object') return out;
+  if ((v as VNode).type === NewGameButton) return buttons(NewGameButton((v as VNode).props as unknown as Parameters<typeof NewGameButton>[0]), out);
   const node = v as { type: unknown; props: { children?: unknown; onClick?: () => void } };
   if (node.type === 'button' && node.props.onClick) out.push({ text: text(node.props.children), onClick: node.props.onClick });
   buttons(node.props?.children, out);
@@ -538,7 +540,7 @@ describe('settings changed mid-hand', () => {
     let after = you(before); // computer bids still to come
     expect(after.game!.phase).toBe('bidding');
     expect(pendingAiSeat(after)).not.toBeNull();
-    after = reducer(after, { type: 'set-nello-preview', enabled: true });
+    after = reducer(after, { type: 'set-nello-enabled', enabled: true });
     expect(reducer(after, { type: 'set-difficulty', difficulty: 'native-l1' })).toBe(after);
     expect(after.game!.config).toEqual(PLUNGE_CONFIG);
     expect(canUndo(after)).toBe(true);
@@ -554,7 +556,7 @@ describe('settings changed mid-hand', () => {
     let app = untilYou(you(untilYou(start('toggle-trump'))));
     expect(app.game!.phase).toBe('declaring');
     for (const enabled of [true, false, true]) {
-      app = reducer(app, { type: 'set-nello-preview', enabled });
+      app = reducer(app, { type: 'set-nello-enabled', enabled });
       expect(canUndo(app)).toBe(true);
       const undone = undo(app);
       expect(undone.game!.phase).toBe('bidding');
@@ -562,9 +564,9 @@ describe('settings changed mid-hand', () => {
       expect(undone.game!.config).toEqual(enabled ? PLUNGE_CONFIG : LEGACY_PLUNGE_CONFIG);
       expect(undone.settings).toBe(app.settings);
     }
-    app = untilYou(you(app)); // trump called with the preview on: the contract keeps PLUNGE rules
+    app = untilYou(you(app)); // trump called with Nel-O on: the contract keeps PLUNGE rules
     app = untilYou(you(app));
-    app = reducer(app, { type: 'set-nello-preview', enabled: false });
+    app = reducer(app, { type: 'set-nello-enabled', enabled: false });
     expect(app.game!.config).toEqual(PLUNGE_CONFIG);
     expect(canUndo(app)).toBe(true);
     expect(undo(app).game!.config).toEqual(PLUNGE_CONFIG); // still in play: rules unchanged
@@ -617,7 +619,8 @@ describe('a finished game after reload', () => {
   };
   const resume = (app: AppState): AppState => {
     const h = home(app);
-    expect(h.buttons.map((b) => b.text).slice(0, 2)).toEqual(['Resume your game', 'Deal me in']);
+    expect(h.buttons[0]!.text).toBe('Resume your game');
+    expect(h.buttons.some((b) => b.text === 'Deal me in')).toBe(false);
     h.buttons[0]!.onClick();
     expect(h.sent).toEqual([{ type: 'resume' }]);
     return reducer(app, h.sent[0]!);
@@ -639,10 +642,12 @@ describe('a finished game after reload', () => {
     const card = buttons(flatten(GameOverSheet({ g: resumed.game!, dispatch: () => {},
       onUndo: canUndo(resumed) ? () => {} : undefined, onRestart: canRestart(resumed) ? () => {} : undefined }))).map((b) => b.text);
     expect(card).toEqual(expect.arrayContaining(['Play again', 'Undo my last move', 'Play this hand again']));
-    // "Deal me in" still starts a fresh game from Home.
-    const fresh = home(loaded);
-    fresh.buttons[1]!.onClick();
-    expect(fresh.sent[0]).toMatchObject({ type: 'new-game' });
+    // Starting fresh is available on Home and behind More after reload.
+    expect(home(loaded).buttons.some(b => b.text === 'Start a new game')).toBe(true);
+    const fresh: AppEvent[] = [];
+    buttons(More({ app: loaded, dispatch: e => fresh.push(e) }))
+      .find(b => b.text === 'Start a new game')!.onClick();
+    expect(fresh[0]).toMatchObject({ type: 'new-game' });
 
     const undone = resume(reload(undo(resumed)));
     expect(undone.game!.phase).toBe('playing');

@@ -9,6 +9,7 @@ import { syncStats, type StatsStatus } from '../history/stats-sync';
 import { familyTable, ROOMS_ENABLED, roomUrl, saveSeat } from '../room/client';
 import { rememberMe, tableName } from './me';
 import { connectionReturn } from './connection';
+import { roomAccountReturn } from '../room/account-return';
 import { ideaAccountReturn } from '../ideas/account-return';
 import '../ui/app.css';
 import '../ui/home.css';
@@ -129,6 +130,7 @@ export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBacke
   const returningToDemo = backend === liveBackend && !QUESTIONS_LOCAL_ONLY && /^[1-9][0-9]{0,8}$/.test(previewPr) && /^[a-f0-9]{32}$/.test(previewState);
   const returnTo=connectionReturn(new URLSearchParams(location.search).get('returnTo'),location.origin);
   const returnToIdea=ideaAccountReturn(location.search);
+  const returnToRoom=roomAccountReturn(location.search);
   const [state,setState]=useState<State|null>(null),[members,setMembers]=useState<Person[]>([]),[name,setName]=useState(tableName);
   const [error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
   const [recover,setRecover]=useState(()=>secretFromLink('recover')),[recoveryLink,setRecoveryLink]=useState<{name:string;url:string;kind:'Recovery'|'Invite'}|null>(null);
@@ -189,6 +191,10 @@ export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBacke
         if (!response.ok || !result.token || result.origin !== previewFor(Number(previewPr))) throw new Error(result.error ?? 'Could not open the demo. Please try again.');
         location.assign(`${result.origin}/?ideas=1#preview-session=${encodeURIComponent(result.token)}&preview-state=${previewState}`);
       })}>Open dashboard demo →</button> : state?.account && <p>Ask to join the family below. Your existing family access is needed for this dashboard.</p>}
+    </section>}
+    {returnToRoom && <section class="idea-paper"><h2>Back to your table</h2>
+      {state?.account ? <><p>Your account finds your existing chair, even when all four are reserved.</p><a class="big-btn" href={returnToRoom}>Continue to the table as {state.account.name}</a></>
+        : <><p>Sign in below with your usual Plunge passkey to find your chair. Your invitation stays here.</p><a class="text-btn" href={returnToRoom}>Continue without signing in</a></>}
     </section>}
     {returnToIdea && <section class="idea-paper"><h2>{returnToIdea.includes('#') ? 'Back to your idea' : 'Back to family ideas'}</h2>
       {state?.account?.family ? <a class="big-btn" href={returnToIdea}>{returnToIdea.includes('#') ? 'Continue to your idea →' : 'Open family ideas →'}</a>
@@ -277,6 +283,7 @@ export function AccountPage({backend=liveBackend,heading}:{backend?:AccountBacke
           <button class="big-btn secondary" disabled={busy||!supported} onClick={()=>void passkey('add')}>Add another passkey</button>
         </details>
         <div class="account-stats"><h3>Your hands</h3>
+          <p><a href="/?stats=1">Explore stats & play hands again →</a></p>
           {stats?.models && stats.models.length > 0 && <div class="model-stats" aria-label="Hands by computer model"><p>Computer models in your saved attempts</p><ul>{stats.models.map(m => <li key={m.modelKey} title={m.modelKey}>{m.label}: {plural(m.hands,'hand')} · {m.finished} finished</li>)}</ul><p>Attempts can include takebacks, mixed models, and different deals; a hand may appear under more than one model. These counts do not rank playing strength.</p></div>}
           {stats?statsLines(stats,backend.localOnly).map(line=><p key={line}>{line}</p>):<p role="status">Counting the hands on this device…</p>}
           <button class="big-btn secondary" disabled={busy||connecting} onClick={()=>void connectStats(state.account?.id)}>{connecting?'Connecting…':'Connect now'}</button>
