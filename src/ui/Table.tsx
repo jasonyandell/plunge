@@ -19,6 +19,7 @@ import type { ComponentChildren } from 'preact';
 import type { CompletedTrick, GameState, PlayRecord, Seat } from '../engine';
 import { legalDominoes } from '../engine';
 import { Domino } from './Domino';
+import { Hand } from './Hand';
 import { Tally } from './Tally';
 import { YourBid } from './YourBid';
 import type { AppEvent, AppState } from './store';
@@ -202,22 +203,15 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
               ))}
               <p class="sit-note">You're sitting this one out — Nel-O.</p>
             </div>
+          ) : scenario ? (
+            <div class="hand" aria-label="Your hand">{humanHand.map(id => <Domino key={id} id={id} orientation="h" />)}</div>
           ) : (
-            <div class="hand" aria-label="Your hand">
-              {humanHand.map((id) => (
-                <Domino
-                  key={id}
-                  id={id}
-                  orientation="h"
-                  state={humanTurn && app.settings.showHints ? (legal.has(id) ? 'legal' : 'illegal') : 'idle'}
-                  interactive={humanTurn && !app.settings.showHints}
-                  onTap={() => {
-                    if (!legal.has(id)) { setPlayError('You must follow suit when you can.'); return; }
-                    dispatch({ type: 'human', action: { type: 'play', domino: id } });
-                  }}
-                />
-              ))}
-            </div>
+            <Hand key={`${app.sessionId}:${g.handNumber}:${g.dealt[HUMAN_SEAT]?.join(',')}`}
+              hand={humanHand} legal={legal} humanTurn={humanTurn} showHints={app.settings.showHints}
+              onPlay={id => {
+                if (!legal.has(id)) { setPlayError('You must follow suit when you can.'); return; }
+                dispatch({ type: 'human', action: { type: 'play', domino: id } });
+              }} />
           )}
           {playError && <p class="play-error" role="status">{playError}</p>}
         </div>
