@@ -34,7 +34,7 @@ const MAX_LISTED = 12;
 const QUIET = 60 * 60 * 1000;
 const json = (value: unknown, status = 200) => Response.json(value, { status,
   headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
-async function roomBody(request: Request): Promise<{ name: unknown; knock?: unknown; standing?: unknown }> {
+async function roomBody(request: Request): Promise<{ name: unknown; knock?: unknown; standing?: unknown; seatToken?: unknown; restoreOnly?: unknown }> {
   const reader = request.body?.getReader();
   if (!reader) throw new Error('Please enter your name.');
   let size = 0, text = ''; const decoder = new TextDecoder();
@@ -44,7 +44,7 @@ async function roomBody(request: Request): Promise<{ name: unknown; knock?: unkn
     if (size > 1024) { await reader.cancel(); throw new Error('Room request is too large.'); }
     text += decoder.decode(chunk.value, { stream: true });
   }
-  return JSON.parse(text + decoder.decode()) as { name: unknown; knock?: unknown; standing?: unknown };
+  return JSON.parse(text + decoder.decode()) as { name: unknown; knock?: unknown; standing?: unknown; seatToken?: unknown; restoreOnly?: unknown };
 }
 /** Set only by the entry worker after checking the session; never trusted from a browser. */
 function accountFrom(request: Request): { id: string; name: string; family: boolean } | undefined {
@@ -145,7 +145,7 @@ export function claimSeat(room: SavedRoom, seat: Seat, account: { id: string; na
 }
 /** Sitting down works any time; a hand in progress just hands you the seat's dominoes.
  * A signed-in account gets its own chair back from any device; family always has one at the standing table. */
-export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), now = Date.now(), knock?: string, account?: string, family = false): RoomCredentials {
+export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), now = Date.now(), knock?: string, account?: string, family = false, seatToken?: string, restoreOnly = false): RoomCredentials {
   // Record old human membership before a newcomer takes a formerly Walt seat.
   upgradeRoom(room);
   const own = account === undefined ? -1 : room.players.findIndex(player => player?.account === account);
@@ -154,6 +154,17 @@ export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), n
     if (player.name !== cleanName(name)) { player.name = cleanName(name); room.state = { ...room.state, revision: room.state.revision + 1 }; room.updated = now; }
     return { roomId: room.state.roomId, token: player.token, seat: own as Seat };
   }
+  // The account wins over browser storage. Otherwise a valid saved key restores its
+  // chair, and signing in can attach an anonymous chair without taking a second one.
+  const saved = seatToken && TOKEN.test(seatToken) ? room.players.findIndex(player => player?.token === seatToken) : -1;
+  if (saved >= 0) {
+    const player = room.players[saved]!;
+    if (!account || !player.account || player.account === account) {
+      if (account) claimSeat(room, saved as Seat, { id: account, name }, now);
+      return { roomId: room.state.roomId, token: player.token, seat: saved as Seat };
+    }
+  }
+  if (restoreOnly) throw new Error('This saved seat is no longer yours. Join below with your account or name.');
   // The standing table is the family's: a signed-in member sits without knocking. Everyone else meets the door.
   if (!room.state.open && !(account && family && room.standing)) {
     const admission = room.admitted!.findIndex(entry => entry.knock === knock && entry.until > now);
@@ -161,7 +172,7 @@ export function joinRoom(room: SavedRoom, name: string, token = randomKey(32), n
     room.admitted!.splice(admission, 1);
   }
   const seat = ([2, 1, 3, 0] as const).find(seat => !room.players[seat]);
-  if (seat === undefined) throw new Error('All four seats are taken.');
+  if (seat === undefined) throw new Error('All four chairs are reserved. If one is yours, sign in with the account you used there or open the browser you played in. Otherwise, someone at the table needs to leave or use Table → Ask to step out.');
   room.players[seat] = { name: cleanName(name), token, seen: now, ...(account ? { account } : {}) };
   room.state = { ...room.state, revision: room.state.revision + 1, thinkingSeat: null,
     knocks: (room.state.knocks ?? []).filter(entry => entry.visitor !== knock) };
@@ -314,7 +325,7 @@ export function knockRoom(room: SavedRoom, visitor: string, id: string, name: st
   if (room.accepted.includes(key)) return 'duplicate';
   touch(room, connected, now); upgradeRoom(room); settleRoom(room, connected, now);
   if (room.state.open) throw new Error('This table is open. Come on in.');
-  if (room.players.every(Boolean)) throw new Error('All four seats are taken.');
+  if (room.players.every(Boolean)) throw new Error('All four chairs are reserved. If one is yours, sign in with the account you used there or open the browser you played in. Otherwise, someone at the table needs to leave or use Table → Ask to step out.');
   if (room.admitted!.some(entry => entry.knock === visitor && entry.until > now)) throw new Error('The table already said yes. Come on in.');
   const knocks = room.state.knocks ?? [], mine = knocks.find(entry => entry.visitor === visitor);
   if (mine && !mine.answer) return 'duplicate';
@@ -362,7 +373,7 @@ export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
     const knocks = room.state.knocks ?? [], knock = knocks.find(entry => entry.visitor === command.visitor);
     if (!knock) throw new Error('They stopped knocking.');
     if (knock.answer) throw new Error(`${knock.answer.by} already answered.`);
-    if (command.yes && room.players.every(Boolean)) throw new Error('All four seats are taken.');
+    if (command.yes && room.players.every(Boolean)) throw new Error('All four chairs are reserved. Someone needs to leave or use Table → Ask to step out before another person can join.');
     if (command.yes) room.admitted = [...room.admitted!.filter(entry => entry.until > now && entry.knock !== knock.visitor),
       { knock: knock.visitor, name: knock.name, until: now + ADMISSION }];
     const answered: Knock = { ...knock, answer: { by: room.players[seat]!.name, yes: command.yes, at: now } };
@@ -558,12 +569,12 @@ export class PlungeRoom {
       }
       if (!this.room || this.room.updated + roomLifetime(this.room) <= Date.now()) return json({ error: 'This room expired. Please create a new one.' }, 404);
       // Only the entry worker's listing reaches `peek`; browsers see tables through it.
-      if (operation === 'peek' && request.method === 'GET') return json(roomListing(this.room, this.connected(), Date.now()));
+      if (operation === 'peek' && request.method === 'GET') return json({ ...roomListing(this.room, this.connected(), Date.now()), ...(account && this.room.players.some(player => player?.account === account.id) ? { rejoin: true } : {}) });
       if (operation === 'join' && request.method === 'POST') {
-        const { name, knock } = await roomBody(request);
+        const { name, knock, seatToken, restoreOnly } = await roomBody(request);
         settleRoom(this.room, this.connected(), Date.now());
         try {
-          const credentials = joinRoom(this.room, account?.name ?? cleanName(name), undefined, Date.now(), typeof knock === 'string' ? knock : undefined, account?.id, account?.family);
+          const credentials = joinRoom(this.room, account?.name ?? cleanName(name), undefined, Date.now(), typeof knock === 'string' ? knock : undefined, account?.id, account?.family, typeof seatToken === 'string' ? seatToken : undefined, restoreOnly === true);
           await this.sync(true);
           return json(credentials);
         } catch (error) {
@@ -699,7 +710,7 @@ export async function roomRequest(request: Request, namespace?: RoomsNamespace, 
 
 /** The tables anyone can find: those a family member opened, newest first, with who is
  * at them now. Rows expire on read; the coordinator answers 404 for a room that is gone. */
-export async function liveTablesRequest(request: Request, namespace: RoomsNamespace | undefined, db: FamilyDatabase | undefined): Promise<Response> {
+export async function liveTablesRequest(request: Request, namespace: RoomsNamespace | undefined, db: FamilyDatabase | undefined, account?: SessionAccount | null): Promise<Response> {
   if (request.method !== 'GET') return json({ error: 'Method not allowed.' }, 405);
   if (!namespace || !db) return json({ tables: [] });
   const url = new URL(request.url), now = Date.now();
@@ -709,7 +720,7 @@ export async function liveTablesRequest(request: Request, namespace: RoomsNamesp
   ]) as [{ results?: { room_id: string }[] } | undefined];
   const peeked = await Promise.all((listed?.results ?? []).map(async ({ room_id }) => {
     if (!ROOM_ID.test(room_id)) return null;
-    const response = await namespace.get(namespace.idFromName(room_id)).fetch(new Request(`${url.origin}/api/rooms/${room_id}/peek`));
+    const response = await namespace.get(namespace.idFromName(room_id)).fetch(new Request(`${url.origin}/api/rooms/${room_id}/peek`, { headers: account ? { [ACCOUNT_HEADER]: identityHeader(account) } : {} }));
     if (response.status === 404) { await db.prepare('DELETE FROM listed_tables WHERE room_id = ?').bind(room_id).run(); return null; }
     return response.ok ? await response.json() as ListedTable : null;
   }));

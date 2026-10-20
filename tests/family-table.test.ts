@@ -104,3 +104,45 @@ it('lists the tables family members opened for anyone to find, seats members und
   expect((await mf.dispatchFetch(`${origin}/api/rooms/${mom.roomId}/peek`)).status).toBe(404);
   expect((await mf.dispatchFetch(`${origin}/api/rooms/live`, { method: 'POST' })).status).toBe(405);
 }, 20000);
+
+it('recovers authenticated chairs at a full table, preferring the account over browser keys without disclosing identity', async () => {
+  // This account is not family, so its invite table starts open.
+  const host = await (await post('', { name: 'ignored' }, { Cookie: sessions.Stranger! })).json() as RoomCredentials;
+  const mom = await (await post(`/${host.roomId}/join`, { name: 'ignored' }, { Cookie: sessions.Mom! })).json() as RoomCredentials;
+  const guest = await (await post(`/${host.roomId}/join`, { name: 'Guest' })).json() as RoomCredentials;
+  await post(`/${host.roomId}/join`, { name: 'Fourth' });
+  const db = await mf.getD1Database('QUESTIONS');
+  await db.prepare('INSERT INTO listed_tables(room_id,account_id,created) VALUES(?,?,?)').bind(host.roomId, '1'.repeat(32), Date.now()).run();
+  const join = (body: unknown, cookie?: string) => post(`/${host.roomId}/join`, body, cookie ? { Cookie: cookie } : {});
+  expect(await (await join({ name: 'Mom elsewhere' }, sessions.Mom)).json()).toEqual(mom);
+  expect(await (await join({ name: 'Mom', seatToken: guest.token }, sessions.Mom)).json()).toEqual(mom);
+  // A genuine guest key still works at a full table. Signing in attaches that chair.
+  expect(await (await join({ name: 'Guest', seatToken: guest.token })).json()).toEqual(guest);
+  expect(await (await join({ name: 'Dad', seatToken: guest.token }, sessions.Dad)).json()).toEqual(guest);
+  expect(await (await join({ name: 'Dad from another phone' }, sessions.Dad)).json()).toEqual(guest);
+  // Names do not recover chairs, and a stale saved key cannot create a new player.
+  expect((await join({ name: 'Mom' })).status).toBe(400);
+  expect((await join({ name: 'Someone', seatToken: 'f'.repeat(64), restoreOnly: true })).status).toBe(400);
+  const listing = async (cookie?: string, extra = {}) => {
+    const result = await mf.dispatchFetch(`${origin}/api/rooms/live`, { headers: { ...extra, ...(cookie ? { Cookie: cookie } : {}) } });
+    expect(result.headers.get('Cache-Control')).toBe('no-store');
+    return (await result.json() as { tables: ListedTable[] }).tables.find(table => table.roomId === host.roomId)!;
+  };
+  const anonymous = await listing();
+  expect(anonymous.rejoin).toBeUndefined();
+  expect(anonymous.seats.filter(Boolean)).toHaveLength(4);
+  expect(anonymous.seats.map(seat => seat?.name)).toEqual(['Stranger', 'Dad', 'Mom', 'Fourth']);
+  expect(await listing(sessions.Mom)).toEqual({ ...anonymous, rejoin: true });
+  expect(await listing(undefined, { 'X-Plunge-Account': JSON.stringify({ id: '1'.repeat(32), name: 'Mom' }) })).toEqual(anonymous);
+  expect(JSON.stringify(anonymous)).not.toContain(mom.token);
+  expect(JSON.stringify(anonymous)).not.toContain('1'.repeat(32));
+}, 20000);
+
+it("does not restore a different account's saved chair or allocate a chair during a failed restore", async () => {
+  const host = await (await post('', { name: 'ignored' }, { Cookie: sessions.Stranger! })).json() as RoomCredentials;
+  const response = await post(`/${host.roomId}/join`, { name: 'Dad', seatToken: host.token, restoreOnly: true }, { Cookie: sessions.Dad! });
+  expect(response.status).toBe(400);
+  const dad = await (await post(`/${host.roomId}/join`, { name: 'Dad' }, { Cookie: sessions.Dad! })).json() as RoomCredentials;
+  expect(dad.seat).toBe(2);
+  expect(dad.token).not.toBe(host.token);
+}, 20000);

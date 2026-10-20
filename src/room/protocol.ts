@@ -18,7 +18,7 @@ export interface RoomHand {
 /** Bound the room's saved snapshots and reconnect payload. */
 export const ROOM_HISTORY_LIMIT = 20;
 /** A table on the home screen's list: who is here now, and whether the door is open. */
-export interface ListedTable { roomId: string; standing: boolean; player?: PlayerId; open: boolean; started: boolean; updated: number; seats: ({ name: string; connected: boolean } | null)[] }
+export interface ListedTable { rejoin?: boolean; roomId: string; standing: boolean; player?: PlayerId; open: boolean; started: boolean; updated: number; seats: ({ name: string; connected: boolean } | null)[] }
 
 /** Everything the table decides together goes through one proposal at a time. A knock is not one of them. */
 export type ProposalKind = 'start' | 'restart' | 'next-hand' | 'undo' | 'open' | 'close' | 'kick' | 'player';

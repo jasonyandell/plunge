@@ -38,12 +38,12 @@ export function ActiveTables({ family = false, onJoin }: {
         const here = table.seats.flatMap(seat => seat?.connected ? [seat.name] : []);
         const chairs = table.seats.filter(seat => !seat).length;
         const remembered = (() => { try { return savedSeat(table.roomId, localStorage) !== null; } catch { return false; } })();
-        const action = remembered ? 'Rejoin' : chairs === 0 ? 'Full' : table.open || (table.standing && family) ? 'Join' : 'Knock';
+        const action = table.rejoin || remembered ? 'Rejoin' : chairs === 0 ? 'View table' : table.open || (table.standing && family) ? 'Join' : 'Knock';
         return <li key={table.roomId}>
-          <button type="button" class="home-table" disabled={action === 'Full'}
+          <button type="button" class="home-table"
             onClick={() => onJoin ? onJoin(table) : location.assign(roomUrl(table.roomId))}>
             <strong>{tableTitle(table)}</strong>
-            <span>{here.join(', ')} here · {chairs === 0 ? 'All chairs taken' : `${chairs} open ${chairs === 1 ? 'chair' : 'chairs'}`}</span>
+            <span>{here.join(', ')} here · {chairs === 0 ? 'All chairs reserved' : `${chairs} open ${chairs === 1 ? 'chair' : 'chairs'}`}</span>
             <em>{action}</em>
           </button>
         </li>;

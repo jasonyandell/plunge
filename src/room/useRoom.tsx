@@ -21,6 +21,7 @@ import { ClosedTableError, enterRoom, familyProbe, forgetSeat, newVisitorId, Roo
   ROOMS_ENABLED, savedSeat, saveSeat, type RoomIdentity } from './client';
 import { relativeSeat, roomHistory } from './view';
 import { describeResult, Doorbell, VoteBar } from './VoteBar';
+import { roomSignIn } from './account-return';
 import { rememberTableName, tableName, whoAmI } from '../account/me';
 import { RoomHistory } from './RoomHistory';
 import { ActiveTables } from './ActiveTables';
@@ -64,9 +65,7 @@ export interface RoomShell {
 export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell {
   const active = roomActive();
   const roomId = active ? roomFromHash(location.hash) : null;
-  const [credentials, setCredentials] = useState<RoomCredentials | null>(() => {
-    try { return roomId ? savedSeat(roomId, localStorage) : null; } catch { return null; }
-  });
+  const [credentials, setCredentials] = useState<RoomCredentials | null>(null);
   /** `sentAt`: the table's revision when this browser last knocked; an answer only counts after it. */
   const [knock, setKnock] = useState<{ visitor: string; name: string; roomId: string; sentAt: number | null; answer: string | null } | null>(null);
   const [visitorRoom, setVisitorRoom] = useState<RoomState | null>(null);
@@ -77,7 +76,8 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
   useEffect(() => { let live = true; void familyProbe().then(value => { if (live) { setMember(value.name ?? null); setFamily(value.family); } }); return () => { live = false; }; }, []);
   /** Signed out where accounts exist: after a hand, one quiet offer to keep the name and hands. Never again once dismissed. */
   const [offerSignIn, setOfferSignIn] = useState(false);
-  useEffect(() => { let live = true; void whoAmI().then(me => { try { if (live && me === null && !localStorage.getItem(NUDGED)) setOfferSignIn(true); } catch { /* No offer without storage to remember the answer. */ } }); return () => { live = false; }; }, []);
+  const [canSignIn, setCanSignIn] = useState(false);
+  useEffect(() => { let live = true; void whoAmI().then(me => { if (live) setCanSignIn(me === null); try { if (live && me === null && !localStorage.getItem(NUDGED)) setOfferSignIn(true); } catch { /* No offer without storage to remember the answer. */ } }); return () => { live = false; }; }, []);
   const dismissOffer = () => { setOfferSignIn(false); try { localStorage.setItem(NUDGED, '1'); } catch { /* Gone for this visit. */ } };
   const [joinInput, setJoinInput] = useState('');
   const [opening, setOpening] = useState(false);
@@ -158,16 +158,27 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     if (!(connection.current?.send({ ...command, revision, id } as RoomCommand) ?? false)) { quiet.current.delete(id); if (!silent) setError('Reconnecting. Your game is saved; wait for the room to return.'); }
     else if (!silent) setError(null);
   };
-  const sitDown = async (who: string, target?: string, admitted?: string) => {
+  const sitDown = async (who: string, target?: string, admitted?: string, restoreOnly = false) => {
     if (joining.current) return;
     joining.current = true;
     try {
-      const got = await enterRoom(who, target, admitted);
+      let saved: RoomCredentials | null = null;
+      try { if (target) saved = savedSeat(target, localStorage); } catch { /* The account still finds its chair. */ }
+      const got = await enterRoom(who, target, admitted, saved ? { seatToken: saved.token, restoreOnly } : undefined);
       try { saveSeat(got, localStorage); } catch { setError('This browser cannot save your seat. Keep this tab open; refreshing could lose access.'); }
       history.replaceState(null, '', `?rooms=1#room=${got.roomId}`);
       setKnock(null); setNotice(null); setCredentials(got);
     } finally { joining.current = false; }
   };
+  // Resolve saved seats through the server first: an authenticated account takes
+  // precedence over a browser key, and a stale key must never silently add a player.
+  useEffect(() => {
+    let saved: RoomCredentials | null = null;
+    try { if (roomId) saved = savedSeat(roomId, localStorage); } catch { /* Join manually. */ }
+    if (!saved) return;
+    setOpening(true);
+    void sitDown('Player', saved.roomId, undefined, true).catch(e => setError(String(e).replace(/^Error: /, ''))).finally(() => setOpening(false));
+  }, []);
   // Knocking: once the visitor connection is up, ring; ring again if the knock went
   // missing (a dropped connection) or a chair just opened; then watch for the answer.
   const atDoor = knock && visitorRoom ? visitorRoom.knocks?.find(entry => entry.visitor === knock.visitor) : undefined;
@@ -228,9 +239,6 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     const target = joining2 ? roomFromInput(joinInput, location.origin) : roomId;
     try {
       if (joining2 && !target) throw new Error('Paste the room code or an invite link from this Plunge app.');
-      let restored: RoomCredentials | null = null;
-      try { if (target) restored = savedSeat(target, localStorage); } catch { /* Joining still works when storage is unavailable. */ }
-      if (restored) { history.replaceState(null, '', `?rooms=1#room=${restored.roomId}`); setCredentials(restored); return; }
       await sitDown(who, target ?? undefined);
     } catch (e) {
       if (e instanceof ClosedTableError && target) {
@@ -323,12 +331,13 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     {!shown?.proposal && lastVote && <div class="room-takeback" role="status" data-vote-revision={lastVote.revision}>{describeResult(lastVote, model)}</div>}
     {shown?.lastUndo && !lastVote && !shown.proposal && <div class="room-takeback" role="status" data-undo-revision={shown.lastUndo.revision}>Takeback · Back to before {shown.lastUndo.name}’s last move, for everyone.</div>}
     {offerSignIn && credentials && (table?.game?.phase === 'hand-over' || table?.game?.phase === 'game-over') && <div class="room-offer">
-      <a href="?account=1">Keep your name and the hands you play here? Sign in →</a><button onClick={dismissOffer}>Not now</button></div>}
+      <a href={roomSignIn(roomId)}>Keep your name and the hands you play here? Sign in →</a><button onClick={dismissOffer}>Not now</button></div>}
   </> : null;
   const screen = !identity ? <div class="home"><div class="home-card"><p class="eyebrow">Plunge · Experimental</p><h1 class="title">Play with family</h1>
       <p class="room-intro">{roomId ? 'Pull up a chair. You can join while the hand is being played.' : 'Join the people already playing, or open a table of your own.'}</p>
       {notice && <p class="room-notice" role="status">{notice}</p>}
       {!roomId && <ActiveTables family={family} />}
+      {canSignIn && <p class="room-intro"><a href={roomSignIn(roomId)}>Already have an account? Sign in to find your chair →</a></p>}
       <form onSubmit={e => { e.preventDefault(); void open(); }}>{member === null && <label class="room-label">Your name<input maxLength={20} value={name} onInput={e => setName(e.currentTarget.value)} autoComplete="nickname" placeholder="Name at the table" /></label>}
         <button class="big-btn" disabled={opening || member === undefined}>{opening ? 'Opening…' : `${roomId ? 'Join the table' : 'Open a family table'}${member ? ` as ${member}` : ''}`}</button></form>
       <p class="setting-hint">{member && family ? 'A table you open is listed on the home screen for anyone to find. It starts closed, so newcomers knock until the table votes it open.'
@@ -343,8 +352,9 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     </div></div>
     : !shown ? <div class="room-wait" role="status">Connecting to the table…</div>
     : knock && !credentials ? <div class="room-wait"><div class="home-card"><p class="eyebrow">Closed table</p><h1 class="sheet-title">Knocking…</h1>
-      <p>{knock.answer ?? (atDoor ? 'Anyone at the table can let you in. Stay on this screen.' : chairsFull ? 'All four chairs are taken. You will knock again when one opens.' : 'Asking to come in.')}</p>
+      <p>{knock.answer ?? (atDoor ? 'Anyone at the table can let you in. Stay on this screen.' : chairsFull ? 'All four chairs are reserved. If one is yours, sign in or use the browser you played in. Otherwise, someone at the table needs to leave or ask a player to step out.' : 'Asking to come in.')}</p>
       <div class="room-chairs">{[0,2,1,3].map(s => <div key={s}><strong>{shown.seats[s]?.name ?? model}</strong><span>{shown.seats[s] ? shown.seats[s]!.connected ? 'Here' : 'Away' : 'Open chair'}</span></div>)}</div>
+      {canSignIn && <p><a href={roomSignIn(knock.roomId)}>Sign in to find your chair →</a></p>}
       {knock.answer && <button class="big-btn" onClick={() => setKnock({ ...knock, sentAt: null, answer: null })}>Knock again</button>}
       <a class="text-btn" href={location.pathname}>Back to solo play</a>
     </div></div>
