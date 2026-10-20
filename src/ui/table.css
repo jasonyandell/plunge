@@ -431,7 +431,8 @@
 .gather-right  { animation: gather-r 260ms ease-in var(--trick-hold-ms, 2000ms) forwards; }
 
 /* ---------- your hand ---------- */
-/* 7 tiles × clamp(38px, (100vw − 36px)/7, 58px): 46px @360, 50px @390. */
+/* Four horizontal tiles above three, with each row centered. Keep the hand's
+   height stable as tiles are played and leave room for legal tiles to lift. */
 
 .hand-area {
   padding-top: 10px;
@@ -440,14 +441,19 @@
 .hand {
   display: flex;
   justify-content: center;
-  align-items: flex-end;
-  gap: 3px;
+  align-items: center;
+  align-content: flex-end;
+  gap: 16px 8px;
+  width: min(100%, 432px);
+  margin-inline: auto;
   min-height: 118px;
   flex-wrap: wrap;
 }
 
 .hand > .dom {
-  width: clamp(38px, calc((100vw - 36px) / 7), 58px);
+  flex: 0 0 calc((100% - 24px) / 4);
+  width: calc((100% - 24px) / 4);
+  min-height: 44px;
 }
 
 .hand.sit-out { opacity: 0.55; position: relative; }
