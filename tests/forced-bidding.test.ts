@@ -12,6 +12,36 @@ const finish = (g: GameState): GameState => {
 };
 
 describe('Plunge forced last bid', () => {
+  it.each(['force-30', 'force-30-or-nello'] as const)('offers only 30 points under %s while keeping marks available', allPass => {
+    let g = newGame({ ...PLUNGE_CONFIG, allPass }, 'forced-options');
+    const openingMarks = legalActions(g).filter(a => a.type === 'bid' && a.bid.kind === 'marks');
+    for (let i = 0; i < 3; i++) g = applyAction(g, pass);
+    const actions = legalActions(g);
+    expect(actions.filter(a => a.type === 'bid' && a.bid.kind === 'points')).toEqual([thirty]);
+    for (const action of openingMarks) {
+      // Plain marks are independent of the bidder's hand.
+      if (action.type === 'bid' && action.bid.kind === 'marks' && !action.bid.special) {
+        expect(actions).toContainEqual(action);
+        expect(applyAction(g, action).contract).toEqual({ kind: 'marks', value: action.bid.value });
+      }
+    }
+    if (allPass === 'force-30-or-nello') {
+      expect(actions).toContainEqual({ type: 'bid', bid: { kind: 'marks', value: 1, special: 'nello' } });
+    }
+  });
+
+  it('keeps the full points ladder before a forced turn and under reshake rules', () => {
+    for (const config of [PLUNGE_CONFIG, TOURNAMENT_CONFIG]) {
+      let g = newGame(config, 'ordinary-bidding');
+      expect(legalActions(g).filter(a => a.type === 'bid' && a.bid.kind === 'points')).toHaveLength(12);
+      if (config.allPass === 'reshake') {
+        for (let i = 0; i < 3; i++) g = applyAction(g, pass);
+        expect(legalActions(g)).toContainEqual(pass);
+        expect(legalActions(g).filter(a => a.type === 'bid' && a.bid.kind === 'points')).toHaveLength(12);
+      }
+    }
+  });
+
   it('forces each shaker after three passes and preserves the rule in replay links', () => {
     const fixtures = ([0,1,2,3] as Seat[]).map(shaker => {
       let g = newDealtGame(PLUNGE_CONFIG, newGame(PLUNGE_CONFIG, 420600).dealt, shaker);
@@ -23,6 +53,10 @@ describe('Plunge forced last bid', () => {
       expect(legalActions(g)).not.toContainEqual(pass);
       expect(() => applyAction(g, pass)).toThrow();
       expect(legalActions(g)).toContainEqual(thirty);
+      expect(legalActions(g).filter(a => a.type === 'bid' && a.bid.kind === 'points')).toEqual([thirty]);
+      for (let value = 31; value <= 41; value++) {
+        expect(() => applyAction(g, { type: 'bid', bid: { kind: 'points', value } })).toThrow();
+      }
       const start=toSaved({...initialApp(),game:g,seed:'forced-browser',sessionId:'forced-browser'});
       g = applyAction(g, thirty);
       expect(g.forcedBid).toBe(true);
@@ -46,6 +80,8 @@ describe('Plunge forced last bid', () => {
     g = applyAction(g, thirty);
     g = applyAction(applyAction(g, pass), pass);
     expect(legalActions(g)).toContainEqual(pass);
+    expect(legalActions(g)).toContainEqual({ type: 'bid', bid: { kind: 'points', value: 31 } });
+    expect(legalActions(g)).toContainEqual({ type: 'bid', bid: { kind: 'points', value: 41 } });
     g = applyAction(g, pass);
     expect(g.forcedBid).toBe(false);
   });
@@ -58,6 +94,7 @@ describe('Plunge forced last bid', () => {
     expect(resumed.game!.bids).toEqual(old.bids);
     expect(resumed.game!.dealt).toEqual(old.dealt);
     expect(legalActions(resumed.game!)).not.toContainEqual(pass);
+    expect(legalActions(resumed.game!).filter(a => a.type === 'bid' && a.bid.kind === 'points')).toEqual([thirty]);
     expect(resumed.game!.config).toEqual(PLUNGE_CONFIG);
   });
 

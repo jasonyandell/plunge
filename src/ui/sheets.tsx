@@ -93,7 +93,7 @@ export function BidSheet({ g, dispatch, sessionId, questionGameId, onQuestion, s
   return (
     <div class="sheet bid-sheet" role="dialog" aria-label="Your bid">
       <h2 class="sheet-title">Your bid</h2>
-      <p class="hint">{isForcedBidTurn(g) ? 'Everyone passed. You must bid at least 30.' : !canPass ? 'Choose your bid.' : currentBid ? `${SEAT_NAMES[currentBid.seat]} bid ${bidLabel(currentBid.bid)}. Raise it or pass.` : 'Bidding starts at 30. Bid or pass.'}</p>
+      <p class="hint">{isForcedBidTurn(g) ? 'Everyone passed. Bid 30 or choose marks.' : !canPass ? 'Choose your bid.' : currentBid ? `${SEAT_NAMES[currentBid.seat]} bid ${bidLabel(currentBid.bid)}. Raise it or pass.` : 'Bidding starts at 30. Bid or pass.'}</p>
       {showHints && <BiddingHint player={player} bookSeat={bookSeat} g={g} sessionId={sessionId} questionGameId={questionGameId ?? sessionId} onQuestion={onQuestion} />}
       {pt !== null && minPt !== null && maxPt !== null && (
         <div class="bid-stepper">
