@@ -58,6 +58,16 @@
 .vote-buttons .vote-yes { background: var(--cream); color: #21170e; border-color: var(--cream); font-weight: 600; }
 .vote-buttons button:disabled { opacity: .5; }
 .vote-you { font-size: 12px; opacity: .9; white-space: nowrap; }
+/* Computer changes need everyone's explicit answer, so give that vote room. */
+.vote-bar[data-kind="player"] { flex-direction: column; align-items: stretch; margin: 10px; padding: 16px; border: 2px solid #e0a84f; border-radius: 14px; background: #fff0c9; color: #302316; box-shadow: 0 4px 16px #140c0740; }
+.vote-bar[data-kind="player"] .vote-text { font-size: 17px; line-height: 1.4; gap: 6px; overflow-wrap: anywhere; }
+.vote-bar[data-kind="player"] .vote-text span { font-size: 14px; opacity: 1; }
+.vote-bar[data-kind="player"] .vote-heading { font-weight: 700; color: #72501c; }
+.vote-bar[data-kind="player"] .vote-buttons { flex-wrap: wrap; gap: 10px; }
+.vote-bar[data-kind="player"] .vote-buttons button { flex: 1 1 120px; min-height: 48px; font-size: 16px; border-color: #72501c; background: #fffaf0; color: #302316; }
+.vote-bar[data-kind="player"] .vote-buttons .vote-yes { background: #286f65; border-color: #286f65; color: #fffaf0; }
+.vote-bar[data-kind="player"] .vote-buttons button:focus-visible { outline: 3px solid #302316; outline-offset: 3px; }
+.vote-bar[data-kind="player"] .vote-you { font-size: 14px; font-weight: 600; opacity: 1; white-space: normal; }
 .room-people { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; text-align: left; }
 .room-person { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #286f6514; border-radius: 10px; padding: 8px 12px; font-size: 14px; }
 .room-person .text-btn { min-height: 40px; padding: 4px 8px; }
