@@ -64,9 +64,12 @@ export function VoteBar({ proposal, seat, seats, vote, pending }: {
     : nextHand ? `Waiting for ${more === 1 ? 'one more person' : `${more} more people`} · The result stays until everyone is ready`
     : `Needs ${more === 1 ? 'a yes' : `${more} more yes`} within ${seconds}s`;
   return <div class={`vote-bar vote-${proposal.mode}`} role="status" data-proposal={proposal.id} data-kind={proposal.kind}>
-    <div class="vote-text"><strong>{text}</strong><span>{note}{yes > 1 ? ` · ${yes} yes` : ''}</span></div>
+    <div class="vote-text">
+      {proposal.kind === 'player' && <span class="vote-heading">Computer player vote</span>}
+      <strong>{text}</strong><span>{note}{yes > 1 ? ` · ${yes} yes` : ''}</span>
+    </div>
     {seat === null ? null : proposal.target === seat ? <span class="vote-you">The table decides</span>
-      : mine ? <span class="vote-you">{nextHand && mine === 'yes' ? 'You are ready' : `You said ${mine}`}</span>
+      : mine ? <span class="vote-you">{nextHand && mine === 'yes' ? 'You are ready' : `You said ${mine}`}{proposal.kind === 'player' && mine === 'yes' ? ' · Waiting for the table' : ''}</span>
       : <div class="vote-buttons">
         <button class="vote-yes" disabled={!canVote} onClick={() => vote('yes')}>{proposal.kind === 'player' && proposal.endsGame ? 'End game & switch' : nextHand ? 'Ready' : proposal.mode === 'veto' ? 'Fine' : 'Yes'}</button>
         <button class="vote-no" disabled={!canVote} onClick={() => vote('no')}>{proposal.mode === 'veto' ? 'Wait, no' : nextHand ? 'Not yet' : 'No'}</button>
