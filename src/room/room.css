@@ -57,6 +57,18 @@
 .vote-buttons button { min-height: 44px; padding: 6px 12px; border-radius: 10px; font: inherit; font-size: 14px; border: 1px solid #ffffff55; color: var(--cream); background: #ffffff1a; }
 .vote-buttons .vote-yes { background: var(--cream); color: #21170e; border-color: var(--cream); font-weight: 600; }
 .vote-buttons button:disabled { opacity: .5; }
+.vote-door .vote-yes:not(:disabled) {
+  background: var(--butterscotch);
+  border-color: var(--butterscotch);
+  box-shadow: 0 0 0 2px #e0a84f55;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .vote-door .vote-yes:not(:disabled) { animation: door-welcome 2s ease-in-out 2; }
+}
+@keyframes door-welcome {
+  0%, 100% { background: var(--butterscotch); box-shadow: 0 0 0 2px #e0a84f55; }
+  50% { background: var(--cream); box-shadow: 0 0 0 4px #e0a84f99; }
+}
 .vote-you { font-size: 12px; opacity: .9; white-space: nowrap; }
 .room-people { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; text-align: left; }
 .room-person { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #286f6514; border-radius: 10px; padding: 8px 12px; font-size: 14px; }
