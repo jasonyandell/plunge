@@ -49,6 +49,41 @@ async function connect(credentials: RoomCredentials) {
   return { socket, next, state, until, error, ack };
 }
 type Client = Awaited<ReturnType<typeof connect>>;
+
+it('keeps a moved chair connected, broadcasts each person’s seat, and restores it after reconnecting', async () => {
+  const host = await (await post('', { name: 'Seat host' })).json() as RoomCredentials;
+  const guest = await (await post(`/${host.roomId}/join`, { name: 'Seat guest' })).json() as RoomCredentials;
+  const a = await connect(host), b = await connect(guest);
+  const lobby = await b.until(m => m.seats[0]?.connected === true && m.seats[2]?.connected === true);
+  const command = { type: 'move-seat', id: 'choose-chair', revision: lobby.revision, seat: 1 };
+  a.socket.send(JSON.stringify(command));
+  const moved = await a.until(m => m.yourSeat === 1);
+  expect(moved.seats[0]).toBeNull();
+  expect(moved.seats[1]).toMatchObject({ name: 'Seat host', connected: true });
+  expect(moved.runner).toBe(1);
+  expect((await b.state(moved.revision)).yourSeat).toBe(2);
+  await a.ack(command.id);
+  a.socket.close();
+  const restored = await (await post(`/${host.roomId}/join`, { name: 'Seat host', seatToken: host.token, restoreOnly: true })).json() as RoomCredentials;
+  expect(restored).toEqual({ ...host, seat: 1 });
+  // Even old browser credentials resolve to the right seat through the token.
+  const resumed = await connect(host);
+  expect((await resumed.state()).yourSeat).toBe(1);
+  resumed.socket.send(JSON.stringify(command));
+  expect((await resumed.ack(command.id)).revision).toBe(moved.revision);
+  expect((await resumed.state(moved.revision)).yourSeat).toBe(1);
+  // Commands after the move act as the new seat, not its old chair.
+  resumed.socket.send(JSON.stringify({ type: 'propose', id: 'start-after-move', revision: moved.revision, kind: 'start' }));
+  const asked = await b.until(m => m.proposal?.id === 'start-after-move');
+  expect(asked.proposal?.by).toBe(1);
+  b.socket.send(JSON.stringify({ type: 'vote', id: 'agree-after-move', proposal: 'start-after-move', vote: 'yes' }));
+  const started = await resumed.until(m => m.game !== null);
+  resumed.socket.send(JSON.stringify({ type: 'move-seat', id: 'mid-game', revision: started.revision, seat: 3 }));
+  expect((await resumed.error('mid-game')).message).toContain('before the game');
+  expect((await resumed.state(started.revision)).game).toEqual(started.game);
+  resumed.socket.close(); b.socket.close();
+}, 10000);
+
 /** One person asks, the other agrees: the table settles without waiting out the window. */
 async function agree(asker: Client, other: Client, kind: string, revision: number, id = `${kind}-${revision}`) {
   asker.socket.send(JSON.stringify({ type: 'propose', id, revision, kind }));

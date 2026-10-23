@@ -117,14 +117,20 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
   }, [credentials?.roomId, credentials?.token]);
   useEffect(() => {
     if (!identity) { setVisitorRoom(null); setOnline(false); return; }
-    const mine = credentials;
+    let mine = credentials;
     const client = new RoomConnection(identity, {
       state: state => {
         if (!mine) { setVisitorRoom(state); return; }
-        reduce({ type: 'room-snapshot', state, localSeat: mine.seat });
-        void keepRoomReceipts(state, mine.seat).then(receipts => {
+        if (state.yourSeat !== undefined && state.yourSeat !== mine.seat) {
+          mine = { ...mine, seat: state.yourSeat };
+          setCredentials(mine);
+          try { saveSeat(mine, localStorage); } catch { setError('This browser cannot save your seat. Keep this tab open; refreshing could lose access.'); }
+        }
+        const localSeat = mine.seat;
+        reduce({ type: 'room-snapshot', state, localSeat });
+        void keepRoomReceipts(state, localSeat).then(receipts => {
           const latest = current.current;
-          if (connection.current === client && latest?.revision === state.revision) reduce({ type: 'room-snapshot', state: latest, localSeat: mine.seat, receipts });
+          if (connection.current === client && mine?.seat === localSeat && latest?.revision === state.revision) reduce({ type: 'room-snapshot', state: latest, localSeat, receipts });
         }).catch(() => setHistoryError('Original scores could not be saved. Keep this tab open and export your history.'));
       },
       status: setOnline, pending: setPending,
@@ -360,7 +366,15 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     </div></div>
     : credentials && !shown.game ? <div class="room-wait"><div class="home-card"><p class="eyebrow">Your family table</p><h1 class="sheet-title">Pull up a chair</h1>
       <p>You are {shown.seats[credentials.seat]?.name}. Anyone here can start; the table gets five seconds to object. People can join or leave any time, and {model} plays an empty chair.</p>
-      <div class="room-chairs">{[0,2,1,3].map(s => <div key={s}><strong>{shown.seats[s]?.name ?? model}</strong><span>{s === credentials.seat ? 'You' : s === (credentials.seat + 2) % 4 ? 'Your partner' : 'Across the table'}{shown.seats[s] && !shown.seats[s]!.connected ? ' · Away' : ''}</span></div>)}</div>
+      <p class="setting-hint" id="choose-chair">Tap an open chair to move before starting. Chairs in the same row are partners.</p>
+      <div class="room-chairs" role="group" aria-label="Choose your seat" aria-describedby="choose-chair">{([0,2,1,3] as const).map(s => {
+        const person = shown.seats[s];
+        const label = s === credentials.seat ? 'You' : s === (credentials.seat + 2) % 4 ? 'Your partner' : 'Across the table';
+        const contents = <><strong>{person?.name ?? model}</strong><span>{label}{person && !person.connected ? ' · Away' : ''}</span></>;
+        return person ? <div key={s}>{contents}</div> : <button key={s} type="button" disabled={!online || pending || !!shown.proposal}
+          aria-label={`Sit here: seat ${s + 1}, ${model}, ${label.toLowerCase()}`} onClick={() => sendAt({ type: 'move-seat', seat: s }, shown.revision)}>
+          {contents}<span class="room-chair-action">Sit here</span></button>;
+      })}</div>
       {playerControl}
       <button class="big-btn secondary" onClick={share}>Invite someone</button>
       <button class="big-btn" disabled={!online || pending || !!shown.proposal} onClick={() => propose('start')}>Start with {people} {people === 1 ? 'person' : 'people'} + {model}</button>
@@ -380,7 +394,7 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
       {table.game && <button class="big-btn secondary" disabled={!online || pending || !!table.proposal} onClick={() => propose('restart')}>Start over</button>}
       <button class="big-btn secondary" onClick={download}>Export history</button>
       <button class="big-btn" onClick={() => setTableOpen(false)}>Back to the table</button></div></div>}
-    {inviteOpen && <div class="overlay room-invite"><div class="card" role="dialog" aria-label="Invite family"><h2 class="sheet-title">Invite your family</h2><p>Open this link on another phone. The first guest is your partner.</p>
+    {inviteOpen && <div class="overlay room-invite"><div class="card" role="dialog" aria-label="Invite family"><h2 class="sheet-title">Invite your family</h2><p>Open this link on another phone. Before starting, tap any open chair to choose your seat.</p>
       <label class="room-label">Invite link<input aria-label="Invite link" value={invite} readOnly onFocus={e => e.currentTarget.select()} /></label>
       <label class="room-label">Room code<input aria-label="Room code" value={identity ? roomCode(identity.roomId) : ''} readOnly onFocus={e => e.currentTarget.select()} /></label>
       <button class="big-btn secondary" onClick={() => void navigator.clipboard?.writeText(roomCode(identity!.roomId)).then(() => setCopied(true)).catch(() => setCopied(false))}>Copy room code</button>
