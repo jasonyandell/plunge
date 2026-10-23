@@ -244,7 +244,7 @@
   bottom: 100%;
   left: 0;
   right: 0;
-  z-index: 26;
+  z-index: 19; /* Below bidding and result sheets. */
   max-height: min(45vh, 280px);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -263,6 +263,19 @@
   font-variant-numeric: tabular-nums;
 }
 .domino-counter-note { margin: 6px 0; color: #e8c99b; font-size: 11px; }
+.domino-counter-suit { margin-top: 10px; border-top: 1px solid #e9c07a25; }
+.domino-counter-suit h3 {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.domino-counter-suit h3 > span:first-child { text-transform: capitalize; }
+.domino-counter-suit h3 > span:last-child { color: #e8c99b; font-weight: 400; }
 .domino-counter-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
