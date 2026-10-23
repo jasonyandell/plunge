@@ -79,6 +79,7 @@ function FamilyEntry({ compact = false }: { compact?: boolean }) {
       <small class="preview-badge">Experimental</small>
     </button>
     {familyError && <p class="setting-hint" role="alert">{familyError}</p>}
+    {familyError && <button type="button" class="big-btn" onClick={openRooms}>Start another table</button>}
   </>;
   return <section class="more-section" aria-labelledby="home-together-title">
     <h2 id="home-together-title">Family tables <small class="preview-badge">Experimental</small></h2>
@@ -96,6 +97,7 @@ function FamilyEntry({ compact = false }: { compact?: boolean }) {
       </button>
     )}
     {familyError && <p class="setting-hint" role="alert">{familyError}</p>}
+    {familyError && <button type="button" class="big-btn" onClick={openRooms}>Start another table</button>}
     {!family && remembered && !shown.some(table => table.roomId === remembered) && (
       <button type="button" class="big-btn" onClick={() => location.assign(roomUrl(remembered))}>
         Back to your family table
