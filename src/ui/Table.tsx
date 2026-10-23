@@ -426,7 +426,11 @@ export function OpponentTop({ g, thinking, note, names = SEAT_NAMES }: { g: Game
   return (
     <div class={`seat seat-top${active ? ' active' : ''}${thinking === seat ? ' seat-thinking' : ''}`}>
       <div class="seat-name">
-        {names[seat]} <span class="seat-tag">Your partner</span>{note && <span class="seat-tag seat-note">{note}</span>} {seatBadges(g, seat)} {bidBubble(g, seat)}
+        <span class="partner-identity">
+          <strong>{names[seat]}</strong>
+          <span class="partner-label">Your partner</span>
+        </span>
+        {note && <span class="seat-tag seat-note">{note}</span>} {seatBadges(g, seat)} {bidBubble(g, seat)}
       </div>
       <div class={`mini-row${sitsOut ? ' sitting' : ''}`}>
         {hand.map((id) => (

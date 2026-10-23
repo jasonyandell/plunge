@@ -501,7 +501,8 @@
 .status-tallies .tally-svg { width: 30px; }
 .status-tallies { gap: 6px; padding: 7px 6px; }
 
-.you-label {
+.you-label,
+.partner-identity {
   display: inline-block;
   padding: 5px 13px;
   border: 1px solid #a4d9c980;
@@ -511,6 +512,19 @@
   font-size: 15px;
   line-height: 18px;
 }
+.partner-identity {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px 8px;
+  max-width: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  text-align: center;
+  text-shadow: none;
+}
+.partner-identity > strong { min-width: 0; }
+.partner-label { font-size: 14px; font-weight: 600; }
 .seat-top .seat-tag { color: #b8e3d7; }
 
 .play-error { margin: 8px 0 0; text-align: center; color: var(--cream); font-size: 14px; }
