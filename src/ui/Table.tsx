@@ -200,7 +200,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
               {humanHand.map((id) => (
                 <Domino key={id} faceDown orientation="h" />
               ))}
-              <p class="sit-note">You're sitting this one out — Nel-O.</p>
+              <p class="sit-note">You're sitting this one out — Nel-O. You can see the other hands.</p>
             </div>
           ) : (
             <div class="hand" aria-label="Your hand">
@@ -430,7 +430,7 @@ export function OpponentTop({ g, thinking, note, names = SEAT_NAMES }: { g: Game
       </div>
       <div class={`mini-row${sitsOut ? ' sitting' : ''}`}>
         {hand.map((id) => (
-          <Domino key={id} faceDown orientation="v" className="mini-v" />
+          <Domino key={id} id={g.sittingOut === HUMAN_SEAT ? id : undefined} faceDown={g.sittingOut !== HUMAN_SEAT} orientation="v" className="mini-v" />
         ))}
       </div>
       {sitsOut && <div class="sit-note">sitting this one out</div>}
@@ -449,7 +449,7 @@ export function OpponentSide({ g, seat, thinking, note, names = SEAT_NAMES }: { 
       </div>
       <div class={`mini-col${sitsOut ? ' sitting' : ''}`}>
         {hand.map((id) => (
-          <Domino key={id} faceDown orientation="h" className="mini-h" />
+          <Domino key={id} id={g.sittingOut === HUMAN_SEAT ? id : undefined} faceDown={g.sittingOut !== HUMAN_SEAT} orientation="h" className="mini-h" />
         ))}
       </div>
       {sitsOut && <div class="sit-note">sitting out</div>}
