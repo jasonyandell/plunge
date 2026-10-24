@@ -102,7 +102,7 @@ export function Ideas() {
     olderLoaded.current=true;setCards(c => [...c,...page.cards.filter(x=>!c.some(y=>y.id===x.id))]);setNext(page.next);
   } catch(e) {setError(String(e));}};
   if(trial.id && thread?.card.id===trial.id && name)
-    return <IdeaPreview pr={hasIdeaDemo(thread.card) ? thread.card.pr! : 0} title={ideaPresentation(thread.card).title} onClose={trial.close}/>;
+    return <IdeaPreview pr={hasIdeaDemo(thread.card) ? thread.card.pr! : 0} idea={thread.card.id} title={ideaPresentation(thread.card).title} onClose={trial.close}/>;
   return <main class="ideas-page">
     <header class="ideas-top"><a href="/">← Back to Plunge</a><span>Made together</span></header>
     <div class="ideas-heading"><p class="eyebrow">Our community game</p><h1>Ideas for Plunge</h1>
