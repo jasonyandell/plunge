@@ -17,6 +17,7 @@ import {
 } from './update';
 import { Home, HowTo, About, More } from './Home';
 import { Table } from './Table';
+import { Challenges } from './Challenges';
 import { codeFromHash, decodeHand } from './share';
 import { decodeObservation } from './observation-link';
 import { api, isNative, nativeMove, NATIVE_TABLE, type FlagRecord } from '../ai/native';
@@ -270,6 +271,8 @@ export function App() {
         : <div class="room-wait" role="status">Connecting to the table…</div>)}
     </>;
     switch (app.screen) {
+      case 'challenges':
+        return <Challenges onBack={() => dispatch({ type: 'go', screen: 'home' })} />;
       case 'home':
         return <Home app={app} dispatch={dispatch} onPriorHands={openSoloHistory} identity={<IdentityChip />} />;
       case 'how':
