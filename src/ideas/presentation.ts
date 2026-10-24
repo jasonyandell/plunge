@@ -14,7 +14,7 @@ const topics = [
   { label: 'Gameplay', match: /\b(dominoes|dominos|hands?|tricks?|play|game)\b/i },
 ];
 
-export function ideaPresentation(card: IdeaCard) {
+export function ideaPresentation(card: Pick<IdeaCard, 'title' | 'number'>) {
   const tags = topics.filter(topic => topic.match.test(card.title)).slice(0, 3).map(topic => topic.label);
   if (!tags.length) tags.push('Suggestion');
   return {title: ideaHeadline(card.title, card.number), tags};
