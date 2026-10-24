@@ -53,6 +53,8 @@ export interface Knock { visitor: string; name: string; at: number; answer?: { b
 /** Trusted family prototype: all four hands are shared with room members. */
 export interface RoomState {
   type: 'state'; roomId: string; revision: number; seed: string; sessionId: string;
+  /** This connection's current chair; supplied only to seated clients. */
+  yourSeat?: Seat;
   player?: PlayerId; modelKey?: string; playerEvents?: readonly PlayerEvent[];
   game: GameState | null; seats: (RoomSeat | null)[];
   /** Lowest seated, connected human: runs Walt for every seat without a present human. */
@@ -73,6 +75,7 @@ export interface RoomState {
 }
 /** `revision` guards game-changing commands. A vote is keyed to its proposal instead. */
 export type RoomCommand =
+  | { type: 'move-seat'; id: string; revision: number; seat: Seat }
   | { type: 'action'; id: string; revision: number; action: Action; receiptId?: string; receipt?: NativeReceipt; auction?: AuctionEvidence; seat?: Seat; modelKey?: string }
   | { type: 'thinking'; id: string; revision: number; seat: Seat | null }
   | { type: 'propose'; id: string; revision: number; kind: ProposalKind; target?: Seat; player?: PlayerId; endGame?: boolean }

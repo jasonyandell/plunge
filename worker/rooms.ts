@@ -365,8 +365,9 @@ export function tidyDoor(room: SavedRoom, waiting: ReadonlySet<string>, now = Da
 export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
   connected: ReadonlySet<Seat>, now = Date.now()): 'duplicate' | 'changed' | 'thinking' {
   if (!command || !COMMAND_ID.test(command.id) || command.type === 'knock'
-    || !['action', 'thinking', 'propose', 'vote', 'leave', 'door'].includes(command.type)) throw new Error('Invalid room command.');
-  const key = `${seat}:${command.id}`;
+    || !['action', 'thinking', 'propose', 'vote', 'leave', 'door', 'move-seat'].includes(command.type)) throw new Error('Invalid room command.');
+  // A seat change can be retried from the new chair after a lost acknowledgement.
+  const key = command.type === 'move-seat' ? `${room.players[seat]?.token}:${command.id}` : `${seat}:${command.id}`;
   if (room.accepted.includes(key)) return 'duplicate';
   if (!room.players[seat]) throw new Error('This seat is no longer yours.');
   touch(room, connected, now);
@@ -406,7 +407,17 @@ export function commandRoom(room: SavedRoom, seat: Seat, command: RoomCommand,
     if (!Number.isSafeInteger(command.revision)) throw new Error('Invalid room command.');
     if (command.revision !== room.state.revision) throw new Error('The table changed. Please try your move again.');
     const runner = runnerOf(room, connected);
-    if (command.type === 'propose') {
+    if (command.type === 'move-seat') {
+      if (![0, 1, 2, 3].includes(command.seat)) throw new Error('Choose one of the four chairs.');
+      if (room.state.game) throw new Error('Choose your seat before the game starts.');
+      if (room.state.proposal) throw new Error('Wait for the table’s vote before changing seats.');
+      if (command.seat === seat) return 'duplicate';
+      if (room.players[command.seat]) throw new Error('That chair is reserved for someone else.');
+      const target = command.seat;
+      room.players[target] = room.players[seat]!;
+      room.players[seat] = null;
+      connected = new Set([...connected].map(s => s === seat ? target : s));
+    } else if (command.type === 'propose') {
       if (!PROPOSAL_KINDS.includes(command.kind)) throw new Error('Invalid room command.');
       if (command.target !== undefined && ![0, 1, 2, 3].includes(command.target)) throw new Error('Invalid room command.');
       if (room.state.proposal) throw new Error('The table is already deciding something. One moment.');
@@ -567,10 +578,11 @@ export class PlungeRoom {
   }
   private broadcast(exclude?: RoomSocket): void {
     if (!this.room) return;
-    const message = JSON.stringify(roomSnapshot(this.room, this.connected(exclude), Date.now(), this.visitors()));
+    const snapshot = roomSnapshot(this.room, this.connected(exclude), Date.now(), this.visitors());
     for (const socket of this.ctx.getWebSockets()) {
       if (socket === exclude || socket.readyState !== 1) continue;
-      try { socket.send(message); } catch { /* A close callback updates presence. */ }
+      const { seat } = socket.deserializeAttachment();
+      try { socket.send(JSON.stringify({ ...snapshot, ...(seat !== null ? { yourSeat: seat } : {}) })); } catch { /* A close callback updates presence. */ }
     }
   }
   async fetch(request: Request): Promise<Response> {
@@ -662,6 +674,10 @@ export class PlungeRoom {
       } else {
         if (this.room.players[attachment.seat]?.token !== attachment.token) throw new Error('This seat is no longer yours.');
         commandRoom(this.room, attachment.seat, command, this.connected(), Date.now());
+        if (command.type === 'move-seat') {
+          const seat = this.room.players.findIndex(player => player?.token === attachment.token) as Seat;
+          socket.serializeAttachment({ ...attachment, seat });
+        }
       }
       socket.send(JSON.stringify({ type: 'ack', id: command.id, revision: this.room.state.revision }));
       await this.sync(this.room.state.revision !== before);
