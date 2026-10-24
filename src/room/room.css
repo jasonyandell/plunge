@@ -1,6 +1,7 @@
 .rooms { height: 100%; display: flex; flex-direction: column; }
 .rooms > .home { height: 100%; overflow-y: auto; }
 .room-intro { line-height: 1.6; }
+.room-demo-link { display: flex; align-items: center; justify-content: center; padding: 12px; text-decoration: none; }
 .room-label { display: flex; flex-direction: column; gap: 8px; text-align: left; font-size: 14px; margin: 18px 0; }
 .room-label input { font: inherit; font-size: 17px; min-height: 48px; width: 100%; border: 1px solid #a88f69; border-radius: 10px; padding: 10px; background: #fffaf0; color: #302316; }
 .room-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 3px 8px; background: #21170e; font-size: 12px; }

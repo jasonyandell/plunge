@@ -25,6 +25,7 @@ import { roomSignIn } from './account-return';
 import { rememberTableName, tableName, whoAmI } from '../account/me';
 import { RoomHistory } from './RoomHistory';
 import { ActiveTables } from './ActiveTables';
+import { SeatChooser } from './SeatChooser';
 import './room.css';
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -366,15 +367,8 @@ export function useRoom(app: AppState, reduce: (e: AppEvent) => void): RoomShell
     </div></div>
     : credentials && !shown.game ? <div class="room-wait"><div class="home-card"><p class="eyebrow">Your family table</p><h1 class="sheet-title">Pull up a chair</h1>
       <p>You are {shown.seats[credentials.seat]?.name}. Anyone here can start; the table gets five seconds to object. People can join or leave any time, and {model} plays an empty chair.</p>
-      <p class="setting-hint" id="choose-chair">Tap an open chair to move before starting. Chairs in the same row are partners.</p>
-      <div class="room-chairs" role="group" aria-label="Choose your seat" aria-describedby="choose-chair">{([0,2,1,3] as const).map(s => {
-        const person = shown.seats[s];
-        const label = s === credentials.seat ? 'You' : s === (credentials.seat + 2) % 4 ? 'Your partner' : 'Across the table';
-        const contents = <><strong>{person?.name ?? model}</strong><span>{label}{person && !person.connected ? ' · Away' : ''}</span></>;
-        return person ? <div key={s}>{contents}</div> : <button key={s} type="button" disabled={!online || pending || !!shown.proposal}
-          aria-label={`Sit here: seat ${s + 1}, ${model}, ${label.toLowerCase()}`} onClick={() => sendAt({ type: 'move-seat', seat: s }, shown.revision)}>
-          {contents}<span class="room-chair-action">Sit here</span></button>;
-      })}</div>
+      <SeatChooser seats={shown.seats} seat={credentials.seat} model={model} disabled={!online || pending || !!shown.proposal}
+        onChoose={s => sendAt({ type: 'move-seat', seat: s }, shown.revision)} />
       {playerControl}
       <button class="big-btn secondary" onClick={share}>Invite someone</button>
       <button class="big-btn" disabled={!online || pending || !!shown.proposal} onClick={() => propose('start')}>Start with {people} {people === 1 ? 'person' : 'people'} + {model}</button>
