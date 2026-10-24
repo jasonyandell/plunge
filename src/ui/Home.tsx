@@ -142,7 +142,7 @@ function FamilyTile() {
     } finally { setOpening(false); }
   };
   return <>
-    <button type="button" class="home-tile home-family" disabled={opening} onClick={() => void open()}
+    <button type="button" class="home-tile home-family" data-entry="family" disabled={opening} onClick={() => void open()}
       aria-label={playing ? `Play together · ${playing} here now` : undefined}>
       <TableIcon />
       <strong>{opening ? 'Opening…' : 'Play together'}</strong>
@@ -152,7 +152,8 @@ function FamilyTile() {
   </>;
 }
 
-/** One way to play, three places to go, and nothing that moves while you look. */
+/** One way to play, three places to go, and nothing that moves while you look.
+ * `data-entry` names each way in for the browser checks, so wording can change freely. */
 export function Home({ app, dispatch, identity }: HomeProps) {
   const paused = nelloPaused(app);
   // A finished game stays resumable while its last hand can still be undone or
@@ -171,13 +172,14 @@ export function Home({ app, dispatch, identity }: HomeProps) {
 
         <div class="home-play">
           {resumable ? (
-            <button type="button" class="big-btn" disabled={paused} onClick={() => dispatch({ type: 'resume' })}>
+            <button type="button" class="big-btn" data-entry="resume" disabled={paused} onClick={() => dispatch({ type: 'resume' })}>
               Resume your game
             </button>
           ) : (
             <button
               type="button"
               class="big-btn"
+              data-entry="deal"
               onClick={() => dispatch({ type: 'new-game', seed: Date.now().toString(36), sessionId: crypto.randomUUID() })}
             >
               Deal me in
@@ -188,15 +190,15 @@ export function Home({ app, dispatch, identity }: HomeProps) {
 
         <nav class="home-tiles" aria-label="Plunge">
           {ROOMS_ENABLED && <FamilyTile />}
-          <a class="home-tile" href="?stats=1"><StatsIcon /><strong>Stats</strong></a>
-          <a class="home-tile" href="?ideas=1"><IdeaIcon /><strong>Ideas</strong></a>
+          <a class="home-tile" data-entry="stats" href="?stats=1"><StatsIcon /><strong>Stats</strong></a>
+          <a class="home-tile" data-entry="ideas" href="?ideas=1"><IdeaIcon /><strong>Ideas</strong></a>
         </nav>
 
         <div class="link-row home-links">
-          <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'how' })}>
+          <button type="button" class="text-btn" data-entry="how" onClick={() => dispatch({ type: 'go', screen: 'how' })}>
             How to play
           </button>
-          <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'more' })}>
+          <button type="button" class="text-btn" data-entry="settings" onClick={() => dispatch({ type: 'go', screen: 'more' })}>
             Settings & more
           </button>
         </div>

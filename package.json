@@ -16,6 +16,8 @@
     "test:offline:browser": "node scripts/test-offline-browser.mjs",
     "test:zeb:browser": "PLUNGE_TEST_PLAYER=Zeb node scripts/test-offline-browser.mjs",
     "typecheck": "tsc --noEmit",
+    "ci:local": "node scripts/ci-local.mjs",
+    "share": "node scripts/share.mjs",
     "prebuild": "node scripts/verify-walt.mjs",
     "ideas:build": "node scripts/ideas/builder.mjs",
     "test:ideas:browser": "node scripts/test-ideas-browser.mjs",
