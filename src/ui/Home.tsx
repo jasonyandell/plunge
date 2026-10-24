@@ -100,8 +100,8 @@ function FamilyEntry() {
 
 /** Tile icons: line drawings in the tile's ink, so they read as one set. */
 const Icon = ({ children }: { children: ComponentChildren }) => (
-  <svg class="home-tile-icon" viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor"
-    stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{children}</svg>
+  <svg class="home-tile-icon" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor"
+    stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{children}</svg>
 );
 /** Four chairs around a table, from above. */
 const TableIcon = () => <Icon><circle cx="12" cy="12" r="4.5" /><rect x="9.5" y="2" width="5" height="3.5" rx="1.2" /><rect x="9.5" y="18.5" width="5" height="3.5" rx="1.2" /><rect x="2" y="9.5" width="3.5" height="5" rx="1.2" /><rect x="18.5" y="9.5" width="3.5" height="5" rx="1.2" /></Icon>;
@@ -142,10 +142,11 @@ function FamilyTile() {
     } finally { setOpening(false); }
   };
   return <>
-    <button type="button" class="home-tile home-family" disabled={opening} onClick={() => void open()}>
+    <button type="button" class="home-tile home-family" disabled={opening} onClick={() => void open()}
+      aria-label={playing ? `Play together · ${playing} here now` : undefined}>
       <TableIcon />
-      <strong>Family</strong>
-      <span class={playing ? 'live' : undefined}>{opening ? 'Opening…' : playing ? `${playing} here now` : 'Play live'}</span>
+      <strong>{opening ? 'Opening…' : 'Play together'}</strong>
+      {playing > 0 && <span class="home-tile-live" aria-hidden="true">{playing}</span>}
     </button>
     {error && <p class="home-tile-error setting-hint" role="alert">{error} <button type="button" class="text-btn" onClick={openRooms}>Start another table</button></p>}
   </>;
@@ -187,8 +188,8 @@ export function Home({ app, dispatch, identity }: HomeProps) {
 
         <nav class="home-tiles" aria-label="Plunge">
           {ROOMS_ENABLED && <FamilyTile />}
-          <a class="home-tile" href="?stats=1"><StatsIcon /><strong>Stats</strong><span>Your hands</span></a>
-          <a class="home-tile" href="?ideas=1"><IdeaIcon /><strong>Ideas</strong><span>Suggest</span></a>
+          <a class="home-tile" href="?stats=1"><StatsIcon /><strong>Stats</strong></a>
+          <a class="home-tile" href="?ideas=1"><IdeaIcon /><strong>Ideas</strong></a>
         </nav>
 
         <div class="link-row home-links">
