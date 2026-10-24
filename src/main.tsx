@@ -8,6 +8,9 @@ import { ideasLink } from './ideas/client';
 import { App } from './ui/App';
 import { StatsPage } from './stats/StatsPage';
 import { QuickIdea } from './ideas/QuickIdea';
+import { HeadlineDemo } from './ideas/HeadlineDemo';
+import { isHeadlineDemo } from './ideas/headline-demo';
+import { QUESTIONS_LOCAL_ONLY } from './questions/mode';
 
 const root = document.getElementById('app');
 if (!root) throw new Error('missing #app root');
@@ -20,4 +23,4 @@ const page = params.has('stats') ? <StatsPage demo={params.get('demo') === 'stat
     <div class="idea-preview-game">{game}</div>
   </div>
 ) : game;
-render(<>{page}<QuickIdea /></>, root);
+render(<>{isHeadlineDemo(location, QUESTIONS_LOCAL_ONLY) ? <HeadlineDemo /> : page}<QuickIdea /></>, root);
