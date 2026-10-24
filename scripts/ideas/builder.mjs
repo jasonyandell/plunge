@@ -103,10 +103,36 @@ export async function service(config,path,data) {
 }
 async function gh(args, options) {return run('gh',args,options);}
 async function git(cwd,...args) {return run('git',['-c','core.hooksPath=/dev/null',...args],{cwd});}
+export const ICE_AFTER_MS=3*24*60*60*1000;
+const ICE_LABEL='on-ice';
+/** Quiet ideas rest: close the PR (its preview is torn down) and mark the card on ice.
+ * The label tells a later wake or reply to reopen this PR instead of starting over. */
+export async function iceQuiet(config,{now=Date.now(),github=gh}={}) {
+  const before=new Date(now-ICE_AFTER_MS).toISOString();
+  for(const card of await service(config,`stale?before=${encodeURIComponent(before)}`)) {
+    try {
+      await github(['label','create',ICE_LABEL,'--repo',REPO,'--color','BFD4F2','--description','Idea resting; wake it from the idea card','--force']);
+      await github(['pr','edit',String(card.pr),'--repo',REPO,'--add-label',ICE_LABEL]);
+      await github(['pr','close',String(card.pr),'--repo',REPO,'--comment','On ice after three quiet days. Wake it up from the idea card, or reply there, and this PR reopens.']);
+      await service(config,'ice',{id:card.id,before});
+      console.log(JSON.stringify({idea:card.number,status:'iced',pr:`https://github.com/${REPO}/pull/${card.pr}`}));
+    } catch(error) {console.error(`Ice ${card.pr}: ${error.message}`);}
+  }
+}
+/** Reopen an iced PR so its preview redeploys. Returns false when there is nothing to reopen. */
+export async function reopenIced(pr,github=gh) {
+  const view=JSON.parse(await github(['pr','view',String(pr),'--repo',REPO,'--json','state,labels']));
+  if(view.state!=='CLOSED' || !view.labels?.some(label=>label.name===ICE_LABEL))return false;
+  await github(['pr','reopen',String(pr),'--repo',REPO,'--comment','Woken up from the idea card.']);
+  await github(['pr','edit',String(pr),'--repo',REPO,'--remove-label',ICE_LABEL]);
+  return true;
+}
 async function inspectPreviews(config) {
   for(const card of await service(config,'tracked')) {
     try {
       const pr=JSON.parse(await gh(['pr','view',String(card.pr),'--repo',REPO,'--json','state,headRefOid,statusCheckRollup,mergeCommit']));
+      // A woken idea: reopen its PR and let the preview workflow redeploy before judging it.
+      if(card.status==='waking' && pr.state==='CLOSED' && await reopenIced(card.pr))continue;
       let status=null;
       if(pr.state==='MERGED') {
         const live=await fetch(`${config.origin}/version.json`,{cache:'no-store',signal:AbortSignal.timeout(10000)}).then(r=>r.json());
@@ -152,7 +178,10 @@ export async function buildOne(config,job,stateDir) {
     const openPrs=JSON.parse(await gh(['pr','list','--repo',REPO,'--state','open','--json','number,headRefName','--limit','100']));
     const existing=openPrs.find(pr=>pr.headRefName===branch || new RegExp(`^${branch}-r[0-9]+$`).test(pr.headRefName));
     if(existing)branch=existing.headRefName;
-    else {
+    else if(job.card.pr && await reopenIced(job.card.pr)) {
+      // A reply woke this idea; keep building on its old PR.
+      branch=JSON.parse(await gh(['pr','view',String(job.card.pr),'--repo',REPO,'--json','headRefName'])).headRefName;
+    } else {
       const previous=JSON.parse(await gh(['pr','list','--repo',REPO,'--head',branch,'--state','all','--json','number','--limit','1']));
       if(previous.length)branch+=`-r${job.run.revision}`;
     }
@@ -257,6 +286,7 @@ export async function main() {
         await releaseAccepted({service:(path,data)=>service(config,path,data),gh:args=>gh(args,{timeout:30000}),
           version:async origin=>{const response=await fetch(`${origin}/version.json`,{cache:'no-store',signal:AbortSignal.timeout(10000)});if(!response.ok)throw new Error('Version check failed.');return response.json();}});
         await inspectPreviews(config);
+        await iceQuiet(config);
       },
       claim:excludeIdeaIds=>service(config,'claim',{runId:uid(),supportsScreenshots:true,excludeIdeaIds,...(config.onlyIdea?{ideaId:config.onlyIdea}:{})}),
       build:job=>buildOne(config,job,stateDir)});

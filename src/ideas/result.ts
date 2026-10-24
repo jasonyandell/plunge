@@ -18,6 +18,8 @@ export function ideaResult(thread: IdeaThread, message: IdeaMessage) {
     shipped: 'This update is now in the main game.',
     closed: 'This update has been set aside. Its preview is no longer available.',
     question: 'This reply is a question, so it did not create a new preview.',
+    iced: 'This idea is resting. Wake it up to bring its preview back.',
+    waking: 'Bringing the preview back. This takes a few minutes.',
   };
   return { request, ready, shipped: current && card.status === 'shipped',
     detail: current || card.status === 'queued' || card.status === 'building' ? details[card.status]
