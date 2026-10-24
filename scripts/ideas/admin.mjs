@@ -50,16 +50,18 @@ if(command==='init') {
   await service(await loadConfig(),'retry',{id:args[0]});console.log('Idea queued again; its conversation is unchanged.');
 } else if(command==='adopt') {
   // The hand-built lane: link a PR made by hand to a family idea card, new or existing.
-  // `adopt PR [IDEA_ID] [--title TEXT] [--body TEXT] [--note TEXT]`
+  // `adopt PR [IDEA_ID] [--title TEXT] [--body TEXT] [--note TEXT] [--new-id HEX]`
+  // --new-id names a new card up front, so the PR can carry its src/ui/demos/<id>.tsx demo.
   const options={},rest=[];
-  for(let i=0;i<args.length;i++){const flag=/^--(title|body|note)$/.exec(args[i]);if(flag)options[flag[1]]=args[++i];else rest.push(args[i]);}
+  for(let i=0;i<args.length;i++){const flag=/^--(title|body|note|new-id)$/.exec(args[i]);if(flag)options[flag[1]]=args[++i];else rest.push(args[i]);}
   const [pr,idea]=rest;
-  if(!/^[1-9][0-9]*$/.test(pr??'') || (idea!==undefined && !/^[a-f0-9]{32}$/.test(idea)))throw new Error('Use adopt PR [IDEA_ID] [--title TEXT] [--body TEXT] [--note TEXT].');
+  if(!/^[1-9][0-9]*$/.test(pr??'') || (idea!==undefined && !/^[a-f0-9]{32}$/.test(idea)) || (options['new-id']!==undefined && (idea!==undefined || !/^[a-f0-9]{32}$/.test(options['new-id']))))
+    throw new Error('Use adopt PR [IDEA_ID] [--title TEXT] [--body TEXT] [--note TEXT] [--new-id HEX].');
   const config=await loadConfig();
   const found=JSON.parse(await run('gh',['pr','view',pr,'--repo','jasonyandell/plunge','--json','state,headRefOid,title']));
   if(found.state!=='OPEN')throw new Error(`PR #${pr} is ${found.state.toLowerCase()}; only an open PR has a preview.`);
   const result=await service(config,'adopt',{pr:Number(pr),sha:found.headRefOid,...(options.note?{message:options.note}:{}),
-    ...(idea?{id:idea}:{newId:randomBytes(16).toString('hex'),title:options.title??found.title,body:options.body??options.title??found.title})});
+    ...(idea?{id:idea}:{newId:options['new-id']??randomBytes(16).toString('hex'),title:options.title??found.title,body:options.body??options.title??found.title})});
   console.log(`Linked PR #${pr} to ${config.origin}/?ideas=1#idea=${result.id}`);
   console.log(`Once its preview passes, Try your change opens it at ${config.origin}/?ideas=1#idea=${result.id}&try=1`);
 } else if(command==='revoke') {
