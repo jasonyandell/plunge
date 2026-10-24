@@ -1,11 +1,49 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
+
+// PR previews have no question database: `PLUNGE_QUESTIONS=local-only` builds an
+// app that keeps questions on the device. Anything unexpected fails the build.
+const questions = process.env.PLUNGE_QUESTIONS || 'remote';
+if (questions !== 'remote' && questions !== 'local-only')
+  throw new Error(`PLUNGE_QUESTIONS must be "remote" or "local-only", not "${questions}".`);
+const rooms = process.env.PLUNGE_ROOMS || 'off';
+if (rooms !== 'off' && rooms !== 'experimental') throw new Error('PLUNGE_ROOMS must be off or experimental.');
 
 export default defineConfig({
-  plugins: [preact()],
+  plugins: [preact(), {
+    // Offline from the first launch: stamp the service worker with this build
+    // and every file it needs, so it saves the whole game (Walt too) at install.
+    name: 'plunge-offline',
+    apply: 'build',
+    closeBundle() {
+      const out = 'dist', files: string[] = [];
+      for (const entry of readdirSync(out, { recursive: true, withFileTypes: true })) {
+        if (!entry.isFile()) continue;
+        const path = '/' + relative(out, join(entry.parentPath, entry.name)).split('\\').join('/');
+        // The page itself is saved as '/'; onyx's model isn't wired into the game.
+        if (['/sw.js', '/index.html', '/version.json'].includes(path) || path.startsWith('/models/')) continue;
+        files.push(path);
+      }
+      const sw = join(out, 'sw.js'), source = readFileSync(sw, 'utf8');
+      const stamped = source
+        .replace("const BUILD = 'dev';", `const BUILD = ${JSON.stringify(process.env.GITHUB_SHA ?? String(Date.now()))};`)
+        .replace('const FILES = [];', `const FILES = ${JSON.stringify(files.sort())};`);
+      if (stamped === source || !stamped.includes('/assets/')) throw new Error('plunge-offline: could not stamp dist/sw.js.');
+      writeFileSync(sw, stamped);
+    },
+  }, {
+    // Lets preview tooling confirm what was built, before and after deployment.
+    name: 'plunge-questions-mode',
+    transformIndexHtml: () => [
+      { tag: 'meta', attrs: { name: 'plunge-questions', content: questions }, injectTo: 'head' },
+      { tag: 'meta', attrs: { name: 'plunge-rooms', content: rooms }, injectTo: 'head' },
+    ],
+  }],
   server: {
-    proxy: { '/api/questions': { target: `http://127.0.0.1:${process.env.PLUNGE_QUESTIONS_PORT ?? '8787'}` }, '/api': { target: `http://127.0.0.1:${process.env.PLUNGE_BRIDGE_PORT ?? '4245'}` } },
+    proxy: { '/api/account': { target: `http://127.0.0.1:${process.env.PLUNGE_QUESTIONS_PORT ?? '8787'}` }, '/api/ideas': { target: `http://127.0.0.1:${process.env.PLUNGE_QUESTIONS_PORT ?? '8787'}` }, '/api/rooms': { target: `http://127.0.0.1:${process.env.PLUNGE_ROOMS_PORT ?? '8788'}`, ws: true }, '/api/questions': { target: `http://127.0.0.1:${process.env.PLUNGE_QUESTIONS_PORT ?? '8787'}` }, '/api': { target: `http://127.0.0.1:${process.env.PLUNGE_BRIDGE_PORT ?? '4245'}` } },
   },
   build: { target: 'es2022' },
   test: {
@@ -26,5 +64,7 @@ export default defineConfig({
   define: {
     // Stamped with the commit SHA in CI; 'dev' locally (disables update polling).
     __BUILD_ID__: JSON.stringify(process.env.GITHUB_SHA ?? 'dev'),
+    __QUESTIONS_LOCAL_ONLY__: JSON.stringify(questions === 'local-only'),
+    __ROOMS_ENABLED__: JSON.stringify(rooms === 'experimental'),
   },
 });

@@ -362,3 +362,7 @@
   .bid-chip:hover, .decl-btn:hover { background: #eee0c7; }
   .decl-btn.special:hover { background: var(--teal-ink); }
 }
+
+/* Undo and replay from the end-of-hand cards; the confirmation sits above them. */
+.retry-links { display: flex; flex-wrap: wrap; justify-content: center; column-gap: 12px; }
+.restart-overlay { z-index: 40; }

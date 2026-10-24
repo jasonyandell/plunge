@@ -1,12 +1,12 @@
 /** Instant, read-only auction advice from recorded complete games. No solver fallback. */
-import { legalBids, type Action, type Bid, type GameState } from '../engine';
+import { legalBids, type Action, type Bid, type GameState, type Seat } from '../engine';
 import { auctionRequest, partnerAuctionPass } from './auction';
 import { bestPanel, qualifies, type PlayedPanel } from './bid-book';
 import { bookAuction } from './book-auction';
 import { waltContractBid } from './walt/requests';
 
 export type BiddingHint = {
-  kind: 'book'; action: Action; reason: 'bid' | 'pass' | 'partner' | 'forced' | 'declare';
+  kind: 'book'; book_seat?: Seat; action: Action; reason: 'bid' | 'pass' | 'partner' | 'forced' | 'declare';
   target: number; minimum: Bid | null; panel: PlayedPanel; panels: readonly PlayedPanel[];
   /** Highest score clearing the book's observed-frequency cutoff, independent of legal raises. */
   ceiling: number | null;
@@ -19,21 +19,22 @@ export function bookCeiling(panels: readonly PlayedPanel[]): number | null {
   return null;
 }
 
-export function getBiddingHint(g: GameState): BiddingHint {
+export function getBiddingHint(g: GameState, bookSeat: Seat = 0): BiddingHint {
   if (g.turn !== 0 || !['bidding', 'declaring'].includes(g.phase)) throw new Error('Hints are for your auction turn.');
   if (g.config.noTrumpDoubles !== 'high'
     || (g.phase === 'declaring' && (waltContractBid(g.contract) === null || g.declarer !== g.turn))) {
     return { kind: 'unavailable', reason: 'unsupported' };
   }
   // The same request builder and choice rule as live bidding. Book lookup uses only hand + seat.
-  const result = bookAuction(g, auctionRequest(g, 'bidding-hint'));
+  // A family view rotates us to seat 0; the recorded sample still belongs to the original seat.
+  const result = bookAuction(g, { ...auctionRequest(g, 'bidding-hint'), seat: bookSeat });
   if (!result) return { kind: 'unavailable', reason: 'missing-hand' };
   const partnerPass = partnerAuctionPass(g), { survey } = result;
   const action = partnerPass ?? result.action;
   const reason = g.phase === 'declaring' ? 'declare' : partnerPass ? 'partner' : survey.forced ? 'forced'
     : action.type === 'bid' && action.bid.kind === 'pass' ? 'pass' : 'bid';
   return {
-    kind: 'book', action, reason, target: survey.bid,
+    kind: 'book', ...(bookSeat ? { book_seat: bookSeat } : {}), action, reason, target: survey.bid,
     minimum: legalBids(g).find(b => b.kind === 'points' || (b.kind === 'marks' && !b.special)) ?? null,
     panel: survey.panels.find(p => p.decl === survey.decl)!, panels: survey.panels,
     ceiling: bookCeiling(survey.panels),

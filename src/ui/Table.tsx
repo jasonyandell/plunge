@@ -7,22 +7,30 @@ import { playIndex } from '../engine/play-index';
  * your left, Gran (2) — your partner — across the top, Ruby (3) to your right.
  *
  * Portrait layout keeps the suit panels and labeled hand visible. The middle
- * table flexes to the available height; hand tiles cap at 58px wide.
+ * table flexes to the available height; your horizontal tiles form rows of four.
  */
 
+import { PlayerBadge } from './PlayerBadge';
+import { PlayerPicker } from './PlayerPicker';
+import { NewGameButton } from './NewGameButton';
+import { handPlayers, playerLabel, usesForecastBidding } from '../ai/players';
 import { useEffect, useState } from 'preact/hooks';
+import type { ComponentChildren } from 'preact';
 import type { CompletedTrick, GameState, PlayRecord, Seat } from '../engine';
 import { legalDominoes } from '../engine';
 import { Domino } from './Domino';
 import { Tally } from './Tally';
+import { YourBid } from './YourBid';
 import type { AppEvent, AppState } from './store';
 import {
-  HUMAN_SEAT, SEAT_NAMES, nelloAvailable, TRICK_HOLD_MS, bidLabel, contractLabel, declLabel, ledChip, trumpChip,
+  HUMAN_SEAT, SEAT_NAMES, TRICK_HOLD_MS, bidLabel, contractLabel, declLabel, ledChip, trumpChip,
+  canRestart, canUndo, liveDispatch, questionGameId,
 } from './store';
-import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet } from './sheets';
+import { BidSheet, DeclareSheet, GameOverSheet, HandOverSheet, RestartConfirm } from './sheets';
 import { TrickHistory } from './TrickHistory';
 import { NativeReview } from './NativeReview';
 import { MoveHint } from './MoveHint';
+import { HintsSwitch } from './Home';
 import { isNative } from '../ai/native';
 import './table.css';
 import './questions.css';
@@ -35,10 +43,14 @@ interface QuestionSelection {
   game: GameState;
   ply: number;
   sessionId: string;
+  questionGameId: string;
   receiptId: string | null;
   target: HTMLElement;
   label: string;
 }
+
+/** After an undo lands, the button rests briefly so a double tap can't take back two moves. */
+export const UNDO_REST_MS = 700;
 
 interface TableProps {
   app: AppState;
@@ -46,12 +58,29 @@ interface TableProps {
   /** Seat whose slow AI think is in flight (walt solving) — shows a note. */
   thinking?: Seat | null;
   onQuestion: (id: string) => void;
+  /** A shared table's word under a seat: rejoining, or Walt covering an absent person. */
+  seatNote?: (seat: Seat) => string | null;
+  /** A shared table's extra menu entry. */
+  menuExtra?: ComponentChildren;
+  onHistory?: () => void;
 }
 
-export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps) {
+export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion, seatNote = () => null, menuExtra = null, onHistory }: TableProps) {
+  // Every human decision below — tiles, bid/trump sheets, end cards — is
+  // stamped with the generation this render shows (see liveDispatch).
+  const dispatch = liveDispatch(rawDispatch, app.epoch);
   const [question, setQuestion] = useState<QuestionSelection | null>(null);
   const g = app.scenarioGame ?? app.game;
-  useEffect(() => setQuestion(null), [app.sessionId, g?.handNumber, app.scenarioGame]);
+  useEffect(() => setQuestion(null), [app.sessionId, g?.handNumber, app.scenarioGame, app.epoch]);
+  // Undo and replay are deliberate: Undo rests after each use; replaying asks first.
+  const [resting, setResting] = useState(false);
+  useEffect(() => {
+    if (!resting) return;
+    const timer = setTimeout(() => setResting(false), UNDO_REST_MS);
+    return () => clearTimeout(timer);
+  }, [resting]);
+  const [confirmRestart, setConfirmRestart] = useState<number | null>(null);
+  useEffect(() => setConfirmRestart(null), [app.sessionId, g?.handNumber, app.scenarioGame, app.epoch]);
   const [saved, setSaved] = useState<{ id: string; text: string } | null>(null);
   useEffect(() => {
     if (!saved) return;
@@ -61,12 +90,25 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
   const [playError, setPlayError] = useState<string | null>(null);
   useEffect(() => setPlayError(null), [g, app.settings.showHints]);
   const [histOpen, setHistOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   // A shared hand from a link is shown instead of the player's own game,
   // view-only, and opens straight into review.
   const scenario = app.scenarioGame !== null;
   // Reviewing the finished hand: hides the end-of-hand card in favor of the
   // trick-by-trick history until the player comes back to the result.
   const [review, setReview] = useState(scenario);
+  // At a shared table Undo is a vote; one question at a time.
+  const undoReady = !scenario && !resting && canUndo(app) && !app.room?.table?.proposal;
+  const restartReady = !scenario && canRestart(app);
+  const undo = (): void => {
+    if (!undoReady) return;
+    setResting(true);
+    dispatch({ type: 'undo', epoch: app.epoch });
+  };
+  const askRestart = (): void => { if (restartReady) setConfirmRestart(app.epoch); };
+  const branch = questionGameId(app);
+  // Undone or replayed: shown on the table and the end cards, not only in exports.
+  const practice = !scenario && !!g && app.retry?.handNumber === g.handNumber;
   const phase = (app.scenarioGame ?? app.game)?.phase;
   useEffect(() => {
     if (phase !== 'hand-over' && phase !== 'game-over') setReview(false);
@@ -81,13 +123,14 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
     const play = [...g.tricks.flatMap(t => t.plays), ...g.currentTrick][ply];
     if (!play) return;
     // Keep the original evidence even if the trick clears before confirmation.
-    setQuestion({ game: g, ply, sessionId: app.sessionId, target,
+    setQuestion({ game: g, ply, sessionId: app.sessionId, questionGameId: branch, target,
       receiptId: app.nativeReceipts[`${g.handNumber}:${ply}`] ?? null,
       label: `${play.seat === HUMAN_SEAT ? 'You' : SEAT_NAMES[play.seat]} · ${play.domino.split('').join('–')}` });
   };
   const bookmark = (selected: QuestionSelection): void => {
     setQuestion(null);
-    void saveQuestion(selected.game, selected.ply, selected.sessionId, selected.receiptId)
+    void saveQuestion(selected.game, selected.ply, selected.sessionId, selected.receiptId,
+      undefined, null, null, undefined, selected.questionGameId)
       .then(item => setSaved({ id: item.question.id, text: 'Saved for later' }))
       .catch(() => setSaved({ id: '', text: 'Could not save. Please try again.' }));
   };
@@ -105,7 +148,19 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
 
   return (
     <div class="table-screen" style={{ '--trick-hold-ms': `${TRICK_HOLD_MS}ms` }}>
-      <StatusStrip g={g} dispatch={dispatch} />
+      <StatusStrip g={g} onMenu={() => setMenuOpen(true)} />
+      {!scenario && <div class="table-player"><PlayerBadge selected={app.settings.difficulty} game={g} /></div>}
+      {!scenario && !review && (
+        <div class="hand-tools">
+          {practice && <span class="practice-chip" title="Undone or replayed: kept as practice, not counted in stats">Practice</span>}
+          <button type="button" class="hand-tool" disabled={!undoReady} onClick={undo}
+            aria-label={app.room ? 'Undo the last human move' : 'Undo your last move'}>&#8630; Undo</button>
+          {!app.room && <button type="button" class="hand-tool" disabled={!restartReady} onClick={askRestart}>
+            &#8635; Play this hand again
+          </button>}
+          {!app.room && onHistory && <button type="button" class="hand-tool" aria-haspopup="dialog" onClick={onHistory}>Prior hands</button>}
+        </div>
+      )}
       {(g.phase === 'playing' || showingLast) && (
         <InfoBar
           g={g}
@@ -116,9 +171,9 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
         />
       )}
       <div class="felt">
-        <OpponentTop g={g} thinking={thinking} />
+        <OpponentTop g={g} thinking={thinking} note={seatNote(2) ?? (!app.room && !scenario ? playerLabel(app.settings.difficulty, g) : null)} />
         <div class="middle">
-          <OpponentSide g={g} seat={1} thinking={thinking} />
+          <OpponentSide g={g} seat={1} thinking={thinking} note={seatNote(1) ?? (!app.room && !scenario ? playerLabel(app.settings.difficulty, g) : null)} />
           <TrickArea
             g={g}
             plays={trickPlays}
@@ -127,23 +182,23 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
             thinking={thinking}
             onQuestion={scenario ? undefined : (i, target) => selectQuestion(playIndex(g,showingLast ? g.tricks.length - 1 : g.tricks.length,i), target)}
           />
-          <OpponentSide g={g} seat={3} thinking={thinking} />
+          <OpponentSide g={g} seat={3} thinking={thinking} note={seatNote(3) ?? (!app.room && !scenario ? playerLabel(app.settings.difficulty, g) : null)} />
         </div>
         <div class="hand-area">
           <div class="hand-heading">
             <p class={`hand-caption${humanTurn && !showingLast ? ' your-turn' : ''}`} role="status">
-              <strong class="you-label">You</strong>
+              <span class="hand-identity"><strong class="you-label">You</strong><YourBid g={g} seat={HUMAN_SEAT} /></span>
               <span>{humanTurn && !showingLast
                 ? g.currentTrick.length === 0 ? 'Your turn to lead' : 'Your turn to play'
                 : 'Your hand'}</span>
             </p>
             {app.settings.showHints && humanTurn && !showingLast && !scenario && explainScope(g) && isNative(app.settings.difficulty) &&
-              <MoveHint key={`${app.sessionId}:${g.handNumber}:${g.tricks.length}:${g.currentTrick.length}`} g={g} sessionId={app.sessionId} onQuestion={onQuestion} />}
+              <MoveHint player={app.settings.difficulty} key={`${app.sessionId}:${app.epoch}:${g.handNumber}:${g.tricks.length}:${g.currentTrick.length}`} g={g} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
           </div>
           {humanSitsOut ? (
             <div class="hand sit-out">
               {humanHand.map((id) => (
-                <Domino key={id} faceDown orientation="v" />
+                <Domino key={id} faceDown orientation="h" />
               ))}
               <p class="sit-note">You're sitting this one out — Nel-O.</p>
             </div>
@@ -153,7 +208,7 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
                 <Domino
                   key={id}
                   id={id}
-                  orientation="v"
+                  orientation="h"
                   state={humanTurn && app.settings.showHints ? (legal.has(id) ? 'legal' : 'illegal') : 'idle'}
                   interactive={humanTurn && !app.settings.showHints}
                   onTap={() => {
@@ -171,27 +226,45 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
       {saved && <div class="question-toast" role="status"><span>{saved.text}</span>{saved.id && <button class="text-btn" onClick={() => { onQuestion(saved.id); setSaved(null); }}>Add note</button>}</div>}
       {question && <MoveQuestionPrompt key={`${question.sessionId}:${question.game.handNumber}:${question.ply}`}
         target={question.target} label={question.label} onSave={() => bookmark(question)} onClose={() => setQuestion(null)} />}
-      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} onQuestion={onQuestion} />}
-      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} onQuestion={onQuestion} />}
+      {g.phase === 'bidding' && g.turn === HUMAN_SEAT && <BidSheet bookSeat={app.room?.localSeat ?? 0} player={usesForecastBidding(app.settings.difficulty) ? 'zeb' : 'walt'} key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
+      {g.phase === 'declaring' && g.turn === HUMAN_SEAT && <DeclareSheet bookSeat={app.room?.localSeat ?? 0} player={usesForecastBidding(app.settings.difficulty) ? 'zeb' : 'walt'} key={app.epoch} showHints={app.settings.showHints} g={g} dispatch={dispatch} sessionId={app.sessionId} questionGameId={branch} onQuestion={onQuestion} />}
       {g.phase === 'hand-over' && !showingLast && !review && (
-        <HandOverSheet
+        <HandOverSheet nextHandReady={app.room ? app.room.table?.proposal?.kind === 'next-hand' && app.room.table.proposal.votes[app.room.localSeat] === 'yes' : undefined} modelSummary={handPlayers(app.playerEvents, g.handNumber).map(p => `${p.name} · ${p.version}`).join(' + ')}
           g={g}
           dispatch={dispatch}
           onReview={g.tricks.length > 0 ? () => setReview(true) : undefined}
           scenario={scenario}
+          onHistory={scenario ? undefined : onHistory}
+          practice={practice}
+          onUndo={undoReady ? undo : undefined}
+          onRestart={restartReady ? askRestart : undefined}
         />
       )}
       {g.phase === 'game-over' && !showingLast && !review && (
-        <GameOverSheet
+        <GameOverSheet modelSummary={handPlayers(app.playerEvents, g.handNumber).map(p => `${p.name} · ${p.version}`).join(' + ')}
           g={g}
           dispatch={dispatch}
+          onHistory={scenario ? undefined : onHistory}
           onReview={g.tricks.length > 0 ? () => setReview(true) : undefined}
+          practice={practice}
+          onUndo={undoReady ? undo : undefined}
+          onRestart={restartReady ? askRestart : undefined}
         />
       )}
       {(g.phase === 'hand-over' || g.phase === 'game-over') && review && (
-          <NativeReview key={scenario ? (app.scenarioFlag?.id ?? g.dealt.flat().join('')) : `${app.sessionId}:${g.handNumber}`}
-            g={g} nelloPreview={nelloAvailable(app.settings)} onBack={() => setReview(false)} sessionId={app.sessionId}
+          <NativeReview key={scenario ? (app.scenarioFlag?.id ?? g.dealt.flat().join('')) : `${app.sessionId}:${app.epoch}:${g.handNumber}`}
+            g={g} onBack={() => setReview(false)} sessionId={app.sessionId} questionGameId={branch}
             receipts={scenario ? {} : app.nativeReceipts} initialFlag={app.scenarioFlag} onQuestion={onQuestion} />
+      )}
+      {menuOpen && (
+        <GameMenu app={app} dispatch={dispatch} onClose={() => setMenuOpen(false)} extra={menuExtra}
+          onHome={() => { setMenuOpen(false); dispatch({ type: 'go', screen: 'home' }); }} />
+      )}
+      {confirmRestart !== null && !scenario && (
+        <RestartConfirm
+          onConfirm={() => { dispatch({ type: 'restart-hand', epoch: confirmRestart }); setConfirmRestart(null); }}
+          onCancel={() => setConfirmRestart(null)}
+        />
       )}
     </div>
   );
@@ -201,14 +274,41 @@ export function Table({ app, dispatch, thinking = null, onQuestion }: TableProps
 
 // ---------------------------------------------------------------------------
 
-function StatusStrip({ g, dispatch }: { g: GameState; dispatch: (e: AppEvent) => void }) {
+/** The table's ☰: decide on hints mid-game, or step back to Home. */
+function GameMenu({ app, dispatch, onClose, onHome, extra }: {
+  app: AppState; dispatch: (e: AppEvent) => void; onClose: () => void; onHome: () => void; extra?: ComponentChildren;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    addEventListener('keydown', onKey);
+    return () => removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div class="overlay game-menu-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div class="card game-menu" role="dialog" aria-label="Menu">
+        <p class="setting-hint">Computer player: <PlayerBadge selected={app.settings.difficulty} game={app.game} /></p>
+        {!app.room && <PlayerPicker selected={app.settings.difficulty} game={app.game} sessionId={app.sessionId}
+          onChoose={(difficulty, confirmed) => dispatch({ type: 'set-difficulty', difficulty, confirmed, sessionId: app.sessionId })} />}
+        <HintsSwitch app={app} dispatch={dispatch} />
+        {extra}
+        <button type="button" class="big-btn" onClick={onClose}>Keep playing</button>
+        <button type="button" class="big-btn secondary" onClick={()=>{onClose();requestAnimationFrame(()=>window.dispatchEvent(new Event('plunge-screen-idea')));}}>Share an idea about this screen</button>
+        <button type="button" class="big-btn secondary" onClick={onHome}>Back to home</button>
+        {!app.scenarioGame && <NewGameButton app={app} dispatch={dispatch} onStarted={onClose} />}
+      </div>
+    </div>
+  );
+}
+
+function StatusStrip({ g, onMenu }: { g: GameState; onMenu: () => void }) {
   return (
     <header class="status">
       <button
         type="button"
         class="menu-btn"
-        aria-label="Back to home"
-        onClick={() => dispatch({ type: 'go', screen: 'home' })}
+        aria-label="Menu"
+        aria-haspopup="dialog"
+        onClick={onMenu}
       >
         &#9776;
       </button>
@@ -318,7 +418,7 @@ function seatBadges(g: GameState, seat: Seat) {
   );
 }
 
-function OpponentTop({ g, thinking }: { g: GameState; thinking: Seat | null }) {
+export function OpponentTop({ g, thinking, note, names = SEAT_NAMES }: { g: GameState; thinking: Seat | null; note?: string | null; names?: readonly string[] }) {
   const seat: Seat = 2;
   const hand = g.hands[seat] ?? [];
   const sitsOut = g.sittingOut === seat;
@@ -326,7 +426,7 @@ function OpponentTop({ g, thinking }: { g: GameState; thinking: Seat | null }) {
   return (
     <div class={`seat seat-top${active ? ' active' : ''}${thinking === seat ? ' seat-thinking' : ''}`}>
       <div class="seat-name">
-        Gran <span class="seat-tag">Your partner</span> {seatBadges(g, seat)} {bidBubble(g, seat)}
+        {names[seat]} <span class="seat-tag">Your partner</span>{note && <span class="seat-tag seat-note">{note}</span>} {seatBadges(g, seat)} {bidBubble(g, seat)}
       </div>
       <div class={`mini-row${sitsOut ? ' sitting' : ''}`}>
         {hand.map((id) => (
@@ -338,14 +438,14 @@ function OpponentTop({ g, thinking }: { g: GameState; thinking: Seat | null }) {
   );
 }
 
-function OpponentSide({ g, seat, thinking }: { g: GameState; seat: Seat; thinking: Seat | null }) {
+export function OpponentSide({ g, seat, thinking, note, names = SEAT_NAMES }: { g: GameState; seat: Seat; thinking: Seat | null; note?: string | null; names?: readonly string[] }) {
   const hand = g.hands[seat] ?? [];
   const sitsOut = g.sittingOut === seat;
   const active = g.turn === seat;
   return (
     <div class={`seat seat-${POS[seat]}${active ? ' active' : ''}${thinking === seat ? ' seat-thinking' : ''}`}>
       <div class="seat-name">
-        {SEAT_NAMES[seat]} {seatBadges(g, seat)} {bidBubble(g, seat)}
+        {names[seat]}{note && <span class="seat-tag seat-note">{note}</span>} {seatBadges(g, seat)} {bidBubble(g, seat)}
       </div>
       <div class={`mini-col${sitsOut ? ' sitting' : ''}`}>
         {hand.map((id) => (
@@ -359,12 +459,13 @@ function OpponentSide({ g, seat, thinking }: { g: GameState; seat: Seat; thinkin
 
 // ---------------------------------------------------------------------------
 
-function TrickArea({
+export function TrickArea({
   g,
   plays,
   winner,
   gathering,
   thinking,
+  names = SEAT_NAMES,
   onQuestion,
 }: {
   g: GameState;
@@ -372,6 +473,7 @@ function TrickArea({
   winner: Seat | null;
   gathering: boolean;
   thinking: Seat | null;
+  names?: readonly string[];
   onQuestion?: ((play: number, target: HTMLElement) => void) | undefined;
 }) {
   const leader = plays[0]?.seat ?? null;
@@ -385,13 +487,13 @@ function TrickArea({
     <div class="trick">
       {partnerCallsTrump && g.turn !== null && g.declarer !== null && (
         <div class="trick-note">
-          {SEAT_NAMES[g.turn]} is calling trump for {g.declarer === HUMAN_SEAT ? 'you' : SEAT_NAMES[g.declarer]}&hellip;
+          {names[g.turn]} is calling trump for {g.declarer === HUMAN_SEAT ? 'you' : names[g.declarer]}&hellip;
         </div>
       )}
       {!partnerCallsTrump && !gathering && thinking !== null && thinking !== HUMAN_SEAT && (
         <div class="trick-note thinking-note" role="status">
           <span class="thinking-words">
-            <strong>{SEAT_NAMES[thinking]}</strong>
+            <strong>{names[thinking]}</strong>
             <span>{g.phase === 'bidding' ? 'Choosing a bid' : g.phase === 'declaring' ? 'Choosing trump' : 'Thinking it over'}</span>
           </span>
           <span class="thinking-pips" aria-hidden="true">
@@ -414,12 +516,12 @@ function TrickArea({
             .join(' ')}
         >
           {onQuestion ? <button class="played-domino" type="button" disabled={gathering}
-            aria-label={`About ${p.seat === HUMAN_SEAT ? 'your' : SEAT_NAMES[p.seat] + '’s'} ${p.domino.split('').join('–')}`}
+            aria-label={`About ${p.seat === HUMAN_SEAT ? 'your' : names[p.seat] + '’s'} ${p.domino.split('').join('–')}`}
             onClick={event => onQuestion(i, event.currentTarget)}>
             <Domino id={p.domino} orientation="h" className="trick-dom" />
           </button> : <Domino id={p.domino} orientation="h" className="trick-dom" />}
           {p.seat === leader && (
-            <span class="led-tag">{p.seat === HUMAN_SEAT ? 'You' : SEAT_NAMES[p.seat]} led</span>
+            <span class="led-tag">{p.seat === HUMAN_SEAT ? 'You' : names[p.seat]} led</span>
           )}
         </div>
       ))}

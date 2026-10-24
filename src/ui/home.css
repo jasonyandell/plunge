@@ -9,7 +9,8 @@
 }
 
 .home-card {
-  width: min(400px, 94vw);
+  width: min(400px, 100%);
+  min-width: 0;
   color: var(--brown-9);
   background: linear-gradient(145deg, #fff7e8, var(--cream));
   border: 1px solid #fff4dd;
@@ -18,7 +19,29 @@
   text-align: center;
   box-shadow: 0 18px 60px #140c0750, inset 0 0 0 5px #fff9ed55;
   margin: auto;
+  position: relative;
 }
+/* Who's here. Quiet when signed out; your name when signed in. */
+.home-me {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  max-width: 40%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  line-height: 32px;
+  min-height: 32px;
+  padding: 6px 10px;
+  margin: -6px -6px 0 0;
+  color: #715638;
+  text-decoration: none;
+  border-radius: 999px;
+}
+.home-me.signed-in { color: #205e49; }
+.home-me.signed-in::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #3f8f6a; vertical-align: 1px; }
+.home-me:focus-visible { outline: 2px solid #205e49; }
 
 .home-dominoes { display: flex; justify-content: center; gap: 9px; margin: 22px 0 20px; }
 .home-dominoes .dom { width: 37px; opacity: 1; }
@@ -69,14 +92,70 @@
 .thinking-switch[aria-checked="true"] .switch-track { background: var(--teal); }
 .thinking-switch[aria-checked="true"] .switch-track > span { transform: translateX(18px); }
 .home-settings > summary { text-align: center; font-size: 13px; color: #725a40; font-weight: 400; }
-.home-settings .native-intro { margin-bottom: 12px; }
+.more-section .native-intro { margin: 14px 0 8px; }
 .home button:focus-visible { outline-color: var(--teal-ink); }
+/* One play button and compact shortcuts; the details live behind More. */
+/* The three places to go: same order, same size, every time. */
+.home-play { display: flex; flex-direction: column; align-items: center; margin-top: 26px; }
+.home-play .big-btn { width: 100%; }
+.home-welcome + .home-play { margin-top: 0; }
+.home-new { min-height: 44px; margin-top: 4px; font-size: 14px; }
+.home-tiles { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.home-tiles > .home-tile { flex: 1 1 0; }
+.home-tiles > .home-family { flex-grow: 1.35; }
+.home-tile {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  min-width: 0; min-height: 44px; padding: 10px 4px 8px; border: 1px solid #8c6d3b33; border-radius: 12px;
+  background: transparent; color: var(--teal-ink); font: inherit; text-decoration: none; cursor: pointer;
+}
+.home-tile strong { font-size: 13px; font-weight: 600; line-height: 1.2; white-space: nowrap; }
+/* Someone's at a table: a quiet count in the corner, never a layout change. */
+.home-tile-live {
+  position: absolute; top: 6px; right: 6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: #3f8f6a; color: #fff9ed; font-size: 11px; font-weight: 700; line-height: 18px;
+}
+.home-tile:disabled { opacity: .6; cursor: default; }
+.home-tile:focus-visible { outline: 2px solid var(--teal-ink); outline-offset: 2px; }
+.home-tile-error { flex-basis: 100%; order: 1; margin: 0; text-align: center; }
+.home-tables { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.home-table { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; align-items: center; width: 100%; min-height: 56px; padding: 10px 12px; border: 1px solid #8c6d3b40; border-radius: 12px; background: #286f6514; color: var(--brown-9); font: inherit; text-align: left; cursor: pointer; }
+.home-table strong { font-size: 15px; overflow-wrap: anywhere; }
+.home-table span { grid-column: 1; font-size: 12px; color: #725a40; line-height: 1.4; overflow-wrap: anywhere; }
+.home-table em { grid-column: 2; grid-row: 1 / span 2; font-style: normal; font-weight: 650; color: var(--teal-ink); white-space: nowrap; }
+.home-table:disabled { opacity: .5; cursor: default; }
+.active-tables { margin-top: 14px; text-align: left; }
+.active-tables h2 { margin: 0; font-size: 15px; color: var(--brown-9); }
+.active-tables .home-tables { margin-top: 8px; }
+.active-tables .setting-hint { margin: 8px 0 12px; }
+.home-links { margin-top: 18px; padding-top: 4px; border-top: 1px solid #8c6d3b30; }
+.home-links .text-btn { min-height: 44px; }
+
+.more-card { text-align: left; padding-top: 14px; }
+.more-back { min-height: 44px; margin-left: -6px; }
+.more-title {
+  font-family: var(--display, serif);
+  font-size: 34px; font-weight: 500; letter-spacing: -.03em;
+  margin: 2px 0 4px; color: var(--brown-9);
+}
+.more-section { border-top: 1px solid #8c6d3b30; margin-top: 14px; padding-top: 4px; }
+.more-section h2 {
+  font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: #8a6c48; margin: 10px 0 2px;
+}
+.more-row {
+  display: flex; align-items: center; width: 100%; min-height: 44px; padding: 0;
+  border: 0; background: transparent; font: inherit; font-size: 15px; text-align: left;
+  color: var(--teal-ink); text-decoration: none; cursor: pointer;
+}
+.more-section > .setting-hint { margin: 0 0 6px; }
+
 @media (max-height: 680px) {
   .home { padding: 14px 12px; }
   .home-card { padding: 20px 22px 10px; }
   .home-dominoes { margin: 12px 0 14px; }
   .home-dominoes .dom { width: 29px; }
   .home-welcome { margin: 14px 0 18px; }
+  .home-play { margin-top: 18px; }
 }
 
 /* docs */
@@ -134,3 +213,4 @@
   font-size: .7em;
   font-weight: 600;
 }
+.home-me-waiting { display: block; font-size: 12px; line-height: 1.2; text-align: right; font-weight: 700; color: #8a4a12; }

@@ -15,7 +15,7 @@ export interface AuctionSurvey extends AuctionRequest {
   interruption?: string;
   execution?: { kind: 'worker-pool'; workers: number; retries: number; completed_rounds: number[] };
 }
-export type AuctionEvidence = AuctionSurvey | BookAuctionSurvey;
+export type AuctionEvidence = AuctionSurvey | BookAuctionSurvey | import('./zeb').ZebSurvey;
 export interface AuctionDecision { key: string; action: Action; survey: AuctionEvidence | null }
 export type AuctionEvaluator = (request: AuctionRequest, signal?: AbortSignal) => Promise<AuctionSurvey>;
 export const AUCTION_WORLDS=160;
