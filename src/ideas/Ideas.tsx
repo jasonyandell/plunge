@@ -3,6 +3,7 @@ import { Screenshot } from './IdeaScreenshots';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { IdeaActivity } from './IdeaActivity';
 import { IdeaResult } from './IdeaResult';
+import { FamilyTableArt, IdeaDomino, IdeaJourney, SparkTile } from './art';
 import { IdeasBoard, type IdeasBoardView } from './IdeasBoard';
 import { hasIdeaDemo, ideaPresentation } from './presentation';
 import { IdeaLink } from './IdeaLink';
@@ -102,11 +103,10 @@ export function Ideas() {
     olderLoaded.current=true;setCards(c => [...c,...page.cards.filter(x=>!c.some(y=>y.id===x.id))]);setNext(page.next);
   } catch(e) {setError(String(e));}};
   if(trial.id && thread?.card.id===trial.id && name)
-    return <IdeaPreview pr={hasIdeaDemo(thread.card) ? thread.card.pr! : 0} title={ideaPresentation(thread.card).title} onClose={trial.close}/>;
+    return <IdeaPreview pr={hasIdeaDemo(thread.card) ? thread.card.pr! : 0} idea={thread.card.id} title={ideaPresentation(thread.card).title} onClose={trial.close}/>;
   return <main class="ideas-page">
-    <header class="ideas-top"><a href="/">← Back to Plunge</a><span>Made together</span></header>
-    <div class="ideas-heading"><p class="eyebrow">Our community game</p><h1>Ideas for Plunge</h1>
-      <p>Try what we’re making. Share what comes next.</p></div>
+    <header class="ideas-top"><a href="/">← Back to Plunge</a></header>
+    <div class="ideas-heading"><div><h1>Ideas for Plunge</h1><p>A family game, built by the family.</p></div><FamilyTableArt/></div>
     {QUESTIONS_LOCAL_ONLY && !name ? <section class="idea-paper"><h2>Your real family ideas</h2><p>Use your Plunge account to explore this dashboard with your family’s ideas.</p>
       <PreviewSignIn />
       {token && !error && <p role="status">Opening your family ideas…</p>}
@@ -117,11 +117,12 @@ export function Ideas() {
     : <>
       {QUESTIONS_LOCAL_ONLY && <aside class="demo-banner"><strong>Dashboard demo · real family ideas</strong><p>You’re signed in as {name}. Ideas and replies here go to the family. Game progress stays in this preview.</p>
         <button class="text-btn" type="button" disabled={busy} onClick={()=>{clearPreviewSession();setToken('');setName('');setOwner(false);setCards([]);setThread(null);setSaved('');setError('');}}>Disconnect demo</button></aside>}
-      <div class="ideas-welcome"><p>Hi, {name}.</p><button class="big-btn secondary" type="button" disabled={busy} onClick={()=>{open(null);setAdding(true);}}>＋ Share an idea</button></div>
+      <div class="ideas-welcome"><p>Hi, {name}.</p><button class="big-btn share-idea" type="button" disabled={busy} onClick={()=>{open(null);setAdding(true);}}>＋ Share an idea</button></div>
       {selected ? <>
         <button class="text-btn" type="button" disabled={busy} onClick={()=>open(null)}>← All ideas</button>
-        {thread ? <section class="idea-paper"><div class="idea-meta"><span>{thread.card.name}’s idea</span><span>Idea {thread.card.number}</span></div>
+        {thread ? <section class="idea-paper"><div class="idea-meta"><span class="idea-meta-who"><IdeaDomino number={thread.card.number} status={thread.card.status}/>{thread.card.name}’s idea</span><span>Idea {thread.card.number}</span></div>
           <h2>{ideaPresentation(thread.card).title}</h2>
+          <IdeaJourney status={thread.card.status}/>
           <ul class="idea-tags" aria-label="Topics">{ideaPresentation(thread.card).tags.map(tag=><li key={tag}>{tag}</li>)}</ul>
           <IdeaLink key={thread.card.id} id={thread.card.id} busy={busy}/>
           {accepting ? <p role="status" class="idea-notice">{thread.release!.note}</p> : <IdeaActivity card={thread.card} now={now} connected={connected} />}
@@ -149,12 +150,12 @@ export function Ideas() {
       </> : <>
         <IdeasBoard view={boardView} onView={setBoardView} cards={cards} loaded={loaded} busy={busy} now={now} connected={connected} onOpen={open} onTry={id=>{open(id);trial.open(id);}} />
         {next && <button class="big-btn secondary ideas-more" type="button" disabled={busy} onClick={()=>void more()}>Earlier ideas</button>}
-        <section ref={newIdea} tabIndex={-1} class="idea-paper new-idea" aria-labelledby="new-idea-title"><h2 id="new-idea-title">What would make the game better?</h2><p>Say it just like you would at the table. This is your place to make it happen.</p>
+        <section ref={newIdea} tabIndex={-1} class="idea-paper new-idea" aria-labelledby="new-idea-title"><div class="new-idea-head"><SparkTile/><div><h2 id="new-idea-title">What would make the game better?</h2><p>Say it like you would at the table.</p></div></div>
           <Composer key="new" token={token} selected={null} onBusy={setBusy} onSent={sent} onError={setError} />
-          <p class="idea-help">We’ll make a version for you to try. You can ask questions and suggest more changes right on your card.</p>
+          <p class="idea-help">We’ll make a version for you to try, then keep talking on your card.</p>
         </section>
       </>}
-      <p class="idea-help">Everyone with family access can explore these ideas and add their voice. Changes are reviewed before they join everyone’s game.</p>
+      <p class="idea-help ideas-foot">Everyone in the family can add their voice. Changes are reviewed before they join everyone’s game.</p>
     </>}
     {saved && <p role="status" class="idea-notice">{saved}</p>}
     {error && <p role="alert" class="idea-error">{error} Your unsent reply stays here.</p>}

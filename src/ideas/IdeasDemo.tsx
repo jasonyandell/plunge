@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { FamilyTableArt, IdeaDomino, IdeaJourney, SparkTile } from './art';
 import { IdeasBoard, type IdeasBoardView } from './IdeasBoard';
 import { ideaPresentation } from './presentation';
 import { PreviewSignIn } from './PreviewSignIn';
@@ -10,25 +11,25 @@ import './ideas.css';
 
 const STORAGE = 'plunge:ideas-demo:v1';
 const BID_ID = '00000000000000000000000000000022';
-const seed: IdeaThread = {
+export const seed: IdeaThread = {
   card: {id:BID_ID,number:1,name:'Mom',title:'I can’t see what I bid.',context:'Demo example',created:'',updated:'',revision:1,status:'shipped',pr:null,sha:null,preview:null},
   messages:[
     {id:'example-1',role:'family',name:'Mom · example',body:'When I’m the bidder, I can’t see what I bid. Could it stay beside my dominoes?',created:''},
     {id:'example-2',role:'builder',name:'Builder · example',body:'Your bid now sits next to “You,” beside your hand. If you win the bidding, it stays there while you play. It works with hints turned off, too. Try the game and tell us how it feels.',created:''},
   ],
 };
-function initialCards(): IdeaThread[] {
-  try { const saved=JSON.parse(localStorage.getItem(STORAGE) ?? 'null');
+function initialCards(storage: string, seeds: IdeaThread[]): IdeaThread[] {
+  try { const saved=JSON.parse(localStorage.getItem(storage) ?? 'null');
     if(Array.isArray(saved) && saved.length && saved.every(t=>t?.card?.id && typeof t.card.title==='string' && Array.isArray(t.messages))) return saved;
   } catch { /* The example works without storage. */ }
-  return [seed];
+  return seeds;
 }
 
 /** A browser-only walkthrough. Never calls the ideas service or starts a build. */
-export function IdeasDemo() {
+export function IdeasDemo({storage=STORAGE, seeds=[seed], board=false}: {storage?: string; seeds?: IdeaThread[]; board?: boolean} = {}) {
   const [boardView,setBoardView]=useState<IdeasBoardView>({filter:'current',query:''});
-  const [cards,setCards]=useState(initialCards),[person,setPerson]=useState('Mom');
-  const [selected,setSelected]=useState<string|null>(BID_ID),[notice,setNotice]=useState('');
+  const [cards,setCards]=useState(()=>initialCards(storage,seeds)),[person,setPerson]=useState('Mom');
+  const [selected,setSelected]=useState<string|null>(board?null:BID_ID),[notice,setNotice]=useState('');
   const [adding,setAdding]=useState(false);
   const newIdea=useRef<HTMLElement>(null);
   useEffect(()=>{
@@ -39,7 +40,7 @@ export function IdeasDemo() {
   const current=cards.find(t=>t.card.id===selected);
   const save=(next:IdeaThread[])=>{
     setCards(next);
-    try {localStorage.setItem(STORAGE,JSON.stringify(next));setNotice('Saved in this browser’s demo.');}
+    try {localStorage.setItem(storage,JSON.stringify(next));setNotice('Saved in this browser’s demo.');}
     catch {setNotice('Saved for this visit. This browser could not keep a copy for later.');}
   };
   const send=(body:string)=>{
@@ -52,19 +53,19 @@ export function IdeasDemo() {
     }
   };
   return <main class="ideas-page">
-    <header class="ideas-top"><a href="/">← Back to Plunge</a><span>Made together</span></header>
-    <aside class="demo-banner"><strong>Try the family ideas demo</strong><p>Sample conversation about a change already in the game. Messages stay in this browser; demo replies don’t start builds.</p><PreviewSignIn /></aside>
-    <div class="ideas-heading"><p class="eyebrow">Our community game</p><h1>Ideas for Plunge</h1><p>Try what we’re making. Share what comes next.</p></div>
-    <div class="ideas-welcome"><div><p>Hi, {person}.</p><div class="demo-people" role="group" aria-label="Try the demo as">
+    <header class="ideas-top"><a href="/">← Back to Plunge</a></header>
+    <div class="ideas-heading"><div><h1>Ideas for Plunge</h1><p>A family game, built by the family.</p></div><FamilyTableArt/></div>
+    <aside class="demo-banner"><p><strong>Demo</strong> · Sample ideas. Nothing leaves this browser.</p><PreviewSignIn compact/></aside>
+    <div class="ideas-welcome"><div class="ideas-hello"><p>Hi, {person}.</p><div class="demo-people" role="group" aria-label="Try the demo as">
       {['Mom','Dad'].map(name=><button type="button" aria-pressed={person===name} onClick={()=>setPerson(name)} key={name}>{name}</button>)}
-    </div></div><button class="big-btn secondary" onClick={()=>{setSelected(null);setNotice('');setAdding(true);}}>＋ Share an idea</button></div>
+    </div></div><button class="big-btn share-idea" onClick={()=>{setSelected(null);setNotice('');setAdding(true);}}>＋ Share an idea</button></div>
     {current ? <>
       <button class="text-btn" onClick={()=>{setSelected(null);setNotice('');}}>← All ideas</button>
-      <section class="idea-paper"><div class="idea-meta"><span>{current.card.name}’s idea</span><span class={`idea-status ${current.card.id===BID_ID?'ready':'queued'}`}>{current.card.id===BID_ID?'In the game':'Demo idea saved'}</span></div>
+      <section class="idea-paper"><div class="idea-meta"><span class="idea-meta-who"><IdeaDomino number={current.card.number} status={current.card.id===BID_ID?'shipped':'queued'}/>{current.card.name}’s idea</span><span class={`idea-status ${current.card.id===BID_ID?'ready':'queued'}`}>{current.card.id===BID_ID?'In the game':'Demo idea saved'}</span></div>
         <h2>{ideaPresentation(current.card).title}</h2>
         <ul class="idea-tags" aria-label="Topics">{ideaPresentation(current.card).tags.map(tag=><li key={tag}>{tag}</li>)}</ul>
         {current.card.id===BID_ID ? <>
-          <ol class="demo-steps" aria-label="Example progress"><li>Idea shared</li><li>Change built</li><li>In the game</li></ol>
+          <IdeaJourney status="shipped"/>
           <div class="demo-bid-example" aria-label="Illustration of the bidding fix"><div><small>Before</small><span>You</span></div><span aria-hidden="true">→</span><div><small>With your idea</small><span>You <b>Bid 30</b></span></div></div>
           <p class="idea-help">Your winning bid stays beside your hand. The example above illustrates the change; the button opens the actual game.</p>
           <a class="big-btn" href={LIVE_PLUNGE}>Play the updated game →</a>
@@ -76,10 +77,10 @@ export function IdeasDemo() {
     </> : <>
       <IdeasBoard view={boardView} onView={setBoardView} cards={cards.map(t=>t.card)} demo now={Date.now()} connected={true}
         onOpen={id=>{setSelected(id);setNotice('');}} onTry={id=>setSelected(id)} />
-      <section ref={newIdea} tabIndex={-1} class="idea-paper new-idea" aria-labelledby="new-idea-title"><h2 id="new-idea-title">What would make the game better?</h2><p>Say it just like you would at the table. This is your place to make it happen.</p><DemoComposer key={`${person}:new`} person={person} id="new" onSend={send}/></section>
+      <section ref={newIdea} tabIndex={-1} class="idea-paper new-idea" aria-labelledby="new-idea-title"><div class="new-idea-head"><SparkTile/><div><h2 id="new-idea-title">What would make the game better?</h2><p>Say it like you would at the table.</p></div></div><DemoComposer key={`${person}:new`} person={person} id="new" onSend={send}/></section>
     </>}
     {notice && <p class="idea-notice" role="status">{notice}</p>}
-    <p class="idea-help">Try replying as Mom, then switch to Dad and add another idea. In the live version, each person uses their own invite and the family shares the cards.</p>
+    <p class="idea-help ideas-foot">Reply as Mom, then switch to Dad and add an idea. In the real game, everyone signs in and the family shares the cards.</p>
   </main>;
 }
 function DemoComposer({person,id,onSend}:{person:string;id:string;onSend:(body:string)=>void}) {
