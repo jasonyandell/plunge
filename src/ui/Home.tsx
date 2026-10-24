@@ -4,7 +4,7 @@
 
 import { PlayerPicker } from './PlayerPicker';
 import { NewGameButton } from './NewGameButton';
-import { ActiveTables } from '../room/ActiveTables';
+import { activeTables } from '../room/ActiveTables';
 import { DEEP_WORLDS, NATIVE_TABLE } from '../ai/native';
 import { canRestart, canUndo, nelloPaused, type AppEvent, type AppState } from './store';
 import { Domino } from './Domino';
@@ -36,7 +36,7 @@ const LIST_EVERY = 30000;
 /** Family entry points: the tables anyone can find (sit down or knock), the standing
  * table for signed-in family, the last table this browser sat at, and invite rooms.
  * Its own component so Home stays hook-free. */
-function FamilyEntry({ compact = false }: { compact?: boolean }) {
+function FamilyEntry() {
   const [family, setFamily] = useState(false);
   const [tables, setTables] = useState<ListedTable[]>([]);
   const [familyError, setFamilyError] = useState<string | null>(null);
@@ -46,14 +46,13 @@ function FamilyEntry({ compact = false }: { compact?: boolean }) {
   const seated = (roomId: string) => { try { return savedSeat(roomId, localStorage) !== null; } catch { return false; } };
   useEffect(() => { let live = true; void familyProbe().then(value => { if (live) setFamily(value.family); }); return () => { live = false; }; }, []);
   useEffect(() => {
-    if (compact) return;
     let live = true;
     const refresh = () => { if (document.visibilityState !== 'hidden') void liveTables().then(list => { if (live) setTables(list); }).catch(() => { /* The list is a convenience. */ }); };
     refresh();
     const timer = setInterval(refresh, LIST_EVERY);
     document.addEventListener('visibilitychange', refresh);
     return () => { live = false; clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
-  }, [compact]);
+  }, []);
   const openFamilyTable = async () => {
     if (opening) return;
     setOpening(true); setFamilyError(null);
@@ -70,17 +69,6 @@ function FamilyEntry({ compact = false }: { compact?: boolean }) {
   const shown = tables.filter(table => !table.standing || family || table.seats.some(seat => seat?.connected));
   const standingListed = shown.some(table => table.standing);
   const hasTable = shown.length > 0 || family || Boolean(remembered);
-  if (compact) return <>
-    <ActiveTables family={family} onJoin={table => table.standing && family ? void openFamilyTable() : location.assign(roomUrl(table.roomId))} />
-    <button type="button" class="text-btn home-family" disabled={opening}
-      aria-label={!family && !remembered ? 'Play with family · Experimental' : undefined}
-      onClick={() => family ? void openFamilyTable() : remembered ? location.assign(roomUrl(remembered)) : openRooms()}>
-      {opening ? 'Opening the table…' : family ? 'Family table' : remembered ? 'Back to your family table' : 'Play with family'}
-      <small class="preview-badge">Experimental</small>
-    </button>
-    {familyError && <p class="setting-hint" role="alert">{familyError}</p>}
-    {familyError && <button type="button" class="big-btn" onClick={openRooms}>Start another table</button>}
-  </>;
   return <section class="more-section" aria-labelledby="home-together-title">
     <h2 id="home-together-title">Family tables <small class="preview-badge">Experimental</small></h2>
     <p class="setting-hint">{family ? 'Your family’s table is a tap away.' : 'Join a table, or invite someone to yours.'}</p>
@@ -110,7 +98,49 @@ function FamilyEntry({ compact = false }: { compact?: boolean }) {
   </section>;
 }
 
-/** Keep the original welcome and one immediate choice to play. */
+/** The family table's front door: same label and place every time; what's live shows in its note. */
+function FamilyTile() {
+  const [family, setFamily] = useState(false);
+  const [playing, setPlaying] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [opening, setOpening] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void familyProbe().then(value => { if (live) setFamily(value.family); });
+    const refresh = () => {
+      if (document.visibilityState === 'hidden') return;
+      void liveTables().then(list => { if (live) setPlaying(activeTables(list).reduce((n, table) => n + table.seats.filter(seat => seat?.connected).length, 0)); })
+        .catch(() => { /* The count is a convenience. */ });
+    };
+    refresh();
+    document.addEventListener('visibilitychange', refresh);
+    return () => { live = false; document.removeEventListener('visibilitychange', refresh); };
+  }, []);
+  const open = async () => {
+    if (opening) return;
+    const remembered = (() => { try { return lastRoom(localStorage); } catch { return null; } })();
+    // Without the standing table: back to the last table, or the rooms page, which lists who's playing.
+    if (!family) { if (remembered) location.assign(roomUrl(remembered)); else openRooms(); return; }
+    setOpening(true); setError(null);
+    try {
+      const seat = await familyTable();
+      try { saveSeat(seat, localStorage); } catch { /* The room page can still open the seat it was given. */ }
+      location.assign(roomUrl(seat.roomId));
+    } catch (e) {
+      if (e instanceof ClosedTableError && e.roomId) { location.assign(roomUrl(e.roomId)); return; }
+      setError(String(e instanceof Error ? e.message : e));
+    } finally { setOpening(false); }
+  };
+  return <>
+    <button type="button" class="home-tile home-family" disabled={opening} onClick={() => void open()}>
+      <strong>Family</strong>
+      <span class={playing ? 'live' : undefined}>{opening ? 'Opening…' : playing ? `${playing} here now` : 'Play live'}</span>
+    </button>
+    {error && <p class="home-tile-error setting-hint" role="alert">{error} <button type="button" class="text-btn" onClick={openRooms}>Start another table</button></p>}
+  </>;
+}
+
+/** One way to play, three places to go, and nothing that moves while you look. */
 export function Home({ app, dispatch, identity }: HomeProps) {
   const paused = nelloPaused(app);
   // A finished game stays resumable while its last hand can still be undone or
@@ -120,37 +150,37 @@ export function Home({ app, dispatch, identity }: HomeProps) {
     <div class="home">
       <div class="home-card">
         {identity}
-        <p class="eyebrow">Texas 42</p>
         <div class="home-dominoes" aria-hidden="true">
           <Domino id="64" /><Domino id="55" /><Domino id="42" />
         </div>
         <h1 class="title">Plunge</h1>
-        <p class="tagline">Pull up a chair.</p>
-        <p class="home-welcome">{paused ? <>Your Nel-O hand is saved.<br />{NATIVE_TABLE ? 'Resume Nel-O in your browser.' : 'Enable Nel-O in Settings to resume.'}</> : <>You and Gran against Earl and Ruby.<br />First to seven marks wins.</>}</p>
+        <p class="tagline">Texas 42. Pull up a chair.</p>
+        {paused && <p class="home-welcome">Your Nel-O hand is saved.<br />{NATIVE_TABLE ? 'Resume Nel-O in your browser.' : 'Enable Nel-O in Settings to resume.'}</p>}
 
-        {resumable ? (
-          <button type="button" class="big-btn" disabled={paused} onClick={() => dispatch({ type: 'resume' })}>
-            Resume your game
-          </button>
-        ) : (
-          <button
-            type="button"
-            class="big-btn"
-            onClick={() => dispatch({ type: 'new-game', seed: Date.now().toString(36), sessionId: crypto.randomUUID() })}
-          >
-            Deal me in
-          </button>
-        )}
+        <div class="home-play">
+          {resumable ? (
+            <button type="button" class="big-btn" disabled={paused} onClick={() => dispatch({ type: 'resume' })}>
+              Resume your game
+            </button>
+          ) : (
+            <button
+              type="button"
+              class="big-btn"
+              onClick={() => dispatch({ type: 'new-game', seed: Date.now().toString(36), sessionId: crypto.randomUUID() })}
+            >
+              Deal me in
+            </button>
+          )}
+          {resumable && <NewGameButton app={app} dispatch={dispatch} className="text-btn home-new" />}
+        </div>
 
-        {resumable && <NewGameButton app={app} dispatch={dispatch} />}
-
-        <a class="text-btn home-stats-link" href="?stats=1">
-          Stats · Play again <small class="preview-badge">Preview</small>
-        </a>
-        {ROOMS_ENABLED && <FamilyEntry compact />}
+        <nav class="home-tiles" aria-label="Plunge">
+          {ROOMS_ENABLED && <FamilyTile />}
+          <a class="home-tile" href="?stats=1"><strong>Stats</strong><span>Your hands</span></a>
+          <a class="home-tile" href="?ideas=1"><strong>Ideas</strong><span>Suggest</span></a>
+        </nav>
 
         <div class="link-row home-links">
-          <button type="button" class="text-btn" onClick={openScreenIdea}>Share an idea</button>
           <button type="button" class="text-btn" onClick={() => dispatch({ type: 'go', screen: 'how' })}>
             How to play
           </button>
