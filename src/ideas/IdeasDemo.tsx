@@ -55,10 +55,10 @@ export function IdeasDemo() {
   return <main class="ideas-page">
     <header class="ideas-top"><a href="/">← Back to Plunge</a></header>
     <div class="ideas-heading"><div><h1>Ideas for Plunge</h1><p>A family game, built by the family.</p></div><FamilyTableArt/></div>
-    <aside class="demo-banner"><strong>Family ideas demo</strong><p>A sample idea already in the game. Messages stay in this browser.</p><PreviewSignIn /></aside>
-    <div class="ideas-welcome"><div><p>Hi, {person}.</p><div class="demo-people" role="group" aria-label="Try the demo as">
+    <aside class="demo-banner"><p><strong>Demo</strong> · Sample ideas. Nothing leaves this browser.</p><PreviewSignIn compact/></aside>
+    <div class="ideas-welcome"><div class="ideas-hello"><p>Hi, {person}.</p><div class="demo-people" role="group" aria-label="Try the demo as">
       {['Mom','Dad'].map(name=><button type="button" aria-pressed={person===name} onClick={()=>setPerson(name)} key={name}>{name}</button>)}
-    </div></div><button class="big-btn secondary" onClick={()=>{setSelected(null);setNotice('');setAdding(true);}}>＋ Share an idea</button></div>
+    </div></div><button class="big-btn share-idea" onClick={()=>{setSelected(null);setNotice('');setAdding(true);}}>＋ Share an idea</button></div>
     {current ? <>
       <button class="text-btn" onClick={()=>{setSelected(null);setNotice('');}}>← All ideas</button>
       <section class="idea-paper"><div class="idea-meta"><span class="idea-meta-who"><IdeaDomino number={current.card.number} status={current.card.id===BID_ID?'shipped':'queued'}/>{current.card.name}’s idea</span><span class={`idea-status ${current.card.id===BID_ID?'ready':'queued'}`}>{current.card.id===BID_ID?'In the game':'Demo idea saved'}</span></div>

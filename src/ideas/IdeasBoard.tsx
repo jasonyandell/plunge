@@ -25,16 +25,15 @@ export function IdeasBoard({view, onView, cards, loaded = true, busy = false, de
         <span>{item.label}</span> <strong>{loaded ? cards.filter(card => matchesIdeaFilter(card, item.id)).length : '…'}</strong>
       </button>)}
     </div>
-    <label class="ideas-search"><span class="ideas-board-label">Find an idea</span><SearchIcon/><input type="search" value={query} placeholder="Search ideas, people, or tags" onInput={event => onView({...view,query:event.currentTarget.value})} /></label>
+    <label class="ideas-search"><span class="ideas-board-label">Find an idea</span><SearchIcon/><input type="search" value={query} placeholder="Search ideas or people" onInput={event => onView({...view,query:event.currentTarget.value})} /></label>
     {!loaded ? <p role="status">Opening the board…</p> : <>
       <p class="ideas-board-label" role="status">{visible.length} of {cards.length} loaded ideas</p>
       {!visible.length ? <p class="ideas-empty">{!cards.length ? 'Our next idea starts with you. Share one below.' : filter === 'demos' && !query.trim() ? 'No demos are available here yet. Checked previews will appear here when they’re ready to try.' : 'No matching ideas. Try another search or browse current ideas.'}</p> :
         <div class="ideas-grid">{visible.map(card => {
-          const {title, tags} = ideaPresentation(card);
+          const {title} = ideaPresentation(card);
           return <article key={card.id} class={`idea-paper idea-card ${ideaTone(card.status)}`} aria-labelledby={`idea-title-${card.id}`}>
             <div class="idea-card-head"><IdeaDomino number={card.number} status={card.status}/><span class="idea-meta">{card.name} · Idea {card.number}</span></div>
             <h3 id={`idea-title-${card.id}`}><button type="button" disabled={busy} onClick={() => onOpen(card.id)}>{title}</button></h3>
-            <ul class="idea-tags" aria-label="Topics">{tags.map(tag => <li key={tag}>{tag}</li>)}</ul>
             {demo && card.status === 'queued' ? <span class="idea-status">Demo idea saved</span> : <IdeaActivity card={card} now={now} connected={connected} compact />}
             <div class="idea-card-actions">
               {hasIdeaDemo(card) && <button type="button" class="big-btn" disabled={busy} aria-label={`Try demo: ${title}`} onClick={() => onTry(card.id)}>Try demo →</button>}

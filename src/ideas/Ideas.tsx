@@ -117,7 +117,7 @@ export function Ideas() {
     : <>
       {QUESTIONS_LOCAL_ONLY && <aside class="demo-banner"><strong>Dashboard demo · real family ideas</strong><p>You’re signed in as {name}. Ideas and replies here go to the family. Game progress stays in this preview.</p>
         <button class="text-btn" type="button" disabled={busy} onClick={()=>{clearPreviewSession();setToken('');setName('');setOwner(false);setCards([]);setThread(null);setSaved('');setError('');}}>Disconnect demo</button></aside>}
-      <div class="ideas-welcome"><p>Hi, {name}.</p><button class="big-btn secondary" type="button" disabled={busy} onClick={()=>{open(null);setAdding(true);}}>＋ Share an idea</button></div>
+      <div class="ideas-welcome"><p>Hi, {name}.</p><button class="big-btn share-idea" type="button" disabled={busy} onClick={()=>{open(null);setAdding(true);}}>＋ Share an idea</button></div>
       {selected ? <>
         <button class="text-btn" type="button" disabled={busy} onClick={()=>open(null)}>← All ideas</button>
         {thread ? <section class="idea-paper"><div class="idea-meta"><span class="idea-meta-who"><IdeaDomino number={thread.card.number} status={thread.card.status}/>{thread.card.name}’s idea</span><span>Idea {thread.card.number}</span></div>
