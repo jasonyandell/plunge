@@ -104,7 +104,7 @@ export function nelloPaused(s: AppState): boolean {
   return s.game?.phase === 'playing' && s.game.contract?.kind === 'nello' && !nelloAvailable(s.settings);
 }
 
-export type Screen = 'home' | 'table' | 'how' | 'about' | 'more';
+export type Screen = 'home' | 'table' | 'how' | 'about' | 'more' | 'challenges';
 
 export interface SharedRoom {
   readonly mode: 'shared-room'; readonly localSeat: Seat; readonly revision: number;

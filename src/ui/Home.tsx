@@ -144,6 +144,10 @@ export function Home({ app, dispatch, identity }: HomeProps) {
 
         {resumable && <NewGameButton app={app} dispatch={dispatch} />}
 
+        <button type="button" class="text-btn home-stats-link" onClick={() => dispatch({ type: 'go', screen: 'challenges' })}>
+          Challenge hands · Find the winning play
+        </button>
+
         <a class="text-btn home-stats-link" href="?stats=1">
           Stats · Play again <small class="preview-badge">Preview</small>
         </a>
