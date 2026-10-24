@@ -164,6 +164,9 @@ try {
   await page.reload(); // Home retains the game between hands.
   await page.locator('[data-entry="settings"]').click();
   const beforeSwitch = await page.evaluate(() => localStorage.getItem('plunge:save:v1'));
+  // PlayerPicker clears a pending switch from a mount effect, which Preact runs after the next paint. A scripted
+  // click that lands before it is wiped and no dialog opens (a human cannot click that fast), so let it settle.
+  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 150)))));
   await page.getByRole('radio', { name: other, exact: true }).click();
   await page.getByRole('dialog', { name: `Switch to ${other}?`, exact: true }).waitFor();
   await page.setViewportSize({ width: 320, height: 740 });
