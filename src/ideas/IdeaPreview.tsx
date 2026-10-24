@@ -24,7 +24,8 @@ export function useIdeaPreview() {
   }};
 }
 
-export function IdeaPreview({pr,title,onClose}:{pr:number;title:string;onClose:()=>void}) {
+/** Opens the preview on the idea's own demo (`?demo=<card id>`); previews without one open the game. */
+export function IdeaPreview({pr,idea,title,onClose}:{pr:number;idea:string;title:string;onClose:()=>void}) {
   const [attempt,setAttempt]=useState(0),[loading,setLoading]=useState(true),[slow,setSlow]=useState(false);
   const back=useRef<HTMLButtonElement>(null);
   useEffect(()=>{back.current?.focus();},[]);
@@ -38,7 +39,7 @@ export function IdeaPreview({pr,title,onClose}:{pr:number;title:string;onClose:(
     {!valid ? <p class="idea-trial-notice" role="alert">This preview isn’t available. Go back to your idea to check for an update.</p> : <>
       {loading && <p class="idea-trial-notice" role="status">{slow?'The game is taking a while to open. You can try again or go back to your idea.':'Opening your game…'}</p>}
       {slow && <button class="idea-trial-back" onClick={()=>{setSlow(false);setLoading(true);setAttempt(n=>n+1);}}>Try again</button>}
-      <iframe key={attempt} title={`Try your change: ${title}`} src={previewFor(pr)}
+      <iframe key={attempt} title={`Try your change: ${title}`} src={IDEA_ID.test(idea) ? `${previewFor(pr)}/?demo=${idea}` : previewFor(pr)}
         sandbox="allow-scripts allow-same-origin allow-forms allow-downloads allow-popups allow-popups-to-escape-sandbox"
         onLoad={()=>{setLoading(false);setSlow(false);}} />
     </>}

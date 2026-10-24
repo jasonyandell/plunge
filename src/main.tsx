@@ -8,13 +8,15 @@ import { ideasLink } from './ideas/client';
 import { App } from './ui/App';
 import { StatsPage } from './stats/StatsPage';
 import { QuickIdea } from './ideas/QuickIdea';
+import { IdeaDemo, hasDemoFor } from './ui/demos';
 
 const root = document.getElementById('app');
 if (!root) throw new Error('missing #app root');
 const params = new URLSearchParams(location.search);
 const previewIdea = params.get('idea');
+const demoIdea = params.get('demo');
 const game = <App />;
-const page = params.has('stats') ? <StatsPage demo={params.get('demo') === 'stats'}/> : params.has('account') ? (params.get('demo') === 'invite' ? <AccountDemo /> : <AccountPage />) : params.has('ideas') ? (params.get('demo') === 'bidding' ? <IdeasDemo /> : <Ideas />) : previewIdea && IDEA_ID.test(previewIdea) ? (
+const page = params.has('stats') ? <StatsPage demo={params.get('demo') === 'stats'}/> : params.has('account') ? (params.get('demo') === 'invite' ? <AccountDemo /> : <AccountPage />) : params.has('ideas') ? (params.get('demo') === 'bidding' ? <IdeasDemo /> : <Ideas />) : hasDemoFor(demoIdea) ? <IdeaDemo id={demoIdea} fallback={game}/> : previewIdea && IDEA_ID.test(previewIdea) ? (
   <div class="idea-preview-shell">
     <aside class="idea-preview-bar"><span>Preview</span><a href={ideasLink(previewIdea)}>Tell us what you think →</a></aside>
     <div class="idea-preview-game">{game}</div>
