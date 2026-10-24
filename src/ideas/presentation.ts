@@ -40,13 +40,14 @@ export function hasIdeaDemo(card: IdeaCard) {
     && card.preview?.replace(/\/$/, '') === previewFor(card.pr!) && /^[a-f0-9]{40}$/.test(card.sha ?? '');
 }
 
-export type IdeaFilter = 'current' | 'demos' | 'attention' | 'shipped' | 'closed';
+export type IdeaFilter = 'current' | 'demos' | 'attention' | 'iced' | 'shipped' | 'closed';
 export function matchesIdeaFilter(card: IdeaCard, filter: IdeaFilter) {
   switch (filter) {
-    case 'current': return card.status !== 'closed';
+    case 'current': return card.status !== 'closed' && card.status !== 'iced';
     case 'demos': return hasIdeaDemo(card);
     case 'attention': return card.status === 'failed' || card.status === 'question';
     case 'shipped': return card.status === 'shipped';
+    case 'iced': return card.status === 'iced';
     case 'closed': return card.status === 'closed';
   }
 }

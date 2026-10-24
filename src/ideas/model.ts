@@ -1,5 +1,6 @@
 import type { ScreenshotInfo } from './screenshots';
-export type IdeaStatus = 'queued' | 'building' | 'checking' | 'ready' | 'question' | 'failed' | 'shipped' | 'closed';
+/** `iced`: rested after quiet days, its PR closed and preview gone. `waking`: asked back; the PR reopens and the preview redeploys. */
+export type IdeaStatus = 'queued' | 'building' | 'checking' | 'ready' | 'question' | 'failed' | 'shipped' | 'closed' | 'iced' | 'waking';
 export interface IdeaCard {
   number: number; id: string; name: string; title: string; context: string;
   created: string; updated: string; revision: number; status: IdeaStatus;
@@ -21,6 +22,7 @@ export const IDEA_TOKEN = /^[a-f0-9]{64}$/;
 export const IDEA_STATUS: Record<IdeaStatus, string> = {
   queued: 'Waiting to build', building: 'Making your change', checking: 'Checking your preview',
   ready: 'Ready to try', question: 'A question for you', failed: 'Needs attention', shipped: 'In the game', closed: 'Set aside',
+  iced: 'On ice', waking: 'Waking up',
 };
 export const LIVE_PLUNGE = 'https://plunge.texas42.workers.dev';
 export function previewFor(pr: number): string { return `https://plunge-pr-${pr}.texas42.workers.dev`; }

@@ -22,8 +22,10 @@ export function ideaActivity(card:IdeaCard,elapsedMs=0,connected=true) {
     ready:'The builder has finished. Your preview is ready to try.',
     shipped:'This change is now part of Plunge.',
     closed:'The builder is not working on this idea.',
+    iced:'Resting after a few quiet days. Wake it up to bring its preview back.',
+    waking:'Bringing the preview back. This takes a few minutes.',
   };
   const label=card.status==='question'?'Waiting for your reply':card.status==='queued'?'Waiting to start'
     :card.status==='checking'?'Waiting for preview':IDEA_STATUS[card.status];
-  return {tone:card.status==='failed'?'quiet':['ready','shipped'].includes(card.status)?'done':'waiting',label,detail:details[card.status],lastSeen:''};
+  return {tone:['failed','iced'].includes(card.status)?'quiet':['ready','shipped'].includes(card.status)?'done':'waiting',label,detail:details[card.status],lastSeen:''};
 }

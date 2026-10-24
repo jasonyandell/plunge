@@ -62,6 +62,8 @@ if(command==='init') {
     ...(idea?{id:idea}:{newId:randomBytes(16).toString('hex'),title:options.title??found.title,body:options.body??options.title??found.title})});
   console.log(`Linked PR #${pr} to ${config.origin}/?ideas=1#idea=${result.id}`);
   console.log(`Once its preview passes, Try your change opens it at ${config.origin}/?ideas=1#idea=${result.id}&try=1`);
+} else if(command==='wake') {
+  await service(await loadConfig(),'wake',{id:args[0]});console.log('Waking it up; the builder reopens its PR and the preview comes back.');
 } else if(command==='revoke') {
   await service(await loadConfig(),'revoke',{id:args[0]});console.log('Invite revoked.');
-} else throw new Error('Use init, install-secret, inspect [IDEA_ID], triage IDEA_ID --revision N --action note|close --message-file FILE, invite NAME, revoke MEMBER_ID, scope IDEA_ID FILE..., retry IDEA_ID, or adopt PR [IDEA_ID].');
+} else throw new Error('Use init, install-secret, inspect [IDEA_ID], triage IDEA_ID --revision N --action note|close --message-file FILE, invite NAME, revoke MEMBER_ID, scope IDEA_ID FILE..., retry IDEA_ID, wake IDEA_ID, or adopt PR [IDEA_ID].');
