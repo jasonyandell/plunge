@@ -75,7 +75,7 @@ try {
   await mom.getByRole('button', { name: 'Fine', exact: true }).click();
   await host.waitForFunction(() => !!window.__room?.game);
   const before = await host.evaluate(() => ({ session: window.__room.sessionId, hand: window.__room.game.handNumber, seats: window.__room.seats.map(s => s?.name) }));
-  await guest.goto(origin); await guest.getByRole('button', { name: /^Play together/ }).click();
+  await guest.goto(origin); await guest.locator('[data-entry="family"]').click();
   const listing = guest.getByRole('region', { name: 'People playing now' });
   await listing.getByRole('button', { name: /Host, Mom here.*Join/ }).waitFor();
   for (const width of [320, 375, 390, 428]) { await guest.setViewportSize({ width, height: 844 }); assert.equal(await guest.evaluate(() => document.documentElement.scrollWidth), width); }
@@ -104,7 +104,7 @@ try {
   // A full table still belongs to its authenticated players on a fresh phone.
   const returning = await phone(undefined, '2');
   await returning.goto(origin);
-  await returning.getByRole('button', { name: /^Play together/ }).click();
+  await returning.locator('[data-entry="family"]').click();
   await returning.waitForFunction(() => !!window.__room?.game);
   assert.equal(await returning.evaluate(() => JSON.parse(localStorage.getItem('plunge:room:' + window.__room.roomId)).seat), seats[1].seat);
   assert.equal(await returning.evaluate(() => window.__room.seats.filter(Boolean).length), 4);
@@ -116,7 +116,7 @@ try {
   await returning.reload();
   await returning.waitForFunction(seat => window.__room?.seats.filter(Boolean).length === 4 && JSON.parse(localStorage.getItem('plunge:room:' + window.__room.roomId)).seat === seat, seats[1].seat);
   const signedOut = await phone();
-  await signedOut.goto(origin); await signedOut.getByRole('button', { name: /^Play together/ }).click();
+  await signedOut.goto(origin); await signedOut.locator('[data-entry="family"]').click();
   await signedOut.getByRole('region', { name: 'People playing now' }).getByRole('button', { name: /View table$/ }).click();
   const signIn = signedOut.getByRole('link', { name: 'Already have an account? Sign in to find your chair →' });
   await signIn.waitFor();

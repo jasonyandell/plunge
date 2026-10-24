@@ -8,7 +8,7 @@ import {resolve,extname} from 'node:path';
 import assert from 'node:assert/strict';
 // Home no longer has its own Share an idea link; Settings & more does.
 const openIdea=async page=>{
- const more=page.getByRole('button',{name:'Settings & more',exact:true});
+ const more=page.locator('[data-entry="settings"]');
  if(await more.count())await more.click();
  await page.locator('button.more-row',{hasText:'Share an idea about this screen'}).click();
 };
@@ -65,7 +65,7 @@ try {
   const touch=await person(2,'Rose',0);
   touch.setDefaultTimeout(10000);
   await touch.goto(origin);
-  const tagline=touch.getByText('Texas 42. Pull up a chair.',{exact:true});
+  const tagline=touch.locator('.tagline');
   await tagline.waitFor();
   const style=await tagline.evaluate(e=>{const s=getComputedStyle(e);return {select:s.userSelect||s.webkitUserSelect,callout:s.webkitTouchCallout};});
   assert.equal(style.select,'none');
@@ -87,7 +87,7 @@ try {
  page.setDefaultTimeout(10000);
  const faults=[];page.on('pageerror',e=>faults.push(String(e)));
  await page.goto(origin);
- const deal=page.getByRole('button',{name:'Deal me in',exact:true});
+ const deal=page.locator('[data-entry="deal"]');
  await deal.waitFor();
  const box=await deal.boundingBox(),x=box.x+box.width/2,y=box.y+box.height/2;
  // Moving a finger to scroll must cancel the long press.
@@ -163,7 +163,7 @@ try {
  assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM ideas').first()).n,1);
  await page.getByRole('button',{name:'Back to Plunge',exact:true}).click();
  if(await page.getByRole('button',{name:'← Back',exact:true}).count())await page.getByRole('button',{name:'← Back',exact:true}).click();
- await page.getByRole('button',{name:'Deal me in',exact:true}).click();
+ await page.locator('[data-entry="deal"]').click();
  await page.getByLabel('Your hand',{exact:true}).waitFor();
  const auction=page.getByRole('dialog',{name:'Your bid',exact:true});
  await auction.waitFor({timeout:60000});

@@ -54,11 +54,11 @@ const humansPass = async () => { for (const [seat, page] of Object.entries(pages
 const deadline = setTimeout(() => { console.error('Room browser check exceeded 260 seconds'); process.exit(1); }, 260000);
 try {
   const a = await phone(), b = await phone(), c = await phone();
-  await a.goto(base); await a.getByRole('button', { name: 'Deal me in', exact: true }).click();
+  await a.goto(base); await a.locator('[data-entry="deal"]').click();
   await a.getByRole('button', { name: 'Menu', exact: true }).click(); await a.getByRole('button', { name: 'Back to home', exact: true }).click();
-  await a.getByRole('button', { name: 'Resume your game', exact: true }).waitFor();
+  await a.locator('[data-entry="resume"]').waitFor();
   const soloBefore = await a.evaluate(() => localStorage.getItem('plunge:save:v1'));
-  await a.locator('button.home-family').click();
+  await a.locator('[data-entry="family"]').click();
   await a.getByRole('textbox', { name: 'Your name' }).fill('Host'); await a.getByRole('button', { name: 'Open a family table' }).click();
   await a.getByText('Pull up a chair').waitFor(); const invite = a.url(); check('Host opened a table from the home screen.');
   await b.goto(invite); await b.getByRole('textbox', { name: 'Your name' }).fill('Guest'); await b.getByRole('button', { name: 'Join the table' }).click();
@@ -167,7 +167,7 @@ try {
   const errors = await a.evaluate(() => window.__errors ?? []);
   if (errors.length) throw new Error('The host saw room errors: ' + JSON.stringify(errors));
   await a.getByRole('button', { name: 'Menu', exact: true }).click(); await a.getByRole('button', { name: 'Back to home', exact: true }).click();
-  await a.getByRole('button', { name: 'Resume your game', exact: true }).waitFor({ timeout: 10000 });
+  await a.locator('[data-entry="resume"]').waitFor({ timeout: 10000 });
   if (await a.evaluate(() => localStorage.getItem('plunge:save:v1')) !== soloBefore) throw new Error('The solo save changed.');
   check('Back home: the solo game is untouched and resumable.');
   const real = faults.filter(f => !f.includes('favicon') && !f.includes('403'));
