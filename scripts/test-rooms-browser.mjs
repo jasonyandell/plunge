@@ -58,7 +58,7 @@ try {
   await a.getByRole('button', { name: 'Menu', exact: true }).click(); await a.getByRole('button', { name: 'Back to home', exact: true }).click();
   await a.getByRole('button', { name: 'Resume your game', exact: true }).waitFor();
   const soloBefore = await a.evaluate(() => localStorage.getItem('plunge:save:v1'));
-  await a.getByRole('button', { name: 'Play with family · Experimental', exact: true }).click();
+  await a.locator('button.home-family').click();
   await a.getByRole('textbox', { name: 'Your name' }).fill('Host'); await a.getByRole('button', { name: 'Open a family table' }).click();
   await a.getByText('Pull up a chair').waitFor(); const invite = a.url(); check('Host opened a table from the home screen.');
   await b.goto(invite); await b.getByRole('textbox', { name: 'Your name' }).fill('Guest'); await b.getByRole('button', { name: 'Join the table' }).click();

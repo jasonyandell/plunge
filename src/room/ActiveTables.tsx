@@ -8,6 +8,14 @@ export function activeTables(tables: readonly ListedTable[]): ListedTable[] {
   return tables.filter(table => table.seats.some(seat => seat?.connected));
 }
 
+/** Open a table as a fresh page load. From the rooms page only the hash would change,
+ * and the room screen reads its room once, so a plain assign would leave it stale. */
+function openTable(roomId: string) {
+  const url = new URL(roomUrl(roomId), location.href);
+  location.assign(url.href);
+  if (url.pathname === location.pathname && url.search === location.search) location.reload();
+}
+
 /** Put the people already playing on the path a newcomer actually takes. */
 export function ActiveTables({ family = false, onJoin }: {
   family?: boolean;
@@ -41,7 +49,7 @@ export function ActiveTables({ family = false, onJoin }: {
         const action = table.rejoin || remembered ? 'Rejoin' : chairs === 0 ? 'View table' : table.open || (table.standing && family) ? 'Join' : 'Knock';
         return <li key={table.roomId}>
           <button type="button" class="home-table"
-            onClick={() => onJoin ? onJoin(table) : location.assign(roomUrl(table.roomId))}>
+            onClick={() => onJoin ? onJoin(table) : openTable(table.roomId)}>
             <strong>{tableTitle(table)}</strong>
             <span>{here.join(', ')} here · {chairs === 0 ? 'All chairs reserved' : `${chairs} open ${chairs === 1 ? 'chair' : 'chairs'}`}</span>
             <em>{action}</em>

@@ -75,7 +75,7 @@ try {
   await mom.getByRole('button', { name: 'Fine', exact: true }).click();
   await host.waitForFunction(() => !!window.__room?.game);
   const before = await host.evaluate(() => ({ session: window.__room.sessionId, hand: window.__room.game.handNumber, seats: window.__room.seats.map(s => s?.name) }));
-  await guest.goto(origin);
+  await guest.goto(origin); await guest.getByRole('button', { name: /^Play together/ }).click();
   const listing = guest.getByRole('region', { name: 'People playing now' });
   await listing.getByRole('button', { name: /Host, Mom here.*Join/ }).waitFor();
   for (const width of [320, 375, 390, 428]) { await guest.setViewportSize({ width, height: 844 }); assert.equal(await guest.evaluate(() => document.documentElement.scrollWidth), width); }
@@ -88,7 +88,7 @@ try {
   const after = await host.evaluate(() => ({ session: window.__room.sessionId, hand: window.__room.game.handNumber, seats: window.__room.seats.map(s => s?.name) }));
   assert.equal(after.session, before.session); assert.equal(after.hand, before.hand); assert.equal(after.seats[0], 'Host'); assert.equal(after.seats[2], 'Mom');
   await guest.screenshot({ path: join(out, 'joined-mid-hand.png') });
-  console.log('PASS: fresh guest finds the live table on Home and joins mid-hand without changing the game or existing seats.');
+  console.log('PASS: fresh guest finds the live table from Home’s Play together and joins mid-hand without changing the game or existing seats.');
   await host.getByRole('button', { name: 'Table', exact: true }).click();
   await host.getByRole('button', { name: 'Close the table', exact: true }).click();
   await host.waitForFunction(() => window.__room.open === false);
@@ -104,7 +104,7 @@ try {
   // A full table still belongs to its authenticated players on a fresh phone.
   const returning = await phone(undefined, '2');
   await returning.goto(origin);
-  await returning.getByRole('region', { name: 'People playing now' }).getByRole('button', { name: /Rejoin$/ }).click();
+  await returning.getByRole('button', { name: /^Play together/ }).click();
   await returning.waitForFunction(() => !!window.__room?.game);
   assert.equal(await returning.evaluate(() => JSON.parse(localStorage.getItem('plunge:room:' + window.__room.roomId)).seat), seats[1].seat);
   assert.equal(await returning.evaluate(() => window.__room.seats.filter(Boolean).length), 4);
@@ -116,7 +116,7 @@ try {
   await returning.reload();
   await returning.waitForFunction(seat => window.__room?.seats.filter(Boolean).length === 4 && JSON.parse(localStorage.getItem('plunge:room:' + window.__room.roomId)).seat === seat, seats[1].seat);
   const signedOut = await phone();
-  await signedOut.goto(origin);
+  await signedOut.goto(origin); await signedOut.getByRole('button', { name: /^Play together/ }).click();
   await signedOut.getByRole('region', { name: 'People playing now' }).getByRole('button', { name: /View table$/ }).click();
   const signIn = signedOut.getByRole('link', { name: 'Already have an account? Sign in to find your chair →' });
   await signIn.waitFor();
