@@ -11,25 +11,25 @@ import './ideas.css';
 
 const STORAGE = 'plunge:ideas-demo:v1';
 const BID_ID = '00000000000000000000000000000022';
-const seed: IdeaThread = {
+export const seed: IdeaThread = {
   card: {id:BID_ID,number:1,name:'Mom',title:'I can’t see what I bid.',context:'Demo example',created:'',updated:'',revision:1,status:'shipped',pr:null,sha:null,preview:null},
   messages:[
     {id:'example-1',role:'family',name:'Mom · example',body:'When I’m the bidder, I can’t see what I bid. Could it stay beside my dominoes?',created:''},
     {id:'example-2',role:'builder',name:'Builder · example',body:'Your bid now sits next to “You,” beside your hand. If you win the bidding, it stays there while you play. It works with hints turned off, too. Try the game and tell us how it feels.',created:''},
   ],
 };
-function initialCards(): IdeaThread[] {
-  try { const saved=JSON.parse(localStorage.getItem(STORAGE) ?? 'null');
+function initialCards(storage: string, seeds: IdeaThread[]): IdeaThread[] {
+  try { const saved=JSON.parse(localStorage.getItem(storage) ?? 'null');
     if(Array.isArray(saved) && saved.length && saved.every(t=>t?.card?.id && typeof t.card.title==='string' && Array.isArray(t.messages))) return saved;
   } catch { /* The example works without storage. */ }
-  return [seed];
+  return seeds;
 }
 
 /** A browser-only walkthrough. Never calls the ideas service or starts a build. */
-export function IdeasDemo() {
+export function IdeasDemo({storage=STORAGE, seeds=[seed], board=false}: {storage?: string; seeds?: IdeaThread[]; board?: boolean} = {}) {
   const [boardView,setBoardView]=useState<IdeasBoardView>({filter:'current',query:''});
-  const [cards,setCards]=useState(initialCards),[person,setPerson]=useState('Mom');
-  const [selected,setSelected]=useState<string|null>(BID_ID),[notice,setNotice]=useState('');
+  const [cards,setCards]=useState(()=>initialCards(storage,seeds)),[person,setPerson]=useState('Mom');
+  const [selected,setSelected]=useState<string|null>(board?null:BID_ID),[notice,setNotice]=useState('');
   const [adding,setAdding]=useState(false);
   const newIdea=useRef<HTMLElement>(null);
   useEffect(()=>{
@@ -40,7 +40,7 @@ export function IdeasDemo() {
   const current=cards.find(t=>t.card.id===selected);
   const save=(next:IdeaThread[])=>{
     setCards(next);
-    try {localStorage.setItem(STORAGE,JSON.stringify(next));setNotice('Saved in this browser’s demo.');}
+    try {localStorage.setItem(storage,JSON.stringify(next));setNotice('Saved in this browser’s demo.');}
     catch {setNotice('Saved for this visit. This browser could not keep a copy for later.');}
   };
   const send=(body:string)=>{
