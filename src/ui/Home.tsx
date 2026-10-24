@@ -98,6 +98,16 @@ function FamilyEntry() {
   </section>;
 }
 
+/** Tile icons: line drawings in the tile's ink, so they read as one set. */
+const Icon = ({ children }: { children: ComponentChildren }) => (
+  <svg class="home-tile-icon" viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor"
+    stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{children}</svg>
+);
+/** Four chairs around a table, from above. */
+const TableIcon = () => <Icon><circle cx="12" cy="12" r="4.5" /><rect x="9.5" y="2" width="5" height="3.5" rx="1.2" /><rect x="9.5" y="18.5" width="5" height="3.5" rx="1.2" /><rect x="2" y="9.5" width="3.5" height="5" rx="1.2" /><rect x="18.5" y="9.5" width="3.5" height="5" rx="1.2" /></Icon>;
+const StatsIcon = () => <Icon><path d="M4 20h16" /><rect x="5.5" y="12" width="3" height="5" rx=".8" /><rect x="10.5" y="8" width="3" height="9" rx=".8" /><rect x="15.5" y="4" width="3" height="13" rx=".8" /></Icon>;
+const IdeaIcon = () => <Icon><path d="M9 17.5h6M10 20.5h4" /><path d="M12 3.5a5.5 5.5 0 0 0-3.2 10c.7.5 1.2 1.3 1.2 2.2v1.8h4v-1.8c0-.9.5-1.7 1.2-2.2A5.5 5.5 0 0 0 12 3.5z" /></Icon>;
+
 /** The family table's front door: same label and place every time; what's live shows in its note. */
 function FamilyTile() {
   const [family, setFamily] = useState(false);
@@ -133,6 +143,7 @@ function FamilyTile() {
   };
   return <>
     <button type="button" class="home-tile home-family" disabled={opening} onClick={() => void open()}>
+      <TableIcon />
       <strong>Family</strong>
       <span class={playing ? 'live' : undefined}>{opening ? 'Opening…' : playing ? `${playing} here now` : 'Play live'}</span>
     </button>
@@ -176,8 +187,8 @@ export function Home({ app, dispatch, identity }: HomeProps) {
 
         <nav class="home-tiles" aria-label="Plunge">
           {ROOMS_ENABLED && <FamilyTile />}
-          <a class="home-tile" href="?stats=1"><strong>Stats</strong><span>Your hands</span></a>
-          <a class="home-tile" href="?ideas=1"><strong>Ideas</strong><span>Suggest</span></a>
+          <a class="home-tile" href="?stats=1"><StatsIcon /><strong>Stats</strong><span>Your hands</span></a>
+          <a class="home-tile" href="?ideas=1"><IdeaIcon /><strong>Ideas</strong><span>Suggest</span></a>
         </nav>
 
         <div class="link-row home-links">
