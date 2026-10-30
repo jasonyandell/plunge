@@ -27,6 +27,8 @@ function field(value: unknown, max: number, min = 1): string {
   if (typeof value !== 'string' || value.trim().length < min || value.length > max) throw new Error('Please use a shorter, nonempty message.');
   return value.trim();
 }
+// A card's title starts as the family's words, cut to fit. A builder headline replaces only that.
+const requestTitle = (text: string) => text.length>100 ? text.slice(0,97)+'…' : text;
 function id(value: unknown): string { if (typeof value !== 'string' || !IDEA_ID.test(value)) throw new Error('Invalid request identifier.'); return value; }
 async function body(request: Request, limit=16000): Promise<Record<string, unknown>> {
   const reader = request.body?.getReader(); if (!reader) throw new Error('Missing message.');
@@ -155,7 +157,7 @@ export async function ideasRequest(request: Request, env: IdeasEnv, previewAccou
       const count = await db.prepare('SELECT COUNT(*) n FROM ideas WHERE member_id=? AND created>?').bind(member.id, new Date(Date.now() - 86400000).toISOString()).first<{ n: number }>();
       if ((count?.n ?? 0) >= 20) return json({ error: 'Twenty ideas today! Please add more tomorrow.' }, 429);
       await db.batch([
-        db.prepare('INSERT OR IGNORE INTO ideas(id,member_id,title,context,created,updated) VALUES(?,?,?,?,?,?)').bind(idea, member.id, text.length>100?text.slice(0,97)+'…':text, context, now, now),
+        db.prepare('INSERT OR IGNORE INTO ideas(id,member_id,title,context,created,updated) VALUES(?,?,?,?,?,?)').bind(idea, member.id, requestTitle(text), context, now, now),
         db.prepare(`INSERT OR IGNORE INTO idea_messages(id,idea_id,member_id,role,body,created,account_id,screenshots)
           SELECT ?,id,?,'family',?,?,?,? FROM ideas WHERE id=? AND member_id=?`).bind(idea, member.id, text, now, authorizingAccount, screenshots, idea, member.id),
       ]);
@@ -263,6 +265,11 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
     ]);
     return json(await thread(db,idea));
   }
+  if (path === '/admin/title') {
+    // Rename only: no note on the card, and its quiet clock keeps running.
+    const idea=id(data.id), changed=await db.prepare('UPDATE ideas SET title=? WHERE id=? RETURNING id').bind(field(data.title,100),idea).first();
+    return changed ? json(await thread(db,idea)) : json({error:'Idea not found.'},404);
+  }
   if (path === '/admin/wake') { await wake(db,id(data.id),null,now); const found=await thread(db,id(data.id)); return found ? json(found) : json({error:'Idea not found.'},404); }
   if (path === '/admin/members') {
     const name = field(data.name, 40), token = hex(crypto.getRandomValues(new Uint8Array(32))), member = hex(crypto.getRandomValues(new Uint8Array(16)));
@@ -322,7 +329,11 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
     if (!['checking','question','failed'].includes(String(status))) return json({error:'Invalid result.'},400);
     const pr = data.pr ?? null, sha = data.sha ?? null;
     if (status === 'checking' && (!Number.isSafeInteger(pr) || Number(pr)<1 || typeof sha!=='string' || !/^[a-f0-9]{40}$/.test(sha))) return json({error:'Missing build identity.'},400);
+    const headline = data.title===undefined ? null : field(data.title,60);
+    const original = headline ? await db.prepare('SELECT m.body FROM ideas i JOIN idea_messages m ON m.id=i.id WHERE i.run_id=?').bind(run.id).first<{body:string}>() : null;
     await db.batch([
+      ...(headline && original ? [db.prepare('UPDATE ideas SET title=? WHERE run_id=? AND lease_until>? AND title=?')
+        .bind(headline,run.id,finishedAt,requestTitle(original.body))] : []),
       db.prepare(`INSERT OR IGNORE INTO idea_messages(id,idea_id,role,body,created)
         SELECT ?,id,'builder',?,? FROM ideas WHERE run_id=? AND lease_until>?`).bind(run.id,message,now,run.id,finishedAt),
       db.prepare(`UPDATE idea_runs SET state='done' WHERE id=? AND EXISTS(SELECT 1 FROM ideas WHERE run_id=? AND lease_until>?)`).bind(run.id,run.id,finishedAt),

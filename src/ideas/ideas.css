@@ -47,8 +47,6 @@
 .ideas-empty {padding:24px;border:1px dashed #a8bcae;border-radius:12px;line-height:1.6;}
 .idea-card h3 button {background:none;border:0;padding:0;min-height:44px;color:inherit;font:inherit;text-align:left;overflow-wrap:anywhere;cursor:pointer;}
 .idea-card h3 button:hover {text-decoration:underline;text-underline-offset:4px;}
-.idea-tags {display:flex;flex-wrap:wrap;gap:6px;list-style:none;padding:0;margin:0 0 8px;}
-.idea-tags li {background:#eae4d6;color:#55452e;border-radius:6px;padding:5px 9px;font-size:12px;font-weight:600;line-height:1.4;}
 .idea-card-actions {display:flex;flex-direction:column;gap:6px;width:100%;}
 .idea-card-actions .big-btn {box-sizing:border-box;width:100%;font-size:16px;margin:0;min-height:44px;}
 .idea-card-actions .idea-open {border:0;background:transparent;padding:10px 0;min-height:44px;font:inherit;font-size:14px;text-align:left;color:#205e49;cursor:pointer;}

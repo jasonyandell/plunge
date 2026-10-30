@@ -109,6 +109,29 @@ describe('family idea conversations and automatic builds',()=>{
     expect(await (await call(`/${id(9000)}`)).json()).toMatchObject({card:{revision:(before as IdeaThread).card.revision,status:'queued'}});
     await env.QUESTIONS!.prepare("UPDATE ideas SET status='closed' WHERE id=?").bind(id(9000)).run();
   });
+  it('gives a new card the builder’s headline once, and lets Jason rename it quietly',async()=>{
+    const idea=id(9400),long='When a player is the last possible bidder and nobody has bid before them, the computer should only bid thirty';
+    await call(`/${idea}`,'PUT',{body:long,context:'Phone'});
+    const card=async()=>(await (await call(`/${idea}`)).json() as IdeaThread).card;
+    expect((await card()).title).toBe(long.slice(0,97)+'…');
+    await call('/admin/claim','POST',{runId:id(9401),ideaId:idea},admin);
+    expect((await finish(9401,{status:'question',message:'Only computer players?',title:'x'.repeat(61)})).status).toBe(400);
+    expect((await finish(9401,{status:'question',message:'Only computer players?',title:'Computer players bid only what wins'})).status).toBe(200);
+    expect((await card()).title).toBe('Computer players bid only what wins');
+    // A later headline never replaces a summary that is already there.
+    await call(`/${idea}/messages`,'PUT',{id:id(9402),body:'Yes, only the computer'});
+    await call('/admin/claim','POST',{runId:id(9403),ideaId:idea},admin);
+    await finish(9403,{status:'question',message:'Got it.',title:'Something else'});
+    expect((await card()).title).toBe('Computer players bid only what wins');
+    const before=await card(), messages=(await (await call(`/${idea}`)).json() as IdeaThread).messages.length;
+    expect((await call('/admin/title','POST',{id:idea,title:'Bid 30 when the bid is dropped on you'},mom.token)).status).toBe(403);
+    expect((await call('/admin/title','POST',{id:idea,title:'Bid 30 when the bid is dropped on you'},admin)).status).toBe(200);
+    const after=await (await call(`/${idea}`)).json() as IdeaThread;
+    expect(after.card).toMatchObject({title:'Bid 30 when the bid is dropped on you',updated:before.updated,status:before.status});
+    expect(after.messages).toHaveLength(messages);
+    expect((await call('/admin/title','POST',{id:id(9499),title:'Nobody'},admin)).status).toBe(404);
+    await env.QUESTIONS!.prepare("UPDATE ideas SET status='closed' WHERE id=?").bind(idea).run();
+  });
   it('keeps failed previews watched, but never revives a preview for a newer failed request',async()=>{
     const idea=id(9001),sha='a'.repeat(40),nextSha='b'.repeat(40);
     await call(`/${idea}`,'PUT',{body:'Recover my preview',context:'Phone'});
