@@ -2,6 +2,7 @@ import { legalActions, type Action, type GameState } from '../engine';
 import { waltDeclarationOf } from './walt/requests';
 import { BID_BOOK, bestPanel, playedHand, qualifies, type BookAuctionSurvey } from './bid-book';
 import type { AuctionRequest } from './auction';
+import { cheapestLastBid } from './last-bid';
 
 function points(a: Action): number | null {
   return a.type !== 'bid' || a.bid.kind === 'pass' ? null : a.bid.kind === 'points' ? a.bid.value : a.bid.special ? null : 42;
@@ -21,6 +22,8 @@ export function bookAuction(g: GameState, request: AuctionRequest): { action: Ac
       const p=bestPanel(entry.panels,target);
       if (qualifies(p,target) && (!action || target>bid)) { action=candidate;bid=target;panel=p; }
     }
+    // Last to speak: the same mark for the cheapest bid.
+    if (action) { action=cheapestLastBid(g,action); const t=points(action)!; if (t!==bid) { bid=t;panel=bestPanel(entry.panels,bid); } }
     if (!action) action=pass ?? actions.find(a=>points(a)===request.bid);
   }
   if (!action) throw new Error('No legal book auction action.');

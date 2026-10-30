@@ -51,6 +51,21 @@ describe('empirical bid book',()=>{
   expect((await auctionMove({...g,bids:[{seat:opponent,bid:{kind:'points',value:41}}]},seat,'privacy')).action).toEqual({type:'bid',bid:{kind:'pass'}});
   expect(anticipatedAuctions(g,'privacy',0)).toEqual([]);expect(runAuction).not.toHaveBeenCalled();
  });
+ it('bids only what wins when last to speak, across all 520 hands',async()=>{
+  for(const h of BID_BOOK.hands){
+   const seat=h.seat as Seat,w=gameFor(h);
+   const last={...w,bids:[1,2,3].map(n=>({seat:((seat+n)%4) as Seat,bid:{kind:'pass' as const}}))};
+   for(const allPass of ['reshake','force-30'] as const){
+    const g={...last,config:{...last.config,allPass}},d=await auctionMove(g,seat,'last');
+    expect(d.action).toEqual(!ceiling(h)&&allPass==='reshake'?{type:'bid',bid:{kind:'pass'}}:{type:'bid',bid:{kind:'points',value:30}});
+    if(d.survey?.schema==='plunge-played-auction-v1'){expect(d.survey.bid).toBe(30);expect(d.survey.decl).toBe(bestPanel(h.panels,30).decl);}
+   }
+   const opponent=((seat+1)%4) as Seat,raise={...w,bids:[{seat:opponent,bid:{kind:'points',value:31} as const},
+    ...[2,3].map(n=>({seat:((seat+n)%4) as Seat,bid:{kind:'pass' as const}}))]};
+   expect((await auctionMove(raise,seat,'last')).action).toEqual(ceiling(h)>31?{type:'bid',bid:{kind:'points',value:32}}:{type:'bid',bid:{kind:'pass'}});
+  }
+  expect(runAuction).not.toHaveBeenCalled();
+ });
  it('names the best declaration at the actual contract after winning; supports a forced weak bid',async()=>{
   const h=BID_BOOK.hands.find(h=>ceiling(h)>=35)!,seat=h.seat as Seat;let g=gameFor(h);
   const d=await auctionMove(g,seat,'trumps');g=applyAction(g,d.action);

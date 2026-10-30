@@ -54,6 +54,8 @@ describe('recorded-game bidding hints', () => {
   it('separates a weak pass, a forced bid, a partner pass and an unavailable lower bid', async () => {
     expect(bookHint(gameFor(weak))).toMatchObject({ reason: 'pass', ceiling: null, target: 30, action: pass });
     expect(bookHint(forced(weak))).toMatchObject({ reason: 'forced', ceiling: null, target: 30, action: { type: 'bid', bid: { kind: 'points', value: 30 } } });
+    // A strong hand stuck with the bid still hints 30: the same mark for less.
+    expect(bookHint(forced(strong))).toMatchObject({ reason: 'forced', target: 30, action: { type: 'bid', bid: { kind: 'points', value: 30 } } });
     const support = bookHint(partner());
     expect(support.reason).toBe('partner'); expect(support.action).toEqual(pass);
     expect(support.ceiling).toBeGreaterThanOrEqual(33);
