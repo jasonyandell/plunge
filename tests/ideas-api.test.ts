@@ -54,6 +54,34 @@ describe('family idea conversations and automatic builds',()=>{
     expect(current.card).toMatchObject({status:'closed',revision:2});
     expect(current.messages).toHaveLength(3);
   });
+  it('rests quiet previews on ice and lets any family member or reply wake them',async()=>{
+    const builder=id(9200),hand=id(9201),fresh=id(9202),old='2026-01-01T00:00:00.000Z',before='2026-01-04T00:00:00.000Z';
+    for(const [idea,lane,pr,updated] of [[builder,'builder',901,old],[hand,'hand',902,old],[fresh,'builder',903,'2026-01-05T00:00:00.000Z']] as const) {
+      await call(`/${idea}`,'PUT',{body:`Idea ${pr}`,context:'Phone'});
+      await env.QUESTIONS!.prepare("UPDATE ideas SET status='ready',lane=?,pr=?,sha=?,preview=?,updated=? WHERE id=?")
+        .bind(lane,pr,'f'.repeat(40),`https://plunge-pr-${pr}.texas42.workers.dev`,updated,idea).run();
+    }
+    expect((await call(`/admin/stale?before=${before}`,'GET',undefined,mom.token)).status).toBe(403);
+    const stale=await (await call(`/admin/stale?before=${before}`,'GET',undefined,admin)).json() as {id:string}[];
+    expect(stale.map(c=>c.id)).toEqual(expect.arrayContaining([builder,hand]));
+    expect(stale.map(c=>c.id)).not.toContain(fresh);
+    expect((await call('/admin/ice','POST',{id:fresh,before},admin)).status).toBe(409);
+    for(const idea of [builder,hand]) expect((await (await call('/admin/ice','POST',{id:idea,before},admin)).json() as IdeaThread).card)
+      .toMatchObject({status:'iced',preview:null});
+    // Retried ice is refused once the card has changed; it stays off the tracked list.
+    expect((await call('/admin/ice','POST',{id:builder,before},admin)).status).toBe(409);
+    const tracked=async()=>(await (await call('/admin/tracked','GET',undefined,admin)).json() as {id:string}[]).map(c=>c.id);
+    expect(await tracked()).not.toContain(builder);
+    // Wake button: any member, idempotent, and tracked again so the builder reopens the PR.
+    expect((await (await call(`/${builder}/wake`,'POST',{},dad.token)).json() as IdeaThread).card.status).toBe('waking');
+    const woken=await (await call(`/${builder}/wake`,'POST',{},mom.token)).json() as IdeaThread;
+    expect(woken.messages.filter(m=>/woke this idea/.test(m.body))).toHaveLength(1);
+    expect(await tracked()).toContain(builder);
+    // A reply to a resting hand-built idea wakes it too.
+    await call(`/${hand}/messages`,'PUT',{id:id(9203),body:'Can I see it again?'});
+    expect(((await (await call(`/${hand}`)).json()) as IdeaThread).card.status).toBe('waking');
+    expect((await call(`/${id(9299)}/wake`,'POST',{})).status).toBe(404);
+  });
   it('requires a current idle revision for triage and keeps notes out of the build queue',async()=>{
     const idea=id(9110),note={id:idea,revision:1,action:'note',message:'Combined preview will be here.',title:'One visual playground'};
     await call(`/${idea}`,'PUT',{body:'Flowers',context:'Phone'});

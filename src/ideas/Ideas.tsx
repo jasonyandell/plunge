@@ -84,6 +84,16 @@ export function Ideas() {
     } catch(e) {if(generation.current===epoch)setError(e instanceof Error?e.message:'Could not accept yet. Please retry.');}
     finally{setBusy(false);}
   };
+  const wake = async () => {
+    if(!thread || busy)return;
+    const id=thread.card.id,epoch=generation.current;
+    setBusy(true);setError('');
+    try {
+      const result=await ideasApi<IdeaThread>(token,`/${id}/wake`,{},'POST');
+      if(generation.current===epoch){setThread(result);setSaved('Waking it up. The preview will be back in a few minutes.');}
+    } catch(e) {if(generation.current===epoch)setError(e instanceof Error?e.message:'Could not wake it yet. Please retry.');}
+    finally{setBusy(false);}
+  };
   const enter = (event: Event) => {event.preventDefault();const key=inviteToken(invite);
     if(!key) {setError('Paste the invite link Jason shared with you.');return;}
     try {localStorage.setItem(TOKEN_KEY,key);} catch { /* Visit-only login. */ }
@@ -123,6 +133,7 @@ export function Ideas() {
             </> : <p class="idea-help">Jason can accept this preview into everyone’s game from his account.</p>}
           </section>}
           {thread.card.status==='shipped' && <a class="big-btn" href={LIVE_PLUNGE}>Play the updated game</a>}
+          {thread.card.status==='iced' && <button class="big-btn" type="button" disabled={busy} onClick={()=>void wake()}>Wake it up</button>}
           {hasIdeaDemo(thread.card) && <IdeaLink key={`${thread.card.id}:demo`} id={thread.card.id} preview busy={busy} onOpen={()=>trial.open(thread.card.id)}/>}
           <p class="idea-help">You can ask a question or clarify your idea below. {thread.card.lane==='hand' ? 'Jason is making this change by hand. Your replies go straight to him.' : thread.card.status==='building' ? 'Replies will be picked up when this pass finishes.' : 'You can say “let’s talk it through first” before asking for changes.'}</p>
           <ol class="idea-conversation" aria-label="Conversation">{thread.messages.map(message=><li key={message.id} class={message.role}><strong>{message.name}</strong><p>{message.body}</p><div class="screenshot-drafts">{message.screenshots?.map(image=><Screenshot key={image.id} image={image} token={token}/>)}</div><IdeaResult thread={thread} message={message} busy={busy} onTry={()=>trial.open(thread.card.id)} /></li>)}</ol>

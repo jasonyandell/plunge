@@ -11,7 +11,7 @@ export function IdeasBoard({view, onView, cards, loaded = true, busy = false, de
   const filters: {id: IdeaFilter; label: string}[] = [
     {id: 'current', label: 'Current ideas'}, {id: 'demos', label: 'Available demos'},
     {id: 'attention', label: 'Needs attention'}, {id: 'shipped', label: 'In the game'},
-    {id: 'closed', label: 'Set aside'},
+    {id: 'iced', label: 'On ice'}, {id: 'closed', label: 'Set aside'},
   ];
   const visible = cards.filter(card => {
     const {title, tags} = ideaPresentation(card);
