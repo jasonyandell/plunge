@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { IdeasBoard, type IdeasBoardView } from './IdeasBoard';
-import { ideaPresentation } from './presentation';
+import { ideaTitle } from './presentation';
 import { PreviewSignIn } from './PreviewSignIn';
 import { newId, readDraft } from './client';
 import { LIVE_PLUNGE, type IdeaThread } from './model';
@@ -61,8 +61,7 @@ export function IdeasDemo() {
     {current ? <>
       <button class="text-btn" onClick={()=>{setSelected(null);setNotice('');}}>← All ideas</button>
       <section class="idea-paper"><div class="idea-meta"><span>{current.card.name}’s idea</span><span class={`idea-status ${current.card.id===BID_ID?'ready':'queued'}`}>{current.card.id===BID_ID?'In the game':'Demo idea saved'}</span></div>
-        <h2>{ideaPresentation(current.card).title}</h2>
-        <ul class="idea-tags" aria-label="Topics">{ideaPresentation(current.card).tags.map(tag=><li key={tag}>{tag}</li>)}</ul>
+        <h2>{ideaTitle(current.card)}</h2>
         {current.card.id===BID_ID ? <>
           <ol class="demo-steps" aria-label="Example progress"><li>Idea shared</li><li>Change built</li><li>In the game</li></ol>
           <div class="demo-bid-example" aria-label="Illustration of the bidding fix"><div><small>Before</small><span>You</span></div><span aria-hidden="true">→</span><div><small>With your idea</small><span>You <b>Bid 30</b></span></div></div>

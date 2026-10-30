@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { IdeaActivity } from './IdeaActivity';
 import { IdeaResult } from './IdeaResult';
 import { IdeasBoard, type IdeasBoardView } from './IdeasBoard';
-import { hasIdeaDemo, ideaPresentation } from './presentation';
+import { hasIdeaDemo, ideaTitle } from './presentation';
 import { IdeaLink } from './IdeaLink';
 import { IdeaPreview, useIdeaPreview } from './IdeaPreview';
 import { PreviewSignIn } from './PreviewSignIn';
@@ -102,7 +102,7 @@ export function Ideas() {
     olderLoaded.current=true;setCards(c => [...c,...page.cards.filter(x=>!c.some(y=>y.id===x.id))]);setNext(page.next);
   } catch(e) {setError(String(e));}};
   if(trial.id && thread?.card.id===trial.id && name)
-    return <IdeaPreview pr={hasIdeaDemo(thread.card) ? thread.card.pr! : 0} title={ideaPresentation(thread.card).title} onClose={trial.close}/>;
+    return <IdeaPreview pr={hasIdeaDemo(thread.card) ? thread.card.pr! : 0} title={ideaTitle(thread.card)} onClose={trial.close}/>;
   return <main class="ideas-page">
     <header class="ideas-top"><a href="/">← Back to Plunge</a><span>Made together</span></header>
     <div class="ideas-heading"><p class="eyebrow">Our community game</p><h1>Ideas for Plunge</h1>
@@ -121,8 +121,7 @@ export function Ideas() {
       {selected ? <>
         <button class="text-btn" type="button" disabled={busy} onClick={()=>open(null)}>← All ideas</button>
         {thread ? <section class="idea-paper"><div class="idea-meta"><span>{thread.card.name}’s idea</span><span>Idea {thread.card.number}</span></div>
-          <h2>{ideaPresentation(thread.card).title}</h2>
-          <ul class="idea-tags" aria-label="Topics">{ideaPresentation(thread.card).tags.map(tag=><li key={tag}>{tag}</li>)}</ul>
+          <h2>{ideaTitle(thread.card)}</h2>
           <IdeaLink key={thread.card.id} id={thread.card.id} busy={busy}/>
           {accepting ? <p role="status" class="idea-notice">{thread.release!.note}</p> : <IdeaActivity card={thread.card} now={now} connected={connected} />}
           {thread.release?.status==='blocked' && thread.release.revision===thread.card.revision && thread.release.sha===thread.card.sha && thread.card.status!=='shipped' && <p role="status" class="idea-notice">{thread.release.note}</p>}

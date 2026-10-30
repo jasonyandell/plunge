@@ -90,7 +90,7 @@ try {
  await dad.page.getByRole('link',{name:'Open family ideas'}).click();
  await dad.page.getByLabel('Your idea',{exact:true}).fill('Show account-linked stats.');
  await dad.page.getByRole('button',{name:'Make an idea card'}).click();
- await dad.page.getByRole('heading',{name:'Show account-linked stats',exact:true}).waitFor();
+ await dad.page.getByRole('heading',{name:'Show account-linked stats.',exact:true}).waitFor();
  const ideaId=new URL(dad.page.url()).hash.slice('#idea='.length);
  assert.equal(await dad.page.getByRole('button',{name:'Approve full access'}).count(),0);
  await owner.page.goto(`${origin}/?ideas=1#idea=${ideaId}`);
@@ -103,7 +103,7 @@ try {
  assert.equal(await owner.page.locator('.idea-activity-dot').evaluate(el=>getComputedStyle(el).animationName),'none');
  await owner.page.getByRole('button',{name:'All ideas'}).click();
  await owner.page.locator('.idea-card').getByText('Working now',{exact:true}).waitFor();
- await owner.page.getByRole('button',{name:'Show account-linked stats',exact:true}).click();
+ await owner.page.getByRole('button',{name:'Show account-linked stats.',exact:true}).click();
  await owner.page.getByText('Working now',{exact:true}).waitFor();
  for(const width of [320,390]){await owner.page.setViewportSize({width,height:844});assert.ok(await owner.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
  await owner.page.screenshot({path:'/tmp/plunge-idea-working.png',fullPage:true});
@@ -184,7 +184,7 @@ try {
  await dad.page.waitForFunction(()=>!document.querySelector('input[type=file]').disabled);
  await dad.page.getByLabel('Choose screenshot').setInputFiles({name:'bidding.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
  await dad.page.getByRole('button',{name:'Make an idea card'}).click();
- await dad.page.getByRole('heading',{name:'Screenshot idea',exact:true}).waitFor();
+ await dad.page.getByRole('heading',{name:'Screenshot for this idea.',exact:true}).waitFor();
  console.log('PASS: screenshot upload/resize, red pen/undo, reload recovery, failed-send recovery, protected family viewing, image-only idea, narrow phone layouts.');
 
  // Invites: Dad saves a seat for Benny, who already has hands on his phone and has never signed in.
