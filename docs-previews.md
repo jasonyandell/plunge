@@ -29,19 +29,6 @@ To try a local-only build yourself: `npm run build:local-only`
 
 ## Real sign-in for the ideas dashboard
 
-### Idea headline demo (story 34)
-
-Open `/?ideas=1&demo=headlines` to edit a sample request and see the actual
-idea-card title formatter. The examples adapt stories #75, #37, and #73 from
-Git history; they are not quotations from family conversations. No sign-in,
-API calls, or storage writes are needed by the demo. PR #86's bare preview
-address opens it directly, including inside the card's Try button. This default
-is restricted to that preview host and a local-only build. Other preview hosts,
-production, explicit routes, and room/hand hashes retain their usual behavior.
-**Play Plunge** opens `/?play=1` to reach the game and its existing saved progress.
-
-### Dashboard access
-
 The preview home screen's **Open family ideas** link opens the dashboard. Choose
 **Sign in with Plunge** to open the stable account page in a new tab, use an existing
 passkey, then choose **Open dashboard demo**. The account page explains that this

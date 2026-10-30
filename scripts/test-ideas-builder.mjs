@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { allowedFile, approvedFiles, buildPrompt, run, modelArgs } from './ideas/builder.mjs';
+import { allowedFile, approvedFiles, buildPrompt, run, modelArgs, reopenIced } from './ideas/builder.mjs';
 test('the launched process receives explicit Astra High settings instead of CLI defaults',async()=>{
   const args=modelArgs();
   const output=await run(process.execPath,['-e','process.stdout.write(JSON.stringify(process.argv.slice(1)))','--',...args]);
@@ -245,4 +245,15 @@ test('screenshots are private archived inputs attached to both new and resumed s
     await assert.rejects(archiveScreenshots(config,job,root,async()=>new Response('x'.repeat(400001),{headers:{'content-type':'image/jpeg'}})),/too large/);
     await assert.rejects(archiveScreenshots(config,job,root,async()=>new Response('missing',{status:404})),/Could not load/);
   }finally{await rm(root,{recursive:true,force:true});}
+});
+test('waking reopens only a PR the builder put on ice, and clears its label',async()=>{
+  const fake=view=>{const calls=[];return {calls,github:async args=>{calls.push(args.slice(0,2).join(' '));return args[1]==='view'?JSON.stringify(view):'';}};};
+  const iced=fake({state:'CLOSED',labels:[{name:'on-ice'}]});
+  assert.equal(await reopenIced(7,iced.github),true);
+  assert.deepEqual(iced.calls,['pr view','pr reopen','pr edit']);
+  for(const view of [{state:'CLOSED',labels:[]},{state:'OPEN',labels:[{name:'on-ice'}]},{state:'MERGED',labels:[{name:'on-ice'}]}]) {
+    const other=fake(view);
+    assert.equal(await reopenIced(7,other.github),false);
+    assert.deepEqual(other.calls,['pr view']);
+  }
 });

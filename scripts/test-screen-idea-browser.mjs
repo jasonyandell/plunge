@@ -6,6 +6,12 @@ import {Miniflare} from 'miniflare';
 import {readFile} from 'node:fs/promises';
 import {resolve,extname} from 'node:path';
 import assert from 'node:assert/strict';
+// Home no longer has its own Share an idea link; Settings & more does.
+const openIdea=async page=>{
+ const more=page.locator('[data-entry="settings"]');
+ if(await more.count())await more.click();
+ await page.locator('button.more-row',{hasText:'Share an idea about this screen'}).click();
+};
 import {build} from 'esbuild';
 const origin='https://plunge.texas42.workers.dev',admin='a'.repeat(64);
 const bundled=await build({entryPoints:['worker/index.ts'],bundle:true,write:false,format:'esm',platform:'browser'});
@@ -59,7 +65,7 @@ try {
   const touch=await person(2,'Rose',0);
   touch.setDefaultTimeout(10000);
   await touch.goto(origin);
-  const tagline=touch.getByText('Pull up a chair.',{exact:true});
+  const tagline=touch.locator('.tagline');
   await tagline.waitFor();
   const style=await tagline.evaluate(e=>{const s=getComputedStyle(e);return {select:s.userSelect||s.webkitUserSelect,callout:s.webkitTouchCallout};});
   assert.equal(style.select,'none');
@@ -81,7 +87,7 @@ try {
  page.setDefaultTimeout(10000);
  const faults=[];page.on('pageerror',e=>faults.push(String(e)));
  await page.goto(origin);
- const deal=page.getByRole('button',{name:'Deal me in',exact:true});
+ const deal=page.locator('[data-entry="deal"]');
  await deal.waitFor();
  const box=await deal.boundingBox(),x=box.x+box.width/2,y=box.y+box.height/2;
  // Moving a finger to scroll must cancel the long press.
@@ -105,7 +111,7 @@ try {
  await page.screenshot({path:'/tmp/plunge-screen-capture-'+browser.browserType().name()+'.png'});
  // The initial capture is durable even if the page closes before markup completes.
  await page.reload();
- await page.getByRole('button',{name:'Share an idea',exact:true}).click();
+ await openIdea(page);
  await page.getByText('Your unfinished idea is here, with the picture you saved earlier.',{exact:true}).waitFor();
  await page.getByRole('button',{name:'Mark where you mean',exact:true}).click();
  await page.getByRole('button',{name:'Done marking',exact:true}).waitFor();
@@ -119,7 +125,7 @@ try {
   await page.getByRole('button',{name:'Save preview idea',exact:true}).click();
   await page.getByText('Saved on this device for this preview. Nothing was sent to the family.',{exact:true}).waitFor();
   await page.reload();
-  await page.getByRole('button',{name:'Share an idea',exact:true}).click();
+  await openIdea(page);
   assert.equal(await page.getByRole('textbox',{name:'Your idea',exact:true}).inputValue(),'Keep my screen and mark until I can send it.');
   assert.equal(await page.getByAltText('Screenshot 1 to send').getAttribute('src'),picture);
   assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM ideas').first()).n,0);
@@ -128,7 +134,7 @@ try {
  await page.getByRole('button',{name:'Save on this device',exact:true}).click();
  await page.getByText(/^Saved on this device\. Open Share an idea/).waitFor();
  await page.reload();
- await page.getByRole('button',{name:'Share an idea',exact:true}).click();
+ await openIdea(page);
  assert.equal(await page.getByRole('textbox',{name:'Your idea',exact:true}).inputValue(),'Keep my screen and mark until I can send it.');
  assert.equal(await page.getByAltText('Screenshot 1 to send').getAttribute('src'),picture);
  for(const width of [320,375,390,428]) {
@@ -141,13 +147,13 @@ try {
  await page.getByRole('alert').waitFor();
  assert.equal(await page.getByRole('textbox',{name:'Your idea',exact:true}).inputValue(),'Keep my screen and mark until I can send it.');
  await page.reload();
- await page.getByRole('button',{name:'Share an idea',exact:true}).click();
+ await openIdea(page);
  assert.equal(await page.getByAltText('Screenshot 1 to send').getAttribute('src'),picture);
  // Available account authentication wins over an old invite on this device.
  await page.evaluate(()=>localStorage.setItem('plunge:ideas-invite','b'.repeat(64)));
  failSend=false;
  await page.getByRole('button',{name:'Close · keep draft',exact:true}).click();
- await page.getByRole('button',{name:'Share an idea',exact:true}).click();
+ await openIdea(page);
  await page.getByRole('button',{name:'Make an idea card',exact:true}).click();
  await page.getByRole('link',{name:'Open your idea card',exact:true}).waitFor();
  const row=await db.prepare('SELECT member_id,account_id,body,screenshots FROM idea_messages WHERE role=?').bind('family').first();
@@ -156,7 +162,8 @@ try {
  assert.equal(JSON.parse(row.screenshots).length,1);
  assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM ideas').first()).n,1);
  await page.getByRole('button',{name:'Back to Plunge',exact:true}).click();
- await page.getByRole('button',{name:'Deal me in',exact:true}).click();
+ if(await page.getByRole('button',{name:'← Back',exact:true}).count())await page.getByRole('button',{name:'← Back',exact:true}).click();
+ await page.locator('[data-entry="deal"]').click();
  await page.getByLabel('Your hand',{exact:true}).waitFor();
  const auction=page.getByRole('dialog',{name:'Your bid',exact:true});
  await auction.waitFor({timeout:60000});

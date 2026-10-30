@@ -14,7 +14,7 @@ interface Member { id: string; name: string }
 interface Run { id: string; idea_id: string; revision: number; through_seq: number; state: string }
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 const BUILD_LEASE_MS=180000;
-const watchable = "(status IN ('checking','ready') OR (status='failed' AND (lane='hand' OR preview_revision=revision)))";
+const watchable = "(status IN ('checking','ready','waking') OR (status='failed' AND (lane='hand' OR preview_revision=revision)))";
 const cards = `SELECT i.number,i.id,m.name,i.title,i.context,i.created,i.updated,i.revision,i.status,i.pr,i.sha,i.preview,i.lane,(SELECT status FROM idea_releases r WHERE r.idea_id=i.id AND r.status IN ('queued','releasing','deploying') LIMIT 1) releaseStatus,CASE WHEN i.status='building' AND i.run_id IS NOT NULL THEN i.lease_until-${BUILD_LEASE_MS} ELSE NULL END heartbeat_at FROM ideas i JOIN idea_members m ON m.id=i.member_id`;
 type CardRow=IdeaCard & {heartbeat_at:number|null};
 function activityCard(row:CardRow):IdeaCard {
@@ -49,6 +49,19 @@ async function authorization(db:IdeasDatabase,idea:string,revision:number,throug
     JOIN idea_members m ON m.id=a.member_id WHERE p.idea_id=? AND p.revision=? AND a.owner=1 AND m.revoked=0
     ORDER BY p.created DESC LIMIT 1`).bind(idea,revision).first<{id:string}>();
   return approval?{scope:'repository',accountId:approval.id,source:'approval'}:{scope:'limited',accountId:null,source:'default'};
+}
+/** Ideas rest after quiet days; any family member can ask for one back. The builder reopens the
+ * PR and the card returns to Ready to try through the usual preview checks. */
+const ICEABLE = "status IN ('ready','failed','question')";
+async function wake(db: IdeasDatabase, idea: string, who: string|null, now: string) {
+  const card = await db.prepare("SELECT updated FROM ideas WHERE id=? AND status='iced'").bind(idea).first<{updated:string}>();
+  if (!card) return;
+  const note = who ? `${who} woke this idea up. Its preview will be back in a few minutes.` : 'Waking this idea up. Its preview will be back in a few minutes.';
+  await db.batch([
+    db.prepare(`INSERT OR IGNORE INTO idea_messages(id,idea_id,role,body,created) SELECT ?,id,'builder',?,? FROM ideas WHERE id=? AND status='iced'`)
+      .bind((await hash(`${idea}:wake:${card.updated}`)).slice(0,32), note, now, idea),
+    db.prepare(`UPDATE ideas SET status='waking',updated=? WHERE id=? AND status='iced'`).bind(now, idea),
+  ]);
 }
 async function thread(db: IdeasDatabase, idea: string, through = Number.MAX_SAFE_INTEGER) {
   const card = await db.prepare(`${cards} WHERE i.id=?`).bind(idea).first<CardRow>();
@@ -91,10 +104,15 @@ export async function ideasRequest(request: Request, env: IdeasEnv, previewAccou
       const { results } = await db.prepare(`${cards} WHERE i.number<? ORDER BY i.number DESC LIMIT 51`).bind(before).all<CardRow>();
       return json({ cards: results.slice(0, 50).map(activityCard), next: results.length > 50 ? results[49]!.number : null });
     }
-    const match = /^\/([a-f0-9]{32})(\/(?:messages|approve|accept))?$/.exec(path);
+    const match = /^\/([a-f0-9]{32})(\/(?:messages|approve|accept|wake))?$/.exec(path);
     if (!match) return json({ error: 'Not found.' }, 404);
     const idea = match[1]!;
     if (request.method === 'GET' && !match[2]) { const found = await thread(db, idea); return found ? json(found) : json({ error: 'Idea not found.' }, 404); }
+    if(match[2]==='/wake' && request.method==='POST') {
+      await wake(db,idea,member.name,new Date().toISOString());
+      const found=await thread(db,idea);
+      return found ? json(found) : json({error:'Idea not found.'},404);
+    }
     if(match[2]==='/accept' && request.method==='POST') {
       if(previewAccount || !session?.owner)return json({error:'Sign in to the owner account in the main game to accept this preview.'},403);
       const result=await acceptIdea(db,idea,session.id,await body(request));
@@ -158,6 +176,8 @@ export async function ideasRequest(request: Request, env: IdeasEnv, previewAccou
       if(duplicate?.idea_id===idea && duplicate.member_id===member.id)return json(await thread(db,idea));
       return json({error:'This preview is being added to the game. Your reply is saved on this device; send it after the release finishes.'},409);
     }
+    // A reply to a resting idea wakes it. Builder cards are already queued by the reply trigger.
+    await wake(db,idea,null,now);
     return json(await thread(db,idea));
   } catch (error) {
     if (error instanceof SyntaxError || (error instanceof Error && /message|identifier/i.test(error.message))) return json({ error: error.message }, 400);
@@ -188,6 +208,12 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
   if(imageMatch && request.method==='GET')return await screenshotResponse(db,imageMatch[2]!,imageMatch[1]!);
   if (path === '/admin/tracked' && request.method === 'GET') {
     return json((await db.prepare(`${cards} WHERE i.pr IS NOT NULL AND ${watchable} AND NOT EXISTS(SELECT 1 FROM idea_releases r WHERE r.idea_id=i.id AND r.status IN ('queued','releasing','deploying')) ORDER BY i.number`).all<CardRow>()).results.map(activityCard));
+  }
+  if (path === '/admin/stale' && request.method === 'GET') {
+    const before = new URL(request.url).searchParams.get('before') ?? '';
+    if (Number.isNaN(Date.parse(before))) return json({error:'Use ?before=ISO time.'},400);
+    return json((await db.prepare(`${cards} WHERE i.pr IS NOT NULL AND i.${ICEABLE} AND i.updated<? AND NOT EXISTS(SELECT 1 FROM idea_releases r WHERE r.idea_id=i.id AND r.status IN ('queued','releasing','deploying')) ORDER BY i.number`)
+      .bind(before).all<CardRow>()).results.map(activityCard));
   }
   if (request.method !== 'POST') return json({error:'Method not allowed.'},405);
   const data = await body(request), now = new Date().toISOString();
@@ -224,6 +250,20 @@ async function adminRequest(request: Request, path: string, db: IdeasDatabase): 
       .bind(now,id(data.id)).first();
     return json(retried ? {ok:true} : {error:'Only a waiting or stopped idea can be retried.'},retried ? 200 : 409);
   }
+  if (path === '/admin/ice') {
+    const idea=id(data.id), before=String(data.before ?? '');
+    if (Number.isNaN(Date.parse(before))) return json({error:'Missing quiet-since time.'},400);
+    // Still quiet and still idle: a reply or build since the builder looked keeps it awake.
+    const card = await db.prepare(`SELECT updated FROM ideas WHERE id=? AND ${ICEABLE} AND updated<?`).bind(idea,before).first<{updated:string}>();
+    if (!card) return json({error:'This idea changed since it was checked.'},409);
+    await db.batch([
+      db.prepare(`INSERT OR IGNORE INTO idea_messages(id,idea_id,role,body,created) SELECT ?,id,'builder',?,? FROM ideas WHERE id=? AND ${ICEABLE} AND updated<?`)
+        .bind((await hash(`${idea}:ice:${card.updated}`)).slice(0,32),'This idea is resting after three quiet days, so its preview is put away. Anyone can wake it up from this card, or just reply.',now,idea,before),
+      db.prepare(`UPDATE ideas SET status='iced',preview=NULL,updated=? WHERE id=? AND ${ICEABLE} AND updated<?`).bind(now,idea,before),
+    ]);
+    return json(await thread(db,idea));
+  }
+  if (path === '/admin/wake') { await wake(db,id(data.id),null,now); const found=await thread(db,id(data.id)); return found ? json(found) : json({error:'Idea not found.'},404); }
   if (path === '/admin/members') {
     const name = field(data.name, 40), token = hex(crypto.getRandomValues(new Uint8Array(32))), member = hex(crypto.getRandomValues(new Uint8Array(16)));
     await db.prepare('INSERT INTO idea_members(id,name,token_hash) VALUES(?,?,?)').bind(member,name,await hash(token)).run();

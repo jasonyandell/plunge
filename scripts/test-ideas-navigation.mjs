@@ -37,7 +37,7 @@ for(const engine of [chromium,webkit]) {
     await page.getByLabel('Keep the conversation going').fill('Make my bid bigger, please.');
     await page.getByRole('link',{name:'Try your change'}).click();
     const frame=page.frameLocator('iframe');
-    await frame.getByRole('button',{name:'Deal me in',exact:true}).click();
+    await frame.locator('[data-entry="deal"]').click();
     await frame.getByRole('dialog',{name:'Your bid',exact:true}).waitFor({timeout:60000});
     await frame.getByRole('button',{name:/^Bid \d/}).first().click();
     assert.equal(new URL(page.url()).origin,origin);assert.equal(context.pages().length,1);
