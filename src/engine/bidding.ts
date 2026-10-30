@@ -67,9 +67,8 @@ export function legalBids(state: GameState): Bid[] {
   const out: Bid[] = [];
   if (!forced) out.push(PASS);
 
-  // A forced points bid is exactly 30; otherwise raise on the normal 30–41 ladder.
-  const maxPoints = forced ? MIN_POINTS_BID : MAX_POINTS_BID;
-  for (let v = Math.max(MIN_POINTS_BID, curStr + 1); v <= maxPoints; v++) {
+  // Points bids 30–41, strictly above the current high bid.
+  for (let v = Math.max(MIN_POINTS_BID, curStr + 1); v <= MAX_POINTS_BID; v++) {
     out.push({ kind: 'points', value: v });
   }
 
