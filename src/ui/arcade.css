@@ -1,0 +1,118 @@
+/* Presentation only: keep the table's layout, hit targets, and game state.
+   System monospace lettering works offline; the grid stays behind the UI. */
+:root {
+  --cream: #fff1d6;
+  --ivory: #fff8e8;
+  --butterscotch: #ffd45c;
+  --gold: #a56a00;
+  --brown-9: #17182e;
+  --teal: #30458f;
+  --teal-ink: #30458f;
+  --teal-bright: #83f4df;
+  --display: "Courier New", Courier, monospace;
+  --arcade-dark: #101126;
+  --arcade-panel: #202343;
+  --arcade-edge: #777fbb;
+}
+
+body {
+  font-family: var(--display);
+  background-color: var(--arcade-dark);
+  background-image:
+    linear-gradient(#777fbb0c 1px, transparent 1px),
+    linear-gradient(90deg, #777fbb0c 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* Hard edges and offset shadows evoke cartridge-era menus without shrinking
+   controls or drawing scanlines over text. Light panels retain dark text. */
+.home-card, .sheet, .card, .player-change-dialog {
+  border: 2px solid var(--arcade-edge);
+  border-radius: 0;
+  background: var(--cream);
+  box-shadow: 5px 5px 0 var(--arcade-dark);
+}
+
+.title, .sheet-title, .card-title, .more-title, .back-bar h1 {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  overflow-wrap: anywhere;
+}
+.title {
+  font-size: clamp(36px, 10vw, 54px);
+  color: var(--teal-ink);
+  text-shadow: 3px 3px 0 #d5a74b;
+}
+.tagline { font-size: 18px; }
+.home-tile strong { white-space: normal; }
+.link-row { flex-wrap: wrap; }
+.home-dominoes .dom:first-child,
+.home-dominoes .dom:last-child { transform: none; }
+
+.big-btn, .step-btn, .bid-go, .bid-chip, .bid-pass, .decl-btn,
+.seg, .seg-btn, .home-tile, .home-table, .thinking-switch,
+.switch-track, .switch-track > span,
+.menu-btn, .hand-tool, .hist-toggle, .suit-card, .status-tallies,
+.badge, .bubble, .you-label, .practice-chip, .hist-panel, .hist-cell,
+.thinking-note, .thinking-pips i, .room-bar button, .room-bar-link {
+  border-radius: 0;
+}
+.big-btn, .step-btn, .bid-go, .bid-chip, .bid-pass, .decl-btn {
+  box-shadow: inset -3px -3px 0 #10112626;
+}
+.big-btn.secondary { box-shadow: none; }
+
+.status, .back-bar, .hand-tools, .info-bar, .room-bar {
+  background: var(--arcade-dark);
+  border-bottom-color: var(--arcade-edge);
+}
+.status-tallies, .suit-card, .thinking-note, .hist-panel, .room-tricks {
+  background: var(--arcade-panel);
+  border-color: var(--arcade-edge);
+}
+.suit-led { border-color: var(--teal-bright); }
+.suit-label, .suit-detail, .hand-caption, .thinking-words > span,
+.table-player { color: #d0d4f2; }
+.suit-name { color: var(--butterscotch); font-size: 20px; font-weight: 700; }
+.suit-led .suit-name { color: var(--teal-bright); }
+.seat-tag { font-family: inherit; }
+.seat.active .seat-name {
+  color: var(--butterscotch);
+  text-shadow: none;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.bubble { box-shadow: 2px 2px 0 var(--arcade-dark); }
+.bubble.thinking { background: #d0d4f2; }
+.you-label { background: var(--teal); border-color: var(--teal-bright); }
+.trick {
+  border-radius: 0;
+  border: 2px solid var(--arcade-edge);
+  background: var(--arcade-panel);
+  box-shadow: inset 0 0 0 3px var(--arcade-dark);
+}
+.trick-note { font-style: normal; }
+.thinking-note { box-shadow: none; }
+.tally-stroke { stroke-linecap: square; stroke-linejoin: miter; }
+
+/* Square pips keep the familiar pip arrangements and accessible tile names. */
+.dom-svg { filter: drop-shadow(2px 2px 0 #080916); }
+.dom-face { stroke: #777fbb; }
+.dom-pip { fill: #17182e; }
+.dom-bar { stroke: #777fbb; stroke-linecap: square; }
+.dom-bar.gold { stroke: var(--gold); }
+.dom-back { fill: #30458f; stroke: #9faaff; }
+.dom-back-inner { stroke: #9faaff; }
+.dom-back-dot { fill: var(--butterscotch); }
+.trick-slot.led .dom-svg { filter: drop-shadow(2px 2px 0 var(--teal-bright)); }
+.trick-slot.won .dom-svg { filter: drop-shadow(3px 3px 0 var(--butterscotch)); }
+.hist-won { box-shadow: inset 0 0 0 2px var(--butterscotch); }
+.hist-sel { box-shadow: inset 0 0 0 2px var(--teal-bright); }
+
+/* Keep keyboard focus explicit on both dark tables and light dialogs.
+   Existing reduced-motion rules remain in charge of all animation. */
+.dom:focus-visible { outline: 3px solid var(--teal-bright); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  .dom-legal, .dom-legal:active { border-radius: 0; outline-color: var(--teal-bright); }
+}
