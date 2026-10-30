@@ -33,6 +33,16 @@ describe('Zeb at the Plunge boundary',()=>{
     g=applyAction(fresh(),{type:'bid',bid:{kind:'marks',value:2}});
     expect(zebAuctionAction(g,forecasts())).toEqual({type:'bid',bid:{kind:'pass'}});
   });
+  it('bids only what wins when nobody is left to outbid',()=>{
+    let g=fresh();for(let i=0;i<3;i++)g=applyAction(g,{type:'bid',bid:{kind:'pass'}});
+    expect(zebAuctionAction(g,forecasts())).toEqual({type:'bid',bid:{kind:'points',value:30}});
+    g=applyAction(fresh(),{type:'bid',bid:{kind:'points',value:31}});
+    for(let i=0;i<2;i++)g=applyAction(g,{type:'bid',bid:{kind:'pass'}});
+    expect(zebAuctionAction(g,forecasts())).toEqual({type:'bid',bid:{kind:'points',value:32}});
+    // Earlier bidders still bid their ceiling to keep the bid away from later ones.
+    g=applyAction(fresh(),{type:'bid',bid:{kind:'pass'}});
+    expect(zebAuctionAction(g,forecasts())).toEqual({type:'bid',bid:{kind:'points',value:36}});
+  });
   it('forecasts an arbitrary hand without a book and reuses that forecast when declaring',async()=>{
     const g=fresh(), seat=g.turn!, evaluate=vi.fn(async()=>({value:forecasts(),version:version(),net:netId(),elapsed_us:1}));
     const d=await zebAuctionMove(g,seat,'test',undefined,undefined,evaluate);

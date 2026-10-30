@@ -6,6 +6,7 @@ import { waltDeclarationOf, waltDeclId } from '../walt/requests';
 import { digest, putReceipt, putEstimate } from '../phone/records';
 import { BUILD_ID } from '../../ui/update';
 import { runZeb, type ZebForecast, type ZebPlay } from './client';
+import { cheapestLastBid } from '../last-bid';
 
 import { PLAYERS } from '../players';
 export const ZEB_PLAYER = PLAYERS.zeb.receiptName;
@@ -46,7 +47,7 @@ export function zebAuctionAction(g: GameState, forecast: Forecast[]): Action {
   const need = target(choices[0]!)!;
   const chosen = chooseBid(forecast, { need, cutoff: ZEB_CUTOFF });
   const action = chosen && choices.find(a => target(a) === chosen.bid);
-  if (action) return action;
+  if (action) return cheapestLastBid(g, action);
   if (pass) return pass;
   if (choices[0]) return choices[0]; // the engine's forced minimum
   throw new Error('Zeb has no legal bid.');
