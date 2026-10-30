@@ -1,7 +1,7 @@
 /**
  * <Domino> — a single crisp SVG domino tile.
  * Face up or down, vertical (hand) or horizontal (trick), real pip layouts,
- * divider bar, rounded corners. Count dominoes get a gold accent.
+ * divider bar, square pixels. Count dominoes get a gold accent.
  * Sized entirely by CSS (the wrapper has an aspect-ratio), so the same
  * component serves 46px hand tiles and 20px opponent minis.
  */
@@ -49,11 +49,12 @@ function Half({ n, dx, dy, transpose }: HalfProps) {
   return (
     <g transform={`translate(${dx} ${dy})`}>
       {pipCenters(n).map(([x, y]) => (
-        <circle
+        <rect
           key={`${x}-${y}`}
-          cx={transpose ? y : x}
-          cy={transpose ? x : y}
-          r={10}
+          x={(transpose ? y : x) - 9}
+          y={(transpose ? x : y) - 9}
+          width={18}
+          height={18}
           class="dom-pip"
         />
       ))}
@@ -82,15 +83,15 @@ export function Domino({ id, faceDown, orientation = 'v', state = 'idle', intera
 
   const face = faceDown ? (
     <svg viewBox={`0 0 ${w} ${h}`} class="dom-svg" aria-hidden="true">
-      <rect x={3} y={3} width={w - 6} height={h - 6} rx={14} class="dom-back" />
-      <rect x={12} y={12} width={w - 24} height={h - 24} rx={9} class="dom-back-inner" />
-      <circle cx={w / 2} cy={h / 2} r={8} class="dom-back-dot" />
+      <rect x={3} y={3} width={w - 6} height={h - 6} class="dom-back" />
+      <rect x={12} y={12} width={w - 24} height={h - 24} class="dom-back-inner" />
+      <rect x={w / 2 - 8} y={h / 2 - 8} width={16} height={16} class="dom-back-dot" />
     </svg>
   ) : d ? (
     <svg viewBox={`0 0 ${w} ${h}`} class="dom-svg" aria-hidden="true">
-      <rect x={3} y={3} width={w - 6} height={h - 6} rx={14} class="dom-face" />
+      <rect x={3} y={3} width={w - 6} height={h - 6} class="dom-face" />
       {isCount && (
-        <rect x={6.5} y={6.5} width={w - 13} height={h - 13} rx={11} class="dom-count-ring" />
+        <rect x={6.5} y={6.5} width={w - 13} height={h - 13} class="dom-count-ring" />
       )}
       {horiz ? (
         <line x1={100} y1={14} x2={100} y2={86} class={isCount ? 'dom-bar gold' : 'dom-bar'} />

@@ -32,6 +32,7 @@ import { syncStats } from '../history/stats-sync';
 import { Questions } from './Questions';
 import { attachGame, syncQuestions } from '../questions/client';
 import { IdentityChip } from '../account/IdentityChip';
+import './arcade.css';
 
 export function App() {
   const [app, reduce] = useReducer((state: AppState, event: AppEvent) => {
