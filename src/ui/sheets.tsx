@@ -12,6 +12,7 @@ import {
   bidLabel, gameOverCopy, handOverCopy,
 } from './store';
 import { Tally } from './Tally';
+import { VictoryPicture } from './VictoryPicture';
 import { BiddingHint } from './BiddingHint';
 import './sheets.css';
 
@@ -271,7 +272,8 @@ export function GameOverSheet({ g, dispatch, onReview, onHistory, practice, onUn
   const won = g.winner === 0;
   return (
     <div class="overlay">
-      <div class={`card ${won ? 'card-win' : 'card-loss'}`} role="dialog" aria-label="Game over">
+      <div class={`card game-over-card ${won ? 'card-win' : 'card-loss'}`} role="dialog" aria-label="Game over">
+        <VictoryPicture won={won} />
         <p class="eyebrow">{won ? 'A good game' : 'Until the next hand'}{practice && ' · Practice'}</p>
         <h2 class="card-title">{copy.title}</h2>
         <p class="card-detail">{copy.detail}</p>
