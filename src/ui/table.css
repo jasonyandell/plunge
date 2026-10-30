@@ -223,6 +223,16 @@
   display: flex;
   flex-direction: column;
   padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+  /* Still, decorative blossoms beside the partner's hand. Backgrounds keep
+     them outside the accessibility tree and out of the way of every tap. */
+  background-image: url('./cherry-blossoms.svg'), url('./cherry-blossoms.svg');
+  background-repeat: no-repeat;
+  background-position: left 8px top 8px, right 8px top 8px;
+  background-size: clamp(56px, 18vw, 86px) auto;
+}
+
+@media (forced-colors: active) {
+  .felt { background-image: none; }
 }
 
 .seat-name {
