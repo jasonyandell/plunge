@@ -36,7 +36,7 @@ describe('hint questions preserve pre-action advice', () => {
     expect(() => validQuestion({ ...q, hint: badPhase })).toThrow();
     const b = hintQuestion(auctionFixture(), bookEvidence());
     expect(() => validQuestion({ ...b, hint: { ...bookEvidence(), explored_target: 99 } })).toThrow();
-    const bad = structuredClone(bookEvidence()); if (bad.kind === 'move') throw new Error();
+    const bad = structuredClone(bookEvidence()); if (bad.kind === 'move' || bad.source === 'zeb') throw new Error();
     bad.advice.panels[0]!.tails[1] = 99999;
     expect(() => validQuestion({ ...b, hint: bad })).toThrow(/counts/);
     expect(validUpdate(q, b)).toBe(false);
@@ -94,7 +94,7 @@ describe('hint questions preserve pre-action advice', () => {
   });
   it('keeps complete hint evidence immutable while permitting notes and completion', () => {
     const g = auctionFixture(), q = hintQuestion(g,bookEvidence(g));
-    const changed = structuredClone(q); if (changed.hint?.kind !== 'bid') throw new Error();
+    const changed = structuredClone(q); if (changed.hint?.kind !== 'bid' || changed.hint.source === 'zeb') throw new Error();
     changed.hint.advice.panels[0]!.tails[0] = changed.hint.advice.panels[0]!.tails[0]! - 1;
     expect(validUpdate(q,changed)).toBe(false);
     expect(validUpdate(q,{...q,note:'Added note'})).toBe(true);
