@@ -6,7 +6,6 @@ import { dominoCounter } from './domino-counter';
 import { partnerBadge } from './partner-badge';
 import { flashLetIn } from './flash-let-in';
 import { voteNotice } from './vote-notice';
-import { redBackground } from './red-background';
 import { dragArrange } from './drag-arrange';
 import { nelloSitoutView } from './nello-sitout-view';
 import { cherryBlossoms } from './cherry-blossoms';
