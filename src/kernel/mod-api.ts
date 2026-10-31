@@ -5,7 +5,7 @@ import type { GameState, Seat } from '../engine';
 
 export { store, type ModStore } from './store';
 export { Domino, dominoAriaLabel } from '../ui/Domino';
-export { PIP_SUIT_NAMES } from '../ui/store';
+export { PIP_SUIT_NAMES, bidLabel, contractLabel, declLabel, ledChip, trumpChip } from '../ui/wording';
 
 /** Read-only view of the table, from the viewer's chair. */
 export interface TableSlotProps {
