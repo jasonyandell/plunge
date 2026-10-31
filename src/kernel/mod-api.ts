@@ -7,6 +7,7 @@ import type { Proposal, Vote } from '../room/protocol';
 export { store, type ModStore } from './store';
 export { Domino, dominoAriaLabel } from '../ui/Domino';
 export { PIP_SUIT_NAMES, bidLabel, contractLabel, declLabel, ledChip, trumpChip } from '../ui/wording';
+export { BookDetails, ForecastDetails, waltAuctionAdvice, zebAuctionAdvice, type WaltAuctionAdvice, type ZebAuctionAdvice } from './advice';
 export type { Proposal, Vote };
 
 /** Read-only view of the table, from the viewer's chair. */
