@@ -5,5 +5,6 @@ import { biddingHint } from './bidding-hint';
 import { dominoCounter } from './domino-counter';
 import { partnerBadge } from './partner-badge';
 import { flashLetIn } from './flash-let-in';
+import { voteNotice } from './vote-notice';
 
-export const MODS: readonly ModManifest[] = [biddingHint, dominoCounter, partnerBadge, flashLetIn];
+export const MODS: readonly ModManifest[] = [biddingHint, dominoCounter, partnerBadge, flashLetIn, voteNotice];
