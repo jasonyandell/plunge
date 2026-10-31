@@ -23,7 +23,7 @@ const visit = (search: string, storage: Storage = memory()) => {
 };
 afterEach(() => { vi.unstubAllGlobals(); reloadMods(); });
 
-const mod = (id: string, defaultOn: boolean, slots: ModSlots = {}): ModManifest => ({ id, title: id, summary: '', defaultOn, scope: 'device', slots });
+const mod = (id: string, defaultOn: boolean, slots: ModSlots = {}): ModManifest => ({ id, title: id, summary: '', category: 'looks', details: '', defaultOn, scope: 'device', slots });
 const mods = [mod('on-by-default', true), mod('off-by-default', false)];
 
 describe('which mods are on', () => {

@@ -119,10 +119,24 @@ export type FnSlotName = keyof SlotFns;
 export const REPLACING_SLOTS = ['hand'] as const satisfies readonly SlotName[];
 export type ModSlots = { [N in SlotName]?: ComponentType<SlotProps[N]> } & { [N in FnSlotName]?: SlotFns[N] };
 
+/** More → Mods groups mods under these, in this order; a category with no mods doesn't show. */
+export const MOD_CATEGORIES = [
+  { id: 'help', title: 'Helpers', gist: 'Advice and counting while you play.' },
+  { id: 'table', title: 'At the table', gist: 'How your hand and seats look and behave.' },
+  { id: 'family', title: 'Family tables', gist: 'Things that only matter in a shared room.' },
+  { id: 'looks', title: 'Looks and fun', gist: 'Art, animation and flourishes.' },
+  { id: 'rules', title: 'Rules of the game', gist: 'Variants of 42 the whole table plays by. Set by whoever opens the table.' },
+  { id: 'players', title: 'Computer players', gist: 'How Walt and Zeb bid and play. Set per table.' },
+] as const;
+export type ModCategory = typeof MOD_CATEGORIES[number]['id'];
+
 export interface ModManifest {
   id: string;
   title: string;
   summary: string;
+  category: ModCategory;
+  /** A paragraph for the row's details: what it changes and where it came from. */
+  details: string;
   defaultOn: boolean;
   scope: 'device';
   slots: ModSlots;
