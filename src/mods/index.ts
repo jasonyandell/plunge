@@ -3,5 +3,6 @@
 import type { ModManifest } from '../kernel/mod-api';
 import { biddingHint } from './bidding-hint';
 import { dominoCounter } from './domino-counter';
+import { nelloSitoutView } from './nello-sitout-view';
 
-export const MODS: readonly ModManifest[] = [biddingHint, dominoCounter];
+export const MODS: readonly ModManifest[] = [biddingHint, dominoCounter, nelloSitoutView];
