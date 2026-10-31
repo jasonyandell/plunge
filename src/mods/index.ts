@@ -15,5 +15,5 @@ import { shuffleFlourish } from './shuffle-flourish';
 import { birdwatcher } from './birdwatcher';
 import { bramMascot } from './bram-mascot';
 
-export const MODS: readonly ModManifest[] = [biddingHint, dominoCounter, partnerBadge, flashLetIn, voteNotice, redBackground,
-  nelloSitoutView, dragArrange, cherryBlossoms, winnerCongrats, shuffleFlourish, birdwatcher, bramMascot];
+export const MODS: readonly ModManifest[] = [biddingHint, dominoCounter, partnerBadge, flashLetIn, voteNotice,
+  nelloSitoutView, dragArrange, cherryBlossoms, winnerCongrats, shuffleFlourish, birdwatcher];
