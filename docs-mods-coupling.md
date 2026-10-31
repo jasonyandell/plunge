@@ -49,8 +49,9 @@
 
 - `home.entry` / `screens` (PR 88 challenges): needs `Screen` opened to strings. Next when a mod needs it.
 - An event bus: decor gets `ui` flags and `game`; mods derive deals/tricks themselves.
-- An interaction tick for "the player tapped" (PR 62 birdwatch resets on illegal taps). A `hand`
-  replacement sees taps; decor does not. Add a counter to `TableUi` when birdwatch is built.
+- An interaction tick for "the player tapped" (PR 62 birdwatch resets on illegal taps). Not needed:
+  `birdwatcher` listens for `pointerdown`/`keydown` on `document`, so any tap anywhere restarts its
+  pause (PR 62 counted only taps on your dominoes).
 - `ai.bid.adjust` (PR 79): changes the game for everyone; needs a table scope and room agreement,
   not a device switch.
 - A dispatch for auction slots: no mod needs to bid for you yet.
