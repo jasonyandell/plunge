@@ -35,18 +35,25 @@ function saveChoices(choices: Choices): boolean {
 
 interface ModState { device: Choices; link: Choices; enabled: ReadonlySet<string> }
 let state: ModState | null = null;
+
+/** Mods scope CSS that styles core under `:root[data-mods~="<id>"]`; see docs-mods.md. */
+export const MODS_ATTRIBUTE = 'data-mods';
+function settle(device: Choices, link: Choices): ModState {
+  const next = { device, link, enabled: enabledMods(MODS, device, link) };
+  if (typeof document !== 'undefined') document.documentElement.setAttribute(MODS_ATTRIBUTE, [...next.enabled].join(' '));
+  return next;
+}
 const listeners = new Set<() => void>();
 
 function current(): ModState {
   if (!state) {
-    const device = loadChoices(), link = linkChoices(typeof location === 'undefined' ? '' : location.search);
-    state = { device, link, enabled: enabledMods(MODS, device, link) };
+    state = settle(loadChoices(), linkChoices(typeof location === 'undefined' ? '' : location.search));
   }
   return state;
 }
 
 function update(device: Choices, link: Choices): void {
-  state = { device, link, enabled: enabledMods(MODS, device, link) };
+  state = settle(device, link);
   saveChoices(device);
   for (const listener of listeners) listener();
 }

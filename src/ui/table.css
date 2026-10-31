@@ -218,8 +218,10 @@
 /* ---------- felt / seats ---------- */
 
 .felt {
+  position: relative; /* Holds the table-decor slot. */
   flex: 1;
   min-height: 0;
+  background: var(--felt-background);
   display: flex;
   flex-direction: column;
   padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
