@@ -5,5 +5,6 @@ import { biddingHint } from './bidding-hint';
 import { dominoCounter } from './domino-counter';
 import { cherryBlossoms } from './cherry-blossoms';
 import { winnerCongrats } from './winner-congrats';
+import { shuffleFlourish } from './shuffle-flourish';
 
-export const MODS: readonly ModManifest[] = [biddingHint, dominoCounter, cherryBlossoms, winnerCongrats];
+export const MODS: readonly ModManifest[] = [biddingHint, dominoCounter, cherryBlossoms, winnerCongrats, shuffleFlourish];
