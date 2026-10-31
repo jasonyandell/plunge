@@ -6,5 +6,6 @@ import { dominoCounter } from './domino-counter';
 import { partnerBadge } from './partner-badge';
 import { flashLetIn } from './flash-let-in';
 import { voteNotice } from './vote-notice';
+import { redBackground } from './red-background';
 
-export const MODS: readonly ModManifest[] = [biddingHint, dominoCounter, partnerBadge, flashLetIn, voteNotice];
+export const MODS: readonly ModManifest[] = [biddingHint, dominoCounter, partnerBadge, flashLetIn, voteNotice, redBackground];

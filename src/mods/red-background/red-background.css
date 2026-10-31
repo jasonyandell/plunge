@@ -1,0 +1,9 @@
+:root[data-mods~="red-background"] {
+  --page-background-color: #70181e;
+  --page-background-image:
+    radial-gradient(ellipse at 50% 18%, rgba(232, 183, 113, 0.16), transparent 72%),
+    repeating-linear-gradient(176deg,
+      rgba(255, 233, 195, 0.018) 0 2px, transparent 2px 19px,
+      rgba(10, 7, 4, 0.025) 19px 21px, transparent 21px 43px),
+    linear-gradient(145deg, #8b2026, #70181e 65%, #541116);
+}
