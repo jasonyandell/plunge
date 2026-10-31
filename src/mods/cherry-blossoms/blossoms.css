@@ -1,0 +1,9 @@
+/* Still blossoms in the felt's top corners: a background, so out of the way of taps and screen readers. */
+:root[data-mods~="cherry-blossoms"] {
+  --felt-background:
+    url('./cherry-blossoms.svg') no-repeat left 8px top 8px / clamp(56px, 18vw, 86px) auto,
+    url('./cherry-blossoms.svg') no-repeat right 8px top 8px / clamp(56px, 18vw, 86px) auto;
+}
+@media (forced-colors: active) {
+  :root[data-mods~="cherry-blossoms"] { --felt-background: none; }
+}

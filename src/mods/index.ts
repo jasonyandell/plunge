@@ -9,5 +9,11 @@ import { voteNotice } from './vote-notice';
 import { redBackground } from './red-background';
 import { dragArrange } from './drag-arrange';
 import { nelloSitoutView } from './nello-sitout-view';
+import { cherryBlossoms } from './cherry-blossoms';
+import { winnerCongrats } from './winner-congrats';
+import { shuffleFlourish } from './shuffle-flourish';
+import { birdwatcher } from './birdwatcher';
+import { bramMascot } from './bram-mascot';
 
-export const MODS: readonly ModManifest[] = [biddingHint, dominoCounter, partnerBadge, flashLetIn, voteNotice, redBackground, nelloSitoutView, dragArrange];
+export const MODS: readonly ModManifest[] = [biddingHint, dominoCounter, partnerBadge, flashLetIn, voteNotice, redBackground,
+  nelloSitoutView, dragArrange, cherryBlossoms, winnerCongrats, shuffleFlourish, birdwatcher, bramMascot];
