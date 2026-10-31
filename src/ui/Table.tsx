@@ -19,6 +19,7 @@ import type { ComponentChildren } from 'preact';
 import type { CompletedTrick, GameState, PlayRecord, Seat } from '../engine';
 import { legalDominoes } from '../engine';
 import { Domino } from './Domino';
+import { Slot } from '../kernel/Slot';
 import { Tally } from './Tally';
 import { YourBid } from './YourBid';
 import type { AppEvent, AppState } from './store';
@@ -185,6 +186,7 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
           <OpponentSide g={g} seat={3} thinking={thinking} note={seatNote(3) ?? (!app.room && !scenario ? playerLabel(app.settings.difficulty, g) : null)} />
         </div>
         <div class="hand-area">
+          <Slot name="table-above-hand" props={{ game: g, seat: HUMAN_SEAT }} />
           <div class="hand-heading">
             <p class={`hand-caption${humanTurn && !showingLast ? ' your-turn' : ''}`} role="status">
               <span class="hand-identity"><strong class="you-label">You</strong><YourBid g={g} seat={HUMAN_SEAT} /></span>
