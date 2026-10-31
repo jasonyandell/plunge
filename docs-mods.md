@@ -26,12 +26,30 @@ To add a mod: make `src/mods/<id>/`, export a manifest from its `index.tsx`, and
 export const myMod: ModManifest = {
   id: 'my-mod',            // also the folder name and the ?mods= word
   title: 'My mod',         // shown in More → Mods
-  summary: 'One sentence.',// shown under the switch
+  summary: 'One sentence.',// shown in the mod's row, beside its switch
+  category: 'looks',       // which group it sits in (below)
+  details: 'A paragraph.', // shown when the row is tapped open
   defaultOn: false,        // family mods ship dark; built-in features ship on
   scope: 'device',         // the only scope so far: each device decides
   slots: { 'table-above-hand': MyPart },
 };
 ```
+
+`details` says what the mod changes, anything it leaves alone, and where it came from in plain words
+("From Rose's idea on the ideas board (#81)."). The row's details add the scope in words. Search in
+More → Mods matches title, summary and details.
+
+`category` is one of `MOD_CATEGORIES` in mod-api, shown in this order, each heading with its gist.
+A category with no mods (or none matching the search) doesn't show.
+
+| id | Heading | For |
+| --- | --- | --- |
+| `help` | Helpers | advice and counting while you play |
+| `table` | At the table | how your hand and seats look and behave |
+| `family` | Family tables | things that only matter in a shared room |
+| `looks` | Looks and fun | art, animation and flourishes |
+| `rules` | Rules of the game | variants the whole table plays by, set by whoever opens the table (none yet) |
+| `players` | Computer players | how Walt and Zeb bid and play, set per table (none yet) |
 
 ## Slots
 
@@ -112,7 +130,8 @@ read as empty, and `set` returns false when nothing was saved.
 1. Each manifest's `defaultOn`.
 2. This device's choices: the switches in More → Mods.
 3. The link, for this visit: `?mods=my-mod` turns it on, `?mods=-my-mod` off, `?mods=a,-b` both.
-   Unknown ids are ignored. "Keep it" in More → Mods saves the link's choice on the device.
+   Unknown ids are ignored. More → Mods says so at the top and in each linked row: "Keep it" at the top
+   saves all the link's choices on the device, and in a row just that one.
 
 To share a mod, send `https://<plunge host>/?mods=my-mod`.
 
