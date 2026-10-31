@@ -1,0 +1,12 @@
+:root[data-mods~="flash-let-in"] .vote-door .vote-yes:not(:disabled) {
+  background: var(--butterscotch);
+  border-color: var(--butterscotch);
+  box-shadow: 0 0 0 2px #e0a84f55;
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-mods~="flash-let-in"] .vote-door .vote-yes:not(:disabled) { animation: flash-let-in-pulse 2s ease-in-out 2; }
+}
+@keyframes flash-let-in-pulse {
+  0%, 100% { background: var(--butterscotch); box-shadow: 0 0 0 2px #e0a84f55; }
+  50% { background: var(--cream); box-shadow: 0 0 0 4px #e0a84f99; }
+}

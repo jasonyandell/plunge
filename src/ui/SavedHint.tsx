@@ -5,7 +5,7 @@ import { decisionStats } from '../ai/decision-stats';
 import { legalDominoes } from '../engine';
 import { tileOfId, idOfTile } from '../ai/walt/requests';
 import { MoveScores } from './MoveScores';
-import { BookDetails } from './BiddingHint';
+import { BookDetails } from './BookDetails';
 import { ForecastDetails } from './ForecastDetails';
 import { Domino } from './Domino';
 import { bidLabel, declLabel, trumpChip, ledChip, SEAT_NAMES } from './store';

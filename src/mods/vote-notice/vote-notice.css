@@ -1,0 +1,11 @@
+/* Computer changes need everyone's explicit answer, so give that vote room. */
+:root[data-mods~="vote-notice"] .vote-bar[data-kind="player"] { flex-direction: column; align-items: stretch; margin: 10px; padding: 16px; border: 2px solid #e0a84f; border-radius: 14px; background: #fff0c9; color: #302316; box-shadow: 0 4px 16px #140c0740; }
+:root[data-mods~="vote-notice"] .vote-bar[data-kind="player"] .vote-text { font-size: 17px; line-height: 1.4; gap: 6px; overflow-wrap: anywhere; }
+:root[data-mods~="vote-notice"] .vote-bar[data-kind="player"] .vote-text span { font-size: 14px; opacity: 1; }
+:root[data-mods~="vote-notice"] .vote-bar[data-kind="player"] .vote-buttons { flex-wrap: wrap; gap: 10px; }
+:root[data-mods~="vote-notice"] .vote-bar[data-kind="player"] .vote-buttons button { flex: 1 1 120px; min-height: 48px; font-size: 16px; border-color: #72501c; background: #fffaf0; color: #302316; }
+:root[data-mods~="vote-notice"] .vote-bar[data-kind="player"] .vote-buttons .vote-yes { background: #286f65; border-color: #286f65; color: #fffaf0; }
+:root[data-mods~="vote-notice"] .vote-bar[data-kind="player"] .vote-buttons button:focus-visible { outline: 3px solid #302316; outline-offset: 3px; }
+:root[data-mods~="vote-notice"] .vote-bar[data-kind="player"] .vote-you { font-size: 14px; font-weight: 600; opacity: 1; white-space: normal; }
+.vote-notice-heading { font-weight: 700; color: #72501c; }
+.vote-notice-status { font-size: 14px; font-weight: 600; }
