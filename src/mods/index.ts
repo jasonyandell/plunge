@@ -4,5 +4,6 @@ import type { ModManifest } from '../kernel/mod-api';
 import { biddingHint } from './bidding-hint';
 import { dominoCounter } from './domino-counter';
 import { cherryBlossoms } from './cherry-blossoms';
+import { winnerCongrats } from './winner-congrats';
 
-export const MODS: readonly ModManifest[] = [biddingHint, dominoCounter, cherryBlossoms];
+export const MODS: readonly ModManifest[] = [biddingHint, dominoCounter, cherryBlossoms, winnerCongrats];
