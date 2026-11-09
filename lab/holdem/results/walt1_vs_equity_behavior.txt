@@ -1,0 +1,10 @@
+{"A":"walt-L1(live)","B":"equity(58/66/40)","deals":300,"hands":600,"netChipsA":-712,"pairsWonLostTied":[81,129,90],"mbbPerHand":-593,"ci95":[-867,-320],"msPerMoveA":115.5,"maxMsA":902,"movesA":2283}
+rows: street/situation; cols: equity-vs-random quintile 0-20%..80-100%; cell f/c/r counts (open: c = check, r = bet)
+flop/facing        6/0/0    14/38/0    0/39/31     0/7/41    0/11/30
+flop/open         0/14/0    0/135/2    0/97/43    0/12/68     0/3/39
+pre/facing         0/0/0    19/49/2  16/145/78    0/25/32      0/3/1
+pre/open           0/0/0     0/28/3    0/78/76     0/3/34      0/0/0
+river/facing      17/3/0     4/24/0    0/25/14    0/13/53    0/22/61
+river/open        0/54/0     0/64/0    0/25/28     0/0/34     0/0/52
+turn/facing       17/2/0    14/25/1    0/35/25    0/11/49    0/15/46
+turn/open         0/37/0    0/103/2    0/44/40     0/4/57     0/1/40

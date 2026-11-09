@@ -1,0 +1,2 @@
+{"A":"walt-L1(live)","B":"equity(58/66/40)","deals":30,"hands":60,"netChipsA":-138,"pairsWonLostTied":[6,18,6],"mbbPerHand":-1150,"ci95":[-1804,-496],"msPerMoveA":83.1,"maxMsA":191,"movesA":229,"wallSec":19}
+{"A":"walt-L1(live,n512)","B":"equity(58/66/40)","deals":30,"hands":60,"netChipsA":-72,"pairsWonLostTied":[9,11,10],"mbbPerHand":-600,"ci95":[-1233,33],"msPerMoveA":339.6,"maxMsA":767,"movesA":206,"wallSec":70}

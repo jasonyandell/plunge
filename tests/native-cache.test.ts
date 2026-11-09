@@ -11,6 +11,11 @@ it('the offline worker never intercepts local source or research API responses',
       const respondWith=vi.fn();events.fetch!({request:new Request(origin+path),respondWith});
       expect(respondWith).not.toHaveBeenCalled();
     }
+    // The /lab/ experiments are served fresh and never replace the cached shell.
+    for(const path of ['/lab/','/lab/holdem/main.js']) {
+      const respondWith=vi.fn();events.fetch!({request:new Request(origin+path),respondWith});
+      expect(respondWith).not.toHaveBeenCalled();
+    }
     if(origin.startsWith('http:')) {
       const respondWith=vi.fn();events.fetch!({request:new Request(origin+'/src/ui/App.tsx'),respondWith});
       expect(respondWith).not.toHaveBeenCalled();
