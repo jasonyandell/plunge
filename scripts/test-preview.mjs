@@ -28,16 +28,16 @@ function fixture({ exists = false, failDelete = false } = {}) {
 }
 test('preview deploys never touch D1 and always build and check a local-only preview', () => {
   const workflow = readFileSync(new URL('../.github/workflows/preview.yml', import.meta.url), 'utf8');
+  const build = workflow.slice(workflow.indexOf('\n  build:'), workflow.indexOf('\n  deploy:'));
   const deploy = workflow.slice(workflow.indexOf('\n  deploy:'), workflow.indexOf('\n  cleanup:'));
-  assert.ok(deploy.length > 100);
-  const commands = deploy.split('\n').filter(line => !line.trim().startsWith('#')).join('\n');
+  assert.ok(build.length > 100 && deploy.length > 100);
+  const commands = (build + deploy).split('\n').filter(line => !line.trim().startsWith('#')).join('\n');
   assert.doesNotMatch(commands, /\bd1\b|migrations/i);
-  assert.match(deploy, /PLUNGE_QUESTIONS=local-only npm run build/);
-  assert.match(deploy, /PLUNGE_ROOMS="\$PREVIEW_ROOMS"/);
+  assert.match(build, /PLUNGE_QUESTIONS=local-only npm run build/);
+  assert.match(build, /PLUNGE_ROOMS="\$PREVIEW_ROOMS"/);
   assert.match(deploy, /wrangler deploy --config wrangler\.preview\.generated\.json/);
-  assert.match(deploy, /\.\.\/preview-tools\/scripts\/preview\.mjs check-config/);
   // The workflow's grep must select these tools, and reject tools that predate them.
-  const pattern = /marker="(\^.+)\\\$"/.exec(deploy)?.[1] + '$';
+  const pattern = /marker="(\^.+)\\\$"/.exec(build)?.[1] + '$';
   assert.equal(pattern, `^export const PREVIEW_PROTOCOL = '${PREVIEW_PROTOCOL}';$`);
   const grep = text => spawnSync('grep', ['-q', pattern], { input: text }).status;
   assert.equal(grep(readFileSync(new URL('./preview.mjs', import.meta.url))), 0);
@@ -261,4 +261,29 @@ test('staging takes only the bundled Worker and built app from PR output, as pla
     ]) assert.throws(() => stagePrebuilt(artifact(name, extra), target(`${name}-out`)), /plain files|missing|ENOENT|ENOTDIR/, name);
     assert.equal(existsSync(join(root, 'asset-link-out/dist/assets/key.txt')), false);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('preview keys never share a job with PR code', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/preview.yml', import.meta.url), 'utf8');
+  const job = (name, next) => workflow.slice(workflow.indexOf(`\n  ${name}:`), next ? workflow.indexOf(`\n  ${next}:`) : undefined);
+  const build = job('build', 'deploy'), deploy = job('deploy', 'cleanup'), cleanup = job('cleanup');
+  const head = /ref: \$\{\{ needs\.resolve\.outputs\.sha \}\}/, trusted = /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/;
+  // The build job checks out and runs the PR. It gets no secret and a read-only token.
+  assert.match(build, head);
+  assert.match(build, /run: npm test\n/);
+  assert.doesNotMatch(build, /secrets\.|deployments: write/);
+  assert.match(build, /preview-tools\/scripts\/preview\.mjs config [^\n]+\n\s+npx wrangler deploy --dry-run --outdir \.\.\/prebuilt\/worker /);
+  // The jobs with keys check out only the main branch and take the build as files.
+  for (const keyed of [deploy, cleanup]) {
+    assert.match(keyed, /secrets\.CLOUDFLARE_API_TOKEN/);
+    assert.match(keyed, trusted);
+    assert.doesNotMatch(keyed, head);
+    assert.doesNotMatch(keyed, /PREVIEW_TOOLS|working-directory: app|npx |npm (test|run)|cache: npm/);
+  }
+  assert.match(deploy, /needs: \[resolve, build\]/);
+  assert.match(deploy, /working-directory: preview-tools\n\s+run: npm ci\n/);
+  assert.match(deploy, /mkdir deploy && cd deploy\n\s+node \.\.\/preview-tools\/scripts\/preview\.mjs prepare-prebuilt "\$PR_NUMBER" "\$PREVIEW_PROTOCOL_SELECTED" \.\.\/prebuilt\n/);
+  assert.match(deploy, /run: \.\.\/preview-tools\/node_modules\/\.bin\/wrangler deploy --config/);
+  // A pull request's workflow commit includes the PR's own changes, so it is not a trusted source of tools.
+  assert.doesNotMatch(workflow, /github\.workflow_sha/);
 });
