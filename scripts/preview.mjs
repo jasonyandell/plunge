@@ -1,5 +1,6 @@
 /** PR-scoped Cloudflare resources. Never loads the production Wrangler config. */
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -43,6 +44,26 @@ export function checkConfig(pr, config, protocol = PREVIEW_PROTOCOL) {
   if (JSON.stringify(sorted(config)) !== JSON.stringify(sorted(expectedConfig(pr, protocol))))
     throw new Error('Preview configuration must exactly match its database-free PR protocol (no production resources).');
   return config;
+}
+/** What the credentialed job deploys: the same Worker, already bundled by a job that holds no keys. */
+export const PREBUILT_MAIN = 'worker/index.js';
+export function prebuiltConfig(pr, protocol = PREVIEW_PROTOCOL) {
+  return { ...previewConfig(pr, protocol), main: PREBUILT_MAIN, no_bundle: true };
+}
+/** Copy only the bundled Worker and the built app out of an artifact that PR code produced.
+ * Wrangler reads settings such as .env from the folder it deploys, so nothing else may come along. */
+export function stagePrebuilt(artifact, target = '.') {
+  if (readdirSync(target).length) throw new Error('Stage the prebuilt preview in an empty folder.');
+  const plain = path => {
+    const entry = lstatSync(path);
+    if (!entry.isFile() && !entry.isDirectory()) throw new Error('A prebuilt preview may contain only plain files.');
+    return entry;
+  };
+  if (!plain(join(artifact, PREBUILT_MAIN)).isFile() || !plain(join(artifact, 'dist/index.html')).isFile())
+    throw new Error('The prebuilt preview is missing its Worker or app.');
+  mkdirSync(join(target, 'worker'));
+  cpSync(join(artifact, PREBUILT_MAIN), join(target, PREBUILT_MAIN));
+  cpSync(join(artifact, 'dist'), join(target, 'dist'), { recursive: true, filter: source => Boolean(plain(source)) });
 }
 export function cloudflare({ account = process.env.CLOUDFLARE_ACCOUNT_ID,
   token = process.env.CLOUDFLARE_API_TOKEN, request = fetch } = {}) {
@@ -133,6 +154,17 @@ async function main() {
     writeFileSync(CONFIG_FILE, `${JSON.stringify(config, null, 2)}\n`);
     if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `url=${url}\n`);
     console.log(`Preview: ${url}`);
+  } else if (command === 'config') {
+    // No credentials: the configuration a job without keys uses to bundle the Worker.
+    writeFileSync(CONFIG_FILE, `${JSON.stringify(previewConfig(pr, value || PREVIEW_PROTOCOL), null, 2)}\n`);
+  } else if (command === 'prepare-prebuilt') {
+    // Runs with credentials, so it runs no PR code: PR output is copied in as data only.
+    const config = prebuiltConfig(pr, value || PREVIEW_PROTOCOL), artifact = selectedProtocol;
+    stagePrebuilt(artifact);
+    const { url } = await preparePreview(pr, cloudflare(), value || PREVIEW_PROTOCOL);
+    writeFileSync(CONFIG_FILE, `${JSON.stringify(config, null, 2)}\n`);
+    if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `url=${url}\n`);
+    console.log(`Preview: ${url}`);
   } else if (command === 'check-config') {
     checkConfig(pr, JSON.parse(readFileSync(CONFIG_FILE, 'utf8')), value || PREVIEW_PROTOCOL);
     console.log(`${CONFIG_FILE} is a database-free preview for PR #${pr}.`);
@@ -147,7 +179,7 @@ async function main() {
       catch (error) { if (attempt === 12) throw error; await delay(5000); }
     }
     console.log(`Verified app, commit, and local-only questions at ${pr}`);
-  } else throw new Error('Usage: preview.mjs prepare|check-config|cleanup <pr> | stamp <pr> <sha> | smoke <url> <sha>');
+  } else throw new Error('Usage: preview.mjs prepare|config|check-config|cleanup <pr> | prepare-prebuilt <pr> <protocol> <artifact> | stamp <pr> <sha> | smoke <url> <sha>');
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(error => { console.error(error.message); process.exitCode = 1; });

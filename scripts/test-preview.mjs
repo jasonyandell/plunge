@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { names, previewConfig, checkConfig, preparePreview, cleanupPreview, cloudflare, smokePreview, stampPreview,
+import { names, previewConfig, prebuiltConfig, stagePrebuilt, checkConfig, preparePreview, cleanupPreview, cloudflare, smokePreview, stampPreview,
   LOCAL_ONLY_MARKER, ROOMS_MARKER, PREVIEW_PROTOCOL, LOCAL_ONLY_PROTOCOL } from './preview.mjs';
 
 const previewDb = { name: 'plunge-pr-4-questions', uuid: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' };
@@ -197,4 +197,68 @@ test('family builder keys are confined to the main deployment step', () => {
   const steps=deploy.split('      - name: Prepare question database and deploy');
   assert.doesNotMatch(steps[0],/IDEAS_ADMIN_TOKEN|SOCIAL_LOGIN_CONFIG/);
   assert.match(steps[1],/PLUNGE_IDEAS_ADMIN_TOKEN: \$\{\{ secrets.PLUNGE_IDEAS_ADMIN_TOKEN \}\}/);
+});
+test('production keys never share a job with tests or the app build', () => {
+  const workflow=readFileSync(new URL('../.github/workflows/deploy.yml',import.meta.url),'utf8');
+  const [,...jobs]=workflow.slice(workflow.indexOf('\njobs:')).split(/\n  (?=[a-z]+:\n)/);
+  assert.deepEqual(jobs.map(job=>/^[a-z]+/.exec(job)[0]),['test','build','deploy']);
+  const [testJob,build,deploy]=jobs;
+  // The family builder can write tests/ and src/. Whatever runs them gets no credential at all.
+  for(const job of [testJob,build]) {
+    assert.doesNotMatch(job,/secrets\.|wrangler/);
+    assert.match(job,/if: github.ref == 'refs\/heads\/main'/);
+  }
+  assert.match(testJob,/run: npm test\n/);
+  assert.match(build,/npm run build[\s\S]*upload-artifact@v4\n\s+with: \{ name: dist, path: dist,/);
+  assert.match(deploy,/needs: \[test, build\]/);
+  assert.match(deploy,/download-artifact@v4\n\s+with: \{ name: dist, path: dist \}/);
+  assert.doesNotMatch(deploy,/npm (test|run)|vitest|node --test|cache: npm/);
+  assert.equal(workflow.match(/secrets\./g).length,3);
+});
+
+test('a prebuilt preview deploys the same isolated Worker without bundling PR source', () => {
+  for (const protocol of [PREVIEW_PROTOCOL, LOCAL_ONLY_PROTOCOL]) {
+    const { main, no_bundle, ...rest } = prebuiltConfig(4, protocol);
+    assert.equal(main, 'worker/index.js');
+    assert.equal(no_bundle, true);
+    assert.deepEqual({ ...rest, main: 'worker/index.ts' }, previewConfig(4, protocol));
+  }
+  assert.throws(() => prebuiltConfig('main'));
+  assert.throws(() => prebuiltConfig(4, 'production'));
+});
+test('staging takes only the bundled Worker and built app from PR output, as plain files', () => {
+  const root = mkdtempSync(join(tmpdir(), 'plunge-prebuilt-'));
+  const artifact = (name, extra = () => {}) => {
+    const dir = join(root, name);
+    mkdirSync(join(dir, 'worker'), { recursive: true }); mkdirSync(join(dir, 'dist/assets'), { recursive: true });
+    writeFileSync(join(dir, 'worker/index.js'), 'export default {};');
+    writeFileSync(join(dir, 'dist/index.html'), '<script></script>');
+    writeFileSync(join(dir, 'dist/assets/app.js'), '1');
+    extra(dir);
+    return dir;
+  };
+  const target = name => { const dir = join(root, name); mkdirSync(dir); return dir; };
+  try {
+    // Wrangler would read these from the deploy folder and send the account key wherever they say.
+    const good = artifact('good', dir => {
+      writeFileSync(join(dir, '.env'), 'CLOUDFLARE_API_BASE_URL=https://attacker.example');
+      writeFileSync(join(dir, 'wrangler.toml'), 'name = "plunge"');
+      writeFileSync(join(dir, 'worker/extra.js'), '1');
+    });
+    const staged = target('staged');
+    stagePrebuilt(good, staged);
+    assert.deepEqual(readdirSync(staged).sort(), ['dist', 'worker']);
+    assert.deepEqual(readdirSync(join(staged, 'worker')), ['index.js']);
+    assert.equal(readFileSync(join(staged, 'dist/assets/app.js'), 'utf8'), '1');
+    assert.throws(() => stagePrebuilt(good, staged), /empty folder/);
+    const secret = join(root, 'secret'); writeFileSync(secret, 'key');
+    for (const [name, extra] of [
+      ['asset-link', dir => symlinkSync(secret, join(dir, 'dist/assets/key.txt'))],
+      ['worker-link', dir => { rmSync(join(dir, 'worker/index.js')); symlinkSync(secret, join(dir, 'worker/index.js')); }],
+      ['dist-link', dir => { rmSync(join(dir, 'dist'), { recursive: true }); symlinkSync(join(root, 'good/dist'), join(dir, 'dist')); }],
+      ['no-worker', dir => rmSync(join(dir, 'worker/index.js'))],
+      ['no-app', dir => rmSync(join(dir, 'dist/index.html'))],
+    ]) assert.throws(() => stagePrebuilt(artifact(name, extra), target(`${name}-out`)), /plain files|missing|ENOENT|ENOTDIR/, name);
+    assert.equal(existsSync(join(root, 'asset-link-out/dist/assets/key.txt')), false);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
