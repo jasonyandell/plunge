@@ -3,6 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { applyAction, legalActions, newDealtGame, newGame, PLUNGE_CONFIG, type GameState, type Seat } from '../src/engine';
 import { BID_BOOK, bestPanel, type PlayedHand } from '../src/ai/bid-book';
 import { getBiddingHint, bookCeiling } from '../src/ai/bidding-hint';
+import { rotateGame } from '../src/room/view';
 import { auctionMove } from '../src/ai/auction';
 import { initialApp, toSaved } from '../src/ui/store';
 vi.mock('../src/ai/phone/client', () => ({ runAuction: vi.fn(), runPlayer: vi.fn() }));
@@ -37,6 +38,19 @@ describe('recorded-game bidding hints', () => {
     }
     expect(runAuction).not.toHaveBeenCalled();
   });
+  it('uses the original catalogue seat for every rotated family view', async () => {
+    for (const seat of [0,1,2,3] as const) {
+      const hand = BID_BOOK.hands.find(h => h.seat === seat)!;
+      const canonical = gameFor(hand, ((seat + 3) % 4) as Seat), view = rotateGame(canonical, seat);
+      const hint = getBiddingHint(view, seat);
+      expect(hint.kind).toBe('book');
+      if (hint.kind !== 'book') throw new Error('Missing family hint');
+      expect(hint.action).toEqual((await auctionMove(canonical, seat, 'family-book')).action);
+      expect(hint.panels).toEqual(hand.panels);
+      expect(hint.book_seat ?? 0).toBe(seat);
+    }
+  });
+
   it('separates a weak pass, a forced bid, a partner pass and an unavailable lower bid', async () => {
     expect(bookHint(gameFor(weak))).toMatchObject({ reason: 'pass', ceiling: null, target: 30, action: pass });
     expect(bookHint(forced(weak))).toMatchObject({ reason: 'forced', ceiling: null, target: 30, action: { type: 'bid', bid: { kind: 'points', value: 30 } } });

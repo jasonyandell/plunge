@@ -1,0 +1,4 @@
+interface:
+  display_name: "Generate Plunge Hands"
+  short_description: "Expand and audit the prepared Plunge hand catalogue"
+  default_prompt: "Use $plunge-generate-hands to generate and audit five new prepared deals."

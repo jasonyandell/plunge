@@ -1,3 +1,4 @@
+import { decisionStats } from '../ai/decision-stats';
 import { playLocation, playIndex } from '../engine/play-index';
 /** Durable question evidence. A replay is evidence for the examiner, never AI input. */
 import { legalPlays, type GameState } from '../engine';
@@ -78,8 +79,8 @@ export function validQuestion(value: unknown): Question {
     const r = q.receipt;
     if (!r || r.schema !== 'plunge-decision-v1' || r.id !== q.receipt_id || !r.identity || !r.response
       || typeof r.identity.player?.name !== 'string' || !Number.isFinite(r.response.elapsed_us)
-      || !Array.isArray(r.response.phases) || r.response.phases.length > 100
-      || !r.response.phases.every(p => p && typeof p.name === 'string' && typeof p.status === 'string')) throw new Error('Invalid original scores.');
+      || (!r.response.zeb_result && (!Array.isArray(r.response.phases) || r.response.phases.length > 100
+      || !r.response.phases.every(p => p && typeof p.name === 'string' && typeof p.status === 'string')))) throw new Error('Invalid original scores.');
     const response = r.response;
     if (typeof response.route !== 'string' || (response.interruption !== undefined && typeof response.interruption !== 'string')) throw new Error('Invalid score details.');
     const review = response.review_result;
@@ -92,6 +93,8 @@ export function validQuestion(value: unknown): Question {
     for (const k of ['contract', 'decl', 'bid', 'bidder', 'seat', 'hand', 'plays', 'seed'] as const) {
       if (JSON.stringify(req?.[k]) !== JSON.stringify(expected[k])) throw new Error('Scores belong to a different decision.');
     }
+    if (r.response.zeb_result && (r.response.zeb_result.tile !== r.response.choice
+      || (legal.length === 1 ? !r.response.zeb_result.forced : !decisionStats(r.response, r.identity.request, legal)))) throw new Error('Invalid Zeb scores.');
     const tile = built.domino;
     if (r.response.choice !== Number(tile[0]) * (Number(tile[0]) + 1) / 2 + Number(tile[1])) throw new Error('Scores name a different play.');
   }

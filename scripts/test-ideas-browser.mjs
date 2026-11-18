@@ -1,0 +1,45 @@
+import { chromium } from 'playwright';
+import { readFile,mkdir } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
+const origin=process.env.PLUNGE_IDEAS_TEST_URL ?? 'http://127.0.0.1:8791';
+if(!/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(origin))throw new Error('This test creates fixture conversations; use a local service.');
+const admin=(await readFile('.dev.vars','utf8')).match(/^IDEAS_ADMIN_TOKEN=(\w+)$/m)[1];
+const api=async(path,body,token=admin,method='POST')=>{
+  const response=await fetch(`${origin}/api/ideas${path}`,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const data=await response.json();assert.equal(response.ok,true,JSON.stringify(data));return data;
+};
+const mom=await api('/admin/members',{name:'Mom'}),dad=await api('/admin/members',{name:'Dad'});
+const browser=await chromium.launch();
+try {
+  const context=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:1});
+  const page=await context.newPage();
+  await page.goto(`${origin}/?ideas=1#invite=${mom.token}`);
+  await page.getByText('Hi, Mom.').waitFor();assert.ok(!page.url().includes(mom.token));
+  const original='I can’t see my bid.';
+  await page.getByLabel('Your idea',{exact:true}).fill(original);
+  await page.reload();await page.getByText('Hi, Mom.').waitFor();assert.equal(await page.getByLabel('Your idea',{exact:true}).inputValue(),original);
+  await page.getByRole('button',{name:'Make an idea card'}).click();
+  await page.getByRole('heading',{name:original,exact:true,level:2}).waitFor();
+  const idea=new URL(page.url()).hash.slice('#idea='.length);
+  await page.getByLabel('Keep the conversation going').fill('Please keep this unfinished reply.');
+  await page.getByRole('button',{name:'Another idea'}).click();
+  assert.equal(await page.getByLabel('Your idea',{exact:true}).inputValue(),'');
+  await page.getByLabel('Your idea',{exact:true}).fill('Make the letters on the score easier to read.');
+  await page.getByRole('button',{name:'Make an idea card'}).click();await page.getByRole('heading',{name:'Make the letters on the score easier to read.',exact:true,level:2}).waitFor();
+  await page.goto(`${origin}/?ideas=1#idea=${idea}`);await page.getByLabel('Keep the conversation going').waitFor();
+  assert.equal(await page.getByLabel('Keep the conversation going').inputValue(),'Please keep this unfinished reply.');
+  await context.setOffline(true);await page.getByRole('button',{name:'Send reply'}).click();await page.getByRole('alert').waitFor();
+  assert.equal(await page.getByLabel('Keep the conversation going').inputValue(),'Please keep this unfinished reply.');
+  await context.setOffline(false);await page.getByRole('button',{name:'Send reply'}).click();await page.getByText('Please keep this unfinished reply.',{exact:true}).waitFor();
+  const other=await browser.newContext({viewport:{width:320,height:640}}),dadPage=await other.newPage();
+  await dadPage.goto(`${origin}/?ideas=1#invite=${dad.token}`);await dadPage.getByText('Hi, Dad.').waitFor();
+  await dadPage.getByRole('button').filter({has:dadPage.getByRole('heading',{name:original,exact:true})}).first().click();
+  await dadPage.getByLabel('Keep the conversation going').fill('I would like that too.');await dadPage.getByRole('button',{name:'Send reply'}).click();
+  await dadPage.getByText('I would like that too.',{exact:true}).waitFor();
+  for(const p of [page,dadPage])assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No horizontal overflow');
+  await mkdir('scratch/ideas-check',{recursive:true});
+  await dadPage.screenshot({path:'scratch/ideas-check/conversation-320.png',fullPage:true});
+  await page.getByRole('button',{name:'Another idea'}).click();await page.screenshot({path:'scratch/ideas-check/board-390.png',fullPage:true});
+  console.log(JSON.stringify({passed:true,checks:['personal invites','multiple cards','draft reload','separate drafts','offline retry','Mom and Dad conversation','320px and 390px layout'],fixtureIds:{idea,mom:mom.id,dad:dad.id}}));
+} finally {await browser.close();}

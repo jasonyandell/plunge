@@ -6,6 +6,42 @@ best of luck to the both of you.
 **Play it: https://plunge.texas42.workers.dev** — works in any phone browser,
 installable as an app, plays offline.
 
+**Play with family · Experimental** opens a shared family table on the same
+felt as solo play: hints, legal-domino highlighting, mid-hand questions, trick
+history, the post-hand review and the Menu all work there, and your seat is
+always at the bottom.
+Open a table and send its invite or room code. Family can open their existing
+Plunge app, choose **Play with family**, and paste the code or invite; no second
+install or account is needed. Nobody hosts: people sit down or leave any time,
+even mid-hand, and the selected computer player covers every empty chair. Whoever is
+present and lowest at the table runs the selected player in their browser; if they drop, the
+next person takes over without a pause. Someone who drops keeps their seat for
+twenty seconds, then the computer covers it until they return. Refresh rejoins your seat.
+Anything done to the table is a quick vote: starting, shaking the next hand,
+undoing the last human move, changing the computer player, starting over, opening
+or closing the table, and
+asking someone to step out. Low-stakes votes go ahead after five seconds unless
+anyone says no; alone with computers they go ahead at once. Shaking the next hand
+waits for everyone asked to tap Ready, so nobody loses the result card while
+they are still reading it. Disconnecting or letting the readiness check expire
+does not deal the next hand. A closed table lets
+newcomers knock, and one yes from anyone present lets them in. Asking someone to
+step out needs most of the table. Earlier attempts stay in history. For Nel-O,
+win a bid of one mark or more and choose Nel-O; your partner sits out. Your solo
+game stays saved. The home screen lists the tables that are live: who is at
+each, and whether to sit right down or knock. Anyone can knock, account or not.
+A table opened by a signed-in family member is listed; one opened without
+signing in stays private to its link. Listed tables start closed, and the table
+votes itself open when it wants walk-ins. Anyone signed in (see **Your
+account**) sits under their account name and skips the name prompt; signed-in
+family also always have their own chair at the standing **Family table** from any
+device, and can invite more family with a link.
+[The family table](docs/FAMILY-TABLE.md) describes the design.
+
+[Chat companions](docs/CHAT-COMPANIONS.md) documents the first Texas 42 MCP
+connection: passkey-approved OAuth and a separate named companion identity.
+Game actions through chat are a following milestone.
+
 The live table plays **straight 42** with regular bidding: 30–41, then marks.
 Each player bids once or passes, starting left of the shaker; the winner calls
 trump and leads. Four passes throw the hand in. First team to seven marks wins.
@@ -27,6 +63,15 @@ legal-domino highlighting. It defaults to on and is saved on this device across
 new games and reloads. With hints off, every tile in your hand has the same play
 styling; an illegal attempt gives a follow-suit reminder without changing the game.
 
+**Undo** (under the score bar) takes back your most recent bid, trump call or play
+in the current hand, together with the computer replies that followed; tap again
+to step back further. A double tap takes back one move. **Play this hand again**
+asks first, then replays the same deal and shaker with the marks the hand began
+with. Both are also on the end-of-hand and game-over cards, and stop at the
+start of the hand: once the next hand is shaken, earlier hands stay as played.
+Retried hands count as practice and show a small **Practice** label: the first attempt's finished record and saved
+moves stay as written, and the retry is kept as its own attempt in history and stats.
+
 Completed tricks stay visible for two seconds before gathering toward the winner,
 including tricks that end the hand or match. The result card waits until the trick
 has been shown, and taps cannot skip the pause.
@@ -37,6 +82,13 @@ home screen holds notes, short links, and later explanations. Original evidence
 stays fixed; the finished hand is attached afterward. No login required.
 See [the question notebook guide](docs-question-notebook.md) for the private
 research inbox and deployment details.
+
+Hold the screen, or choose **Share an idea**, to capture what you see, mark a
+spot, and add a note. Solo play pauses while the idea is open. **Save on this
+device** keeps the picture and note through closing or reloading, even offline.
+Open **Share an idea** again and choose **Make an idea card** when connected;
+it uses your signed-in family account or personal invite. Saved drafts do not
+upload automatically. Preview captures stay on the preview's device storage.
 
 The shaker (last bidder) must bid at least 30 when the first three players pass.
 This applies to new hands and resumed auctions; hands already in play keep
@@ -59,10 +111,17 @@ anonymously, and private hand details stay off shared links until the hand finis
 
 **Get a hint** is available during your turn to play. It suggests a legal domino
 without playing it, shows the sampled make/set comparison, and describes the
-public effect on the current trick. The first comparison uses 40 worlds;
-**Think deeper** can request 160. Closing the hint cancels pending work. Hints
+public effect on the current trick. Walt compares 40 worlds, or 350 in the phone build with
+**Think deeper**; Zeb uses budgets of 160 and 512 respectively. Closing the hint cancels pending work. Hints
 use only your hand and public history, with no separate partner review, and
 never label an unscored emergency fallback as a measured recommendation.
+
+Choose **Walt** or **Zeb** in More → Computer player, or by vote at a family
+table. The selection follows hints, messages, history, original scores and
+account counts. Zeb uses the pinned `@jasonyandell/zeb` package, fresh shuffled
+hands and sampled forecasts; Walt uses the recorded-game bid book and catalogue.
+Walt explicitly covers Nel-O when Zeb is selected. See [Zeb and player integration](docs/ZEB.md)
+for the package/version boundary and how to add another character.
 
 ## What's inside
 
@@ -71,38 +130,28 @@ never label an unscored emergency fallback as a measured recommendation.
   40/8 and an optional bounded partner count-offer check. The bidder's opening
   lead asks deeper L1 for 160 worlds with 20 seconds, retaining a complete
   40-world comparison first; later play keeps 40 worlds and 14 seconds. The
-  **Think deeper** switch in Home → Advanced settings applies that 160-world,
-  20-second profile to every computer move. It defaults off and persists across
+  **Think deeper** switch in More → Settings uses a 350-world,
+  20-second profile (160 worlds on the Mac research transport) to every computer move. It defaults off and persists across
   reloads; turn it off to restore normal later play. Deeper play skips the
   40/8-only partner check, and does not change the empirical bid book. No hidden
   hands cross the live decision boundary.
-- **Bidding** compares all nine declarations at the cheapest legal raise. Each
-  computer has 20 seconds for complete 4/12/40/160-world surveys. It bids when the
-  best sampled make estimate is at least 75%, otherwise passes, and passes over
-  partner. This is a simple initial policy over uncalibrated model estimates.
-  The winning trump is remembered; it is not searched again after bidding.
-  On modern phones, up to four independent workers share the declaration queue,
-  with fewer on smaller devices. Each runs the same Rust player.
-  Only complete surveys are ranked, with the same samples and seeded ties.
-  The entire pool stops on cancellation; a crashed job can retry once inside
-  the original time budget. Ordinary play still uses one worker.
-  While you consider a bid, that same bounded pool prepares the remaining
-  computer seats at 12, then 40 worlds. Their turns continue matching completed
-  surveys toward 160; an intervening raise is evaluated afresh. Computation
-  starts immediately while bids retain their readable presentation pace.
-  Early-pass screening is an experiment, not an enabled playing rule.
+- **Bidding** uses Walt's recorded-game book, or Zeb's nine-declaration forecast
+  with a 160-world budget and 85% cutoff. Both respect a partner's standing bid.
+  Zeb's forecasts are sampled predictions, not guarantees or completed-game
+  evidence. Historical live Walt auction experiments remain in the repository;
+  they are not the ordinary catalogue bidding policy.
 - **The table** saves games and original move scores on the device. After a hand,
-  inspect a move, ask Walt to think deeper with 160 worlds, or copy a portable
+  inspect a move, ask Walt for a fresh deeper comparison, or copy a portable
   observation link for the Mac gym. Leaving a position cancels its worker.
 - **The rules engine** is an independent pure state machine, with legal actions,
   replayable hands, points/marks scoring, and property tests. Historical variants
   and AI implementations remain in the repository as references; the active UI
-  uses straight 42 and the shared Walt player.
+  uses straight 42 with selectable computer players.
 
 ## How it ships
 
 Every same-repository pull request, including drafts, gets a stable phone-accessible
-preview link and an isolated question database. Pushes update that preview; closing
+preview link. Previews have no database: questions stay on the device. Pushes update that preview; closing
 the PR cleans it up. Open **View deployment** on the PR. [Preview guide](docs-previews.md).
 
 Every push to `main` runs the full suite (engine invariants, AI legality + strength
@@ -150,5 +199,40 @@ Public domain under [CC0 1.0](LICENSE). Steal anything. Built for the love of th
 
 ## Instant bidding from recorded games
 
-New Walt matches use the audited 125-deal catalogue and empirical score tails
-from 305,440 complete games. [Bid-book behavior, evidence and updates](docs-bid-book.md).
+New Walt matches use the audited 130-deal catalogue and empirical score tails
+from 318,472 complete games. [Bid-book behavior, evidence and updates](docs-bid-book.md).
+
+## Local history recorder
+
+Every live hand transition is saved on the device, including unfinished hands,
+replayable bids/trump/plays, marks and outcomes, settings, auction evidence and
+links to actual Walt move receipts. Hint/deeper run responses are also kept.
+Home → **Export history** downloads a JSON backup with those receipts and results.
+History is never uploaded or automatically evicted. Clearing browser data still
+removes local history; export a backup first. A storage failure displays a warning
+and retains pending captures in the tab; a localStorage outbox recovers unfinished
+IndexedDB writes after reload when storage is available. Simultaneous tabs append
+content-addressed captures without overwriting each other's branches; the existing
+single resume slot still belongs to the last tab that saved it.
+
+## Stats and your account
+
+Every hand attempt is recorded: solo hands on the device, including the moves a
+takeback undid, and family-room hands by the room itself. Signing in with the
+optional passkey account uploads the device's hands once each (never duplicated,
+never changed) and ties room hands to your seat, so one account's record spans
+every device and every table. The game only uploads when there is a new hand to
+send; an idle tab makes no requests. Full game history and Walt results stay on
+the device. See [optional accounts](docs/OPTIONAL-ACCOUNTS.md#stats).
+
+The finished-hand store was rescued from PR #7 / commit
+`03970be4ae9888e8e36b1ced6a2b9bca5cd4fb9a`. The staged-outbox design was checked
+against Claude's richer journal on `claude/in-flight-prs-planning-vlkhi2`
+(`f2b8fb02f1f8fde152f07803069d5d45593b6100`). Dashboard, derived reviews and remote
+hand synchronization remain deferred. Existing databases are preserved.
+
+## Family ideas
+
+**Ideas for Plunge** gives invited family members simple idea cards, lasting
+conversations, and individual previews. A local Codex builder turns queued ideas
+and replies into tested draft PRs. See [setup and operation](docs/FAMILY-IDEAS.md).

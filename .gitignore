@@ -8,3 +8,7 @@ scratch/
 
 # Local Python release-tool caches
 __pycache__/
+
+# Private local Worker and family-builder credentials
+.dev.vars
+.dev.vars.*

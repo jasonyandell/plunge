@@ -3,12 +3,24 @@ import type { NativeDecision, NativeRequest } from './native';
 
 export interface MoveStats {
   worlds: number; fallback: boolean; objective: 'make' | 'set';
+  sampleBudget?: boolean;
   options: { tile: number; chance: number; successes: number | null; best: boolean }[];
 }
 
 /** Never silently substitute an incomplete primary comparison for its fallback. */
 export function decisionStats(response: NativeDecision, request: NativeRequest, legal: number[]): MoveStats | null {
   if (response.contract !== request.contract || (request.contract === 'nello' && response.inactive !== (request.bidder+2)%4)) return null;
+  if (response.route === 'zeb') {
+    const result = response.zeb_result, worlds = response.n;
+    if (!result || result.tile !== response.choice || !legal.includes(result.tile) || result.forced
+      || !Number.isSafeInteger(worlds) || worlds! < 1 || worlds! > 1024 || !Array.isArray(result.q)
+      || result.q.length !== legal.length || new Set(result.q.map(row=>row[0])).size !== legal.length
+      || !result.q.every(row=>Array.isArray(row) && row.length===2 && legal.includes(row[0]) && Number.isFinite(row[1]) && row[1]>=0 && row[1]<=1)) return null;
+    const declaring=request.seat%2===request.bidder%2;
+    const rows=result.q.map(([tile,q])=>({tile,chance:declaring?q:1-q})).sort((a,b)=>b.chance-a.chance || a.tile-b.tile);
+    return {worlds:worlds!,fallback:false,sampleBudget:true,objective:declaring?'make':'set',
+      options:rows.map(row=>({...row,best:row.chance===rows[0]!.chance,successes:null}))};
+  }
   const fallback = response.route === 'l1-fallback';
   if (!fallback && !['baseline', 'baseline-reviewed', 'baseline-counterexamples'].includes(response.route)) return null;
   const phase = fallback ? 'fallback-l1' : 'baseline';

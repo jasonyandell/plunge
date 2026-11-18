@@ -20,10 +20,13 @@
     <div id="app"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
+      // Temporary previews stay in the browser; installation belongs to the main game.
+      const previewBuild = window.self !== window.top || document.querySelector('meta[name="plunge-questions"]')?.content === 'local-only';
+      if (previewBuild) document.querySelector('link[rel="manifest"]')?.remove();
       // Service worker + dismissable install banner (no deps).
       if ('serviceWorker' in navigator) {
         addEventListener('load', async () => {
-          if (['localhost', '127.0.0.1'].includes(location.hostname)) {
+          if (previewBuild || ['localhost', '127.0.0.1'].includes(location.hostname)) {
             // A development table must not replay cached source or API status.
             // Retire an earlier local install once; game saves stay untouched.
             const registrations = await navigator.serviceWorker.getRegistrations();
@@ -35,6 +38,7 @@
         });
       }
       (() => {
+        if (previewBuild) { addEventListener('beforeinstallprompt', e => e.preventDefault()); return; }
         const KEY = 'plunge:install-dismissed';
         const standalone =
           matchMedia('(display-mode: standalone)').matches || navigator.standalone;

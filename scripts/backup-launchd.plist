@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Daily Plunge backup at 04:17 local; a missed run fires on wake.
+     Install:   cp scripts/backup-launchd.plist ~/Library/LaunchAgents/com.jasonyandell.plunge-backup.plist
+                launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jasonyandell.plunge-backup.plist
+     Run now:   launchctl kickstart gui/$(id -u)/com.jasonyandell.plunge-backup
+     Remove:    launchctl bootout gui/$(id -u)/com.jasonyandell.plunge-backup -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jasonyandell.plunge-backup</string>
+  <key>ProgramArguments</key>
+  <array><string>/Users/jason/code/plunge/scripts/backup-daily.sh</string></array>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>4</integer><key>Minute</key><integer>17</integer></dict>
+  <key>StandardOutPath</key><string>/Users/jason/Library/Logs/plunge-backup.log</string>
+  <key>StandardErrorPath</key><string>/Users/jason/Library/Logs/plunge-backup.log</string>
+</dict>
+</plist>

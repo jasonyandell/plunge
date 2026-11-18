@@ -1,10 +1,14 @@
+import { playerIdentity } from '../ai/players';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { highBid, type GameState } from '../engine';
+import { highBid, type GameState, type Seat } from '../engine';
 import { BID_BOOK, bestPanel, qualifies, type PlayedPanel } from '../ai/bid-book';
 import { getBiddingHint, type BiddingHint as Advice } from '../ai/bidding-hint';
+import { zebAuctionMove } from '../ai/zeb';
+import type { AuctionDecision } from '../ai/auction';
 import { bidLabel, PIP_SUIT_NAMES, SEAT_NAMES } from './store';
 import type { BookHintEvidence } from '../questions/hint-evidence';
 import { SaveHint } from './SaveHint';
+import { ForecastDetails, forecastCopy } from './ForecastDetails';
 import './hint.css';
 
 type BookAdvice = Extract<Advice, { kind: 'book' }>;
@@ -45,7 +49,7 @@ function RecordedScore({ panel, target }: { panel: PlayedPanel; target: number }
 
 export function BookDetails({ hint, g, captured, capture }: {
   hint: BookAdvice; g: GameState; captured?: BookHintEvidence;
-  capture?: { sessionId: string; onSaved: (id: string) => void };
+  capture?: { sessionId: string; questionGameId?: string; onSaved: (id: string) => void };
 }) {
   const [target, setTarget] = useState(captured?.explored_target ?? hint.target);
   const [comparisonOpen, setComparisonOpen] = useState(captured?.comparison_open ?? false);
@@ -82,7 +86,7 @@ export function BookDetails({ hint, g, captured, capture }: {
       <p class="setting-hint">A higher recorded rate isn’t a guarantee. Sample counts vary; “unsettled” means more samples may change which side of {cutoff}% a score falls on.</p>
       <p class="setting-hint">These are completed Walt games with your seven dominoes and different partner and opponent hands. No one’s actual hidden hand is used. The results don’t infer hidden hands from this auction’s bids.</p>
     </details>
-    {capture && <SaveHint g={g} sessionId={capture.sessionId} onSaved={capture.onSaved} evidence={{
+    {capture && <SaveHint g={g} sessionId={capture.sessionId} questionGameId={capture.questionGameId ?? capture.sessionId} onSaved={capture.onSaved} evidence={{
       kind: g.phase === 'bidding' ? 'bid' : 'trump', book_id: BID_BOOK.source_book, profile: BID_BOOK.profile,
       policy_bid: BID_BOOK.policy_bid, threshold: [...BID_BOOK.threshold], advice: hint, explored_target: target,
       comparison_open: comparisonOpen, heading, explanation,
@@ -90,13 +94,23 @@ export function BookDetails({ hint, g, captured, capture }: {
   </>;
 }
 
-/** Advice never bids or runs a solver; optional feedback uses the question notebook. */
-export function BiddingHint({ g, sessionId, onQuestion }: { g: GameState; sessionId: string; onQuestion: (id: string) => void }) {
+/** On-demand advice never places a bid; optional feedback preserves the evidence. */
+export function BiddingHint({ g, sessionId, questionGameId = sessionId, onQuestion, player = 'walt', bookSeat = 0 }: { player?: 'walt' | 'zeb'; bookSeat?: Seat; g: GameState; sessionId: string; questionGameId?: string; onQuestion: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null), button = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (open) dialog.current?.showModal(); else dialog.current?.close(); }, [open]);
   const close = () => { setOpen(false); button.current?.focus(); };
-  const hint = open ? getBiddingHint(g) : null;
+  const [zeb, setZeb] = useState<AuctionDecision | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if(!open || player!=='zeb')return;
+    const controller=new AbortController(); let live=true;
+    setZeb(null); setError(null);
+    void zebAuctionMove(g,0,sessionId,undefined,controller.signal,undefined,{ comparePartnerPass: true }).then(value=>{if(live)setZeb(value);},error=>{if(live)setError(String(error));});
+    return ()=>{live=false;controller.abort();};
+  },[open,player,g,sessionId,retry]);
+  const hint = open && player !== 'zeb' ? getBiddingHint(g, bookSeat) : null;
   return <>
     <button type="button" class="hint-button bid-hint-button" ref={button} onClick={() => setOpen(true)}>
       {g.phase === 'declaring' ? 'Help me choose trump' : 'Help me bid'}
@@ -104,7 +118,13 @@ export function BiddingHint({ g, sessionId, onQuestion }: { g: GameState; sessio
     <dialog ref={dialog} class="hint-dialog" aria-labelledby="bid-hint-title" onCancel={e => { e.preventDefault(); close(); }}>
       <header class="hint-header"><h2 id="bid-hint-title">{g.phase === 'declaring' ? 'Choosing trump' : 'A bidding hint'}</h2>
         <button type="button" class="hint-close" aria-label="Close hint" onClick={close}>×</button></header>
-      {hint?.kind === 'book' && <BookDetails hint={hint} g={g} capture={{ sessionId, onSaved: id => { close(); onQuestion(id); } }} />}
+      {open && player==='zeb' && <section aria-live="polite">
+        {error ? <><p>{error}</p><button type="button" onClick={()=>setRetry(retry+1)}>Try hint again</button></> : !zeb ? <p>Zeb is considering your hand…</p> : <ForecastDetails g={g} hint={{ kind: g.phase === 'bidding' ? 'bid' : 'trump', source: 'zeb', model: playerIdentity('zeb'),
+          survey: zeb.survey?.schema === 'zeb-auction-v1' ? zeb.survey : null, action: zeb.action,
+          ...forecastCopy(g, { action: zeb.action, survey: zeb.survey?.schema === 'zeb-auction-v1' ? zeb.survey : null }) }}
+          capture={{ sessionId, questionGameId, onSaved: id => { close(); onQuestion(id); } }} />}
+      </section>}
+      {hint?.kind === 'book' && <BookDetails hint={hint} g={g} capture={{ sessionId, questionGameId, onSaved: id => { close(); onQuestion(id); } }} />}
       {hint?.kind === 'unavailable' && <p>{hint.reason === 'missing-hand'
         ? 'Walt doesn’t have recorded games for this hand. Bidding hints are available for hands in the current deal book; you can still choose your own bid and trump.'
         : 'The recorded games cover ordinary 42 with you as the bidder. They don’t cover this contract or rule set.'}</p>}

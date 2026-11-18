@@ -1,7 +1,5 @@
 /* Domino tile. Sized by the wrapper's width + aspect-ratio so the same
-   component scales from 20px opponent minis to 56px hand tiles.
-   Layout math: on a 360px phone the hand row is 7 tiles ×
-   clamp(42px, (100vw - 36px)/7, 58px) ≈ 46px wide ⇒ 7×46 + 6×3px gaps = 340px. */
+   component scales from opponent minis to horizontal hand tiles. */
 
 .dom {
   display: inline-block;

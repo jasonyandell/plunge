@@ -1,11 +1,13 @@
 name = "plunge"
 compatibility_date = "2026-05-14"
-main = "worker/index.ts"
+# Verify preview versions through their public Workers URLs (avoids error 1042).
+compatibility_flags = ["global_fetch_strictly_public"]
+main = "worker/mcp-entry.ts"
 
 [assets]
 directory = "./dist"
 binding = "ASSETS"
-run_worker_first = ["/api/*"]
+run_worker_first = ["/api/*", "/oauth/*", "/.well-known/oauth-*"]
 not_found_handling = "single-page-application"
 
 [[d1_databases]]
@@ -13,3 +15,16 @@ binding = "QUESTIONS"
 database_name = "plunge-questions"
 database_id = "98730843-94b0-4507-b3c1-91fb12f0702a"
 migrations_dir = "migrations"
+
+# Resolved by scripts/prepare-mcp.mjs during production deployment.
+[[kv_namespaces]]
+binding = "OAUTH_KV"
+id = "00000000000000000000000000000000"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "PlungeRoom"
+
+[[migrations]]
+tag = "family-rooms-v1"
+new_sqlite_classes = ["PlungeRoom"]
