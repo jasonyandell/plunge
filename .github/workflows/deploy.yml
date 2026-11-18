@@ -7,13 +7,14 @@ concurrency:
   group: production
   cancel-in-progress: false
 jobs:
-  deploy:
+  # Tests and the build run code from tests/ and src/, which the family builder may write.
+  # Neither job is given a credential. The deploy job holds the keys and runs none of that code.
+  test:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    env:
-      PLUNGE_DEPLOY_PROFILE: ${{ vars.PLUNGE_DEPLOY_PROFILE || 'core' }}
     steps:
       - uses: actions/checkout@v4
+        with: { persist-credentials: false }
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
@@ -21,8 +22,35 @@ jobs:
       - run: python3 scripts/test-update-walt.py
       - run: npm run typecheck
       - run: npm test
+  # Separate from the tests, so nothing a test starts can alter the app that ships.
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
       - run: PLUNGE_ROOMS=experimental npm run build
       - run: printf '{"build":"%s"}' "$GITHUB_SHA" > dist/version.json
+      - uses: actions/upload-artifact@v4
+        with: { name: dist, path: dist, if-no-files-found: error, retention-days: 1 }
+  deploy:
+    needs: [test, build]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      PLUNGE_DEPLOY_PROFILE: ${{ vars.PLUNGE_DEPLOY_PROFILE || 'core' }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      # No shared cache here: this job installs only what the lockfile names.
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with: { name: dist, path: dist }
       - name: Prepare question database and deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

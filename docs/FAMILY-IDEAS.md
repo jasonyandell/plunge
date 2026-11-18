@@ -56,7 +56,7 @@ For each run the coordinator:
 1. Clones Plunge into its own checkout and continues that idea's open branch, or
    creates `codex/idea-<opaque id>` from current `main`. A follow-up after a closed
    or merged PR gets a new branch based on main.
-2. Runs `codex exec` with a workspace-write sandbox, network disabled, structured
+2. Runs `codex exec` in the builder's own sandbox profile (below), with structured
    output and no inherited user config. Family discussion is quoted as data.
 3. Accepts changes only under `src/ui`, `src/room`, `src/engine`, and `tests`.
    The private coordinator can additionally approve `worker/rooms.ts` and
@@ -65,7 +65,9 @@ For each run the coordinator:
    path. Requests outside the approved scope become **Needs attention** with an
    explanation that private configuration is needed, not a permission question
    the family is repeatedly asked to answer.
-4. Runs typecheck, the complete application test suite, and a production build.
+4. Runs typecheck, the complete application test suite, and a production build
+   inside the same sandbox, because these run code the model just wrote. It then
+   publishes exactly the files staged before the checks started.
    Only passing changes are committed and pushed. GitHub credentials stay with
    the coordinator; the agent has no publishing task. It creates a draft PR and
    does not merge as part of building a preview. PR titles and implementation summaries are public; the
@@ -204,6 +206,27 @@ external link in a different browser. `revoke MEMBER_ID` disables one invite.
 No privileged credential is bundled in the browser or deployed to PR previews.
 
 Use the repository skill `plunge-family-worker` for ongoing operation and recovery.
+
+### The builder sandbox
+
+An idea is text from a family member, and the model turns it into code that then
+runs on this Mac. Both the model's own commands and the coordinator's checks of
+its work run under one Codex permission profile (`plunge_builder`):
+
+- The checkout and a per-run temp folder are the only writable places. `.git` is
+  read-only, and the shared `/tmp` folders are closed.
+- Reads are an allowlist: the checkout, the system, and the folders holding `node`
+  and `npm`. The home folder is never readable, so the GitHub login, the builder
+  key in `~/.config/plunge-ideas`, SSH keys and the keychain are out of reach.
+- The network is off. Only `npm test` may use this Mac's loopback, for the local
+  Worker the tests start. Codex's proxy mode leaves port 53 open to any address.
+- Before any model run, a probe inside the sandbox tries each of these. If one
+  succeeds, the run stops; a Codex upgrade that changes sandbox behavior fails
+  closed rather than quietly running family code unconfined.
+
+If `node` or `npm` move somewhere unusual, add that folder to `sandboxReadRoots`
+in the private configuration. A folder that contains the home folder, the builder
+configuration or the run archive is refused.
 The helper `python3 scripts/ideas/service.py status|start|stop|install` manages the
 local job. Install it from the stable checkout, then start it; future logins load
 it automatically. `start` preserves an active build, while `stop` can interrupt it.
@@ -247,7 +270,9 @@ Owner role/family revocation invalidates that authorization before publication.
 Historical messages and resumed Codex sessions cannot override the current grant.
 
 Repository-wide access includes `worker/`, `migrations/`, configuration, and project
-instructions. It applies only to the isolated checkout: Git internals, secret files,
+instructions. It never includes `.github/` or `scripts/ideas/`: the deployment
+pipeline holds the Cloudflare keys and the builder holds this Mac, so Jason changes
+those by hand. It applies only to the isolated checkout: Git internals, secret files,
 credentials, and files outside it remain excluded. The live coordinator runs from
 main, never from model-edited builder code. All builds still produce reviewed PRs;
 this does not grant automatic merge or access to live accounts/services.
@@ -287,7 +312,7 @@ routing a reply to another conversation.
 
 Each turn still receives its own isolated checkout of the idea's current PR branch
 (or main before publication), and its complete card conversation. Explicit `--cd`
-and the same Astra High, workspace-write, no-network and no-approval settings apply
+and the same Astra High, sandbox profile and no-approval settings apply
 to resumed turns. Earlier checkouts remain archived; unpublished failed edits are
 not automatically copied forward. Published changes continue on the same PR.
 A per-run `session.json` records the actual returned session ID and whether it was

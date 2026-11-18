@@ -157,8 +157,68 @@ test('resume passes the exact idea session and new checkout while retaining Astr
   assert.equal(received[received.indexOf('--model')+1],'gpt-6-astra');
   assert.ok(received.includes('model_reasoning_effort="high"'));
   assert.ok(received.includes('approval_policy="never"'));
-  assert.ok(received.includes('sandbox_workspace_write.network_access=false'));
-  assert.equal(received[received.indexOf('--sandbox')+1],'workspace-write');
+  // The named profile replaces the stock workspace sandbox, which lets commands read the whole home folder.
+  assert.ok(received.includes('default_permissions="plunge_builder"'));
+  assert.ok(!received.includes('--sandbox'));
+  assert.ok(received.includes('permissions.plunge_builder.network={enabled=false}'));
+  assert.ok(received.some(arg=>arg.startsWith('permissions.plunge_builder.filesystem=') && arg.includes('".git"="read"')));
+});
+
+test('model-written code is checked only inside the sandbox, with Git internals and shared folders closed',async()=>{
+  const {sandboxArgs,sandboxConfig}=await import('./ideas/builder.mjs');
+  const quiet=sandboxArgs({checkout:'/run/checkout',roots:['/opt/tools']},'npm',['run','build']);
+  assert.deepEqual(quiet.slice(0,3),['sandbox','-P','plunge_builder']);
+  assert.deepEqual(quiet.slice(-6),['-C','/run/checkout','--','npm','run','build']);
+  assert.ok(quiet.includes('permissions.plunge_builder.network={enabled=false}'));
+  assert.ok(quiet.includes('permissions.plunge_builder.filesystem={":minimal"="read",":project_roots"={"."="write",".git"="read"},"/private/tmp"="none","/private/var/tmp"="none",":tmpdir"="write","/opt/tools"="read"}'));
+  // Only the Worker tests get this Mac's loopback; the outside network stays closed.
+  const local=sandboxArgs({checkout:'/run/checkout',roots:[],loopback:true},'npm',['test']);
+  assert.deepEqual(local.slice(0,3),['sandbox','--enable','network_proxy']);
+  assert.ok(local.includes('permissions.plunge_builder.network={enabled=true,allow_local_binding=true}'));
+  assert.ok(!sandboxConfig().join(' ').includes('workspace-write'));
+  // After the model returns, the coordinator itself runs nothing from the checkout outside the sandbox.
+  const {readFile}=await import('node:fs/promises');
+  const source=await readFile(new URL('./ideas/builder.mjs',import.meta.url),'utf8');
+  const build=source.slice(source.indexOf('export async function buildOne'),source.indexOf('export function codexArgs'));
+  assert.deepEqual(build.match(/run\('npm',[^)]*\)/g),["run('npm',['ci','--ignore-scripts'],{cwd:checkout,log,timeout:180000})"]);
+  for(const step of ["check('npm',['run','typecheck']","check('npm',['test'],{loopback:true","check('npm',['run','build']"])assert.ok(build.includes(step));
+  assert.ok(build.indexOf('await assertSandbox(')<build.indexOf('codexArgs('));
+  assert.match(build,/check\('npm',\['run','build'\][^\n]*\n[^\n]*assertLease\(\);\n[^\n]*\n[^\n]*\.git\/config'\),gitConfig\);[\s\S]*Checks changed the checkout[\s\S]*'commit'/);
+});
+
+test('sandboxed commands can read the tool folders but never the home folder, builder key or run archive',async()=>{
+  const {readRoots,sandboxPath}=await import('./ideas/builder.mjs');
+  const links={'/opt/homebrew/bin/node':'/opt/homebrew/Cellar/node/26/bin/node','/opt/homebrew/bin/npm':'/opt/homebrew/lib/node_modules/npm/bin/npm-cli.js'};
+  const present=new Set(['/opt/homebrew/bin','/opt/homebrew/Cellar','/opt/homebrew/Cellar/node/26','/opt/homebrew/lib','/opt/homebrew/lib/node_modules/npm',
+    '/Users/x','/Users/x/.local/bin','/Users/x/state','/usr/bin',...Object.keys(links)]);
+  const fs={home:'/Users/x',execPath:'/opt/homebrew/bin/node',path:'/opt/homebrew/bin:/Users/x/.local/bin:/usr/bin:relative',
+    exists:path=>present.has(path),real:path=>links[path]??path};
+  const roots=readRoots({},'/Users/x/state',fs);
+  assert.deepEqual(roots,['/opt/homebrew/bin','/opt/homebrew/Cellar/node/26','/opt/homebrew/lib/node_modules/npm','/opt/homebrew/Cellar','/opt/homebrew/lib']);
+  // An unreadable search folder would stop every command, so it is left out rather than opened.
+  assert.equal(sandboxPath(roots,fs),'/opt/homebrew/bin:/usr/bin');
+  for(const folder of ['/','/Users','/Users/x','/Users/x/state']) {
+    present.add(folder);
+    assert.throws(()=>readRoots({sandboxReadRoots:[folder]},'/Users/x/state',fs),/holds private files/);
+  }
+  assert.throws(()=>readRoots({sandboxReadRoots:['tools']},'/Users/x/state',fs),/Invalid builder sandbox read folder/);
+  // A node installed directly in the home folder would expose all of it.
+  present.add('/Users/x/bin/node');present.add('/Users/x/bin');
+  assert.throws(()=>readRoots({},'/Users/x/state',{...fs,execPath:'/Users/x/bin/node'}),/holds private files/);
+});
+
+test('the builder refuses to run family code when the sandbox does not hold',async()=>{
+  const {assertSandbox}=await import('./ideas/builder.mjs');
+  const held={inside:true,git:false,outside:false,shared:false,home:false,secret:false,internet:false};
+  const sandbox={checkout:'/run/checkout',roots:[]};
+  let command;
+  await assertSandbox('codex',sandbox,{},async(tool,args)=>{command=[tool,...args];return `noise\n${JSON.stringify(held)}`;});
+  assert.deepEqual(command.slice(0,4),['codex','sandbox','--enable','network_proxy']);
+  for(const leak of ['git','outside','shared','home','secret','internet'])
+    await assert.rejects(assertSandbox('codex',sandbox,{},async()=>JSON.stringify({...held,[leak]:true})),/not enforcing its limits/);
+  await assert.rejects(assertSandbox('codex',sandbox,{},async()=>JSON.stringify({...held,inside:false})),/not enforcing its limits/);
+  await assert.rejects(assertSandbox('codex',sandbox,{},async()=>'{}'),/not enforcing its limits/);
+  await assert.rejects(assertSandbox('codex',sandbox,{},async()=>{throw new Error('codex exited 2');}),/sandbox check could not run/);
 });
 
 test('Codex event capture handles chunk boundaries and never treats stderr as session identity',async()=>{
@@ -176,14 +236,18 @@ test('only server-verified owner authority grants repository scope, including wo
   assert.equal(buildAccess(job),'limited');
   const authorized={...job,authorization:{scope:'repository',accountId:ideaId(1),source:'owner'}};
   assert.equal(buildAccess(authorized),'repository');
-  for(const file of ['worker/accounts.ts','worker/stats.ts','migrations/0005_stats.sql','package.json','.github/workflows/deploy.yml','scripts/ideas/builder.mjs','AGENTS.md']) {
+  for(const file of ['worker/accounts.ts','worker/stats.ts','migrations/0005_stats.sql','package.json','scripts/preview.mjs','AGENTS.md']) {
     assert.equal(allowedFile(file,[],buildAccess(authorized)),true);
     assert.equal(allowedFile(file,[],buildAccess(job)),false);
   }
+  // The pipeline that holds the deployment keys and the builder itself are never edited automatically.
+  for(const file of ['.github/workflows/deploy.yml','.github/workflows/preview.yml','.github/dependabot.yml','scripts/ideas/builder.mjs','scripts/ideas/releases.mjs'])
+    assert.equal(allowedFile(file,[],buildAccess(authorized)),false);
   for(const path of ['/etc/passwd','../secrets','worker/../../secret','worker\\secret','.git/config','node_modules/cache','.dev.vars','.env.production','worker/./x'])
     assert.equal(allowedFile(path,[],'repository'),false);
   const prompt=buildPrompt(authorized);
   assert.ok(prompt.includes('ALL project files'));
+  assert.ok(prompt.includes('.github/ and scripts/ideas/'));
   assert.ok(prompt.includes('replaces narrower file rules from earlier turns'));
   assert.ok(!prompt.includes('Do not modify other files'));
   for(const authorization of [{scope:'repository',accountId:ideaId(1),source:'family'},{scope:'repository',source:'owner'}, {scope:'all'}])
