@@ -141,6 +141,8 @@ try {
     await page.waitForTimeout(150);
   }
   if (!await page.getByRole('dialog', { name: 'Hand over' }).count()) throw new Error(`The hand never finished offline (${moves} moves).`);
+  // Family mods ship dark: with no ?mods= link the table carries none of them.
+  if (await page.locator('.domino-counter').count()) throw new Error('A family mod (domino counter) showed without a ?mods= link.');
   await page.screenshot({ path: join(out, 'offline-hand-over.png') });
   check(`Played a whole hand against ${player} with no connection (${moves} of our moves).`);
 

@@ -1,0 +1,23 @@
+/* Sized like core's hand tiles: four above three. */
+.drag-arrange-tile {
+  flex: 0 0 calc((100% - 24px) / 4);
+  width: calc((100% - 24px) / 4);
+  min-height: 44px;
+  position: relative;
+  cursor: grab;
+  touch-action: none; /* A drag on a phone moves the tile, not the page. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.drag-arrange-tile > .dom { display: block; width: 100%; }
+.drag-arrange-lifted { z-index: 2; cursor: grabbing; }
+.drag-arrange-lifted > .dom { filter: drop-shadow(0 8px 10px rgba(20, 10, 4, 0.5)); }
+.drag-arrange-said {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

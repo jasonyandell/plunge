@@ -16,9 +16,10 @@ import { NewGameButton } from './NewGameButton';
 import { handPlayers, playerLabel, usesForecastBidding } from '../ai/players';
 import { useEffect, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
-import type { CompletedTrick, GameState, PlayRecord, Seat } from '../engine';
+import type { CompletedTrick, DominoId, GameState, PlayRecord, Seat } from '../engine';
 import { legalDominoes } from '../engine';
 import { Domino } from './Domino';
+import { Replaceable, Slot, seatNote as modSeatNote, seatRevealed } from '../kernel/Slot';
 import { Tally } from './Tally';
 import { YourBid } from './YourBid';
 import type { AppEvent, AppState } from './store';
@@ -145,6 +146,13 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
   const humanTurn = !scenario && !showingLast && g.phase === 'playing' && g.turn === HUMAN_SEAT;
   const humanHand = g.hands[HUMAN_SEAT] ?? [];
   const humanSitsOut = g.sittingOut === HUMAN_SEAT;
+  const reveal = (seat: Seat): boolean => seatRevealed({ game: g, viewer: HUMAN_SEAT, seat, name: SEAT_NAMES[seat], relation: seat === 2 ? 'partner' : 'opponent' }, !!app.room);
+  const auctionSheet = (g.phase === 'bidding' || g.phase === 'declaring') && g.turn === HUMAN_SEAT;
+  const endCard = (g.phase === 'hand-over' || g.phase === 'game-over') && !showingLast && !review;
+  const play = (id: DominoId): void => {
+    if (!legal.has(id)) { setPlayError('You must follow suit when you can.'); return; }
+    dispatch({ type: 'human', action: { type: 'play', domino: id } });
+  };
 
   return (
     <div class="table-screen" style={{ '--trick-hold-ms': `${TRICK_HOLD_MS}ms` }}>
@@ -171,9 +179,9 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
         />
       )}
       <div class="felt">
-        <OpponentTop g={g} thinking={thinking} note={seatNote(2) ?? (!app.room && !scenario ? playerLabel(app.settings.difficulty, g) : null)} />
+        <OpponentTop g={g} thinking={thinking} reveal={reveal(2)} note={seatNote(2) ?? (!app.room && !scenario ? playerLabel(app.settings.difficulty, g) : null)} />
         <div class="middle">
-          <OpponentSide g={g} seat={1} thinking={thinking} note={seatNote(1) ?? (!app.room && !scenario ? playerLabel(app.settings.difficulty, g) : null)} />
+          <OpponentSide g={g} seat={1} thinking={thinking} reveal={reveal(1)} note={seatNote(1) ?? (!app.room && !scenario ? playerLabel(app.settings.difficulty, g) : null)} />
           <TrickArea
             g={g}
             plays={trickPlays}
@@ -182,12 +190,14 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
             thinking={thinking}
             onQuestion={scenario ? undefined : (i, target) => selectQuestion(playIndex(g,showingLast ? g.tricks.length - 1 : g.tricks.length,i), target)}
           />
-          <OpponentSide g={g} seat={3} thinking={thinking} note={seatNote(3) ?? (!app.room && !scenario ? playerLabel(app.settings.difficulty, g) : null)} />
+          <OpponentSide g={g} seat={3} thinking={thinking} reveal={reveal(3)} note={seatNote(3) ?? (!app.room && !scenario ? playerLabel(app.settings.difficulty, g) : null)} />
         </div>
         <div class="hand-area">
+          <Slot name="table-above-hand" props={{ game: g, seat: HUMAN_SEAT }} />
           <div class="hand-heading">
             <p class={`hand-caption${humanTurn && !showingLast ? ' your-turn' : ''}`} role="status">
-              <span class="hand-identity"><strong class="you-label">You</strong><YourBid g={g} seat={HUMAN_SEAT} /></span>
+              <span class="hand-identity"><strong class="you-label">You</strong><YourBid g={g} seat={HUMAN_SEAT} />
+                <Slot name="seat-label" props={{ game: g, viewer: HUMAN_SEAT, seat: HUMAN_SEAT, name: SEAT_NAMES[HUMAN_SEAT], relation: 'you' }} /></span>
               <span>{humanTurn && !showingLast
                 ? g.currentTrick.length === 0 ? 'Your turn to lead' : 'Your turn to play'
                 : 'Your hand'}</span>
@@ -200,27 +210,28 @@ export function Table({ app, dispatch: rawDispatch, thinking = null, onQuestion,
               {humanHand.map((id) => (
                 <Domino key={id} faceDown orientation="h" />
               ))}
-              <p class="sit-note">You're sitting this one out — Nel-O.</p>
+              <p class="sit-note">{modSeatNote({ game: g, viewer: HUMAN_SEAT, seat: HUMAN_SEAT, name: SEAT_NAMES[HUMAN_SEAT], relation: 'you' }, 'You\'re sitting this one out — Nel-O.')}</p>
             </div>
           ) : (
-            <div class="hand" aria-label="Your hand">
-              {humanHand.map((id) => (
-                <Domino
-                  key={id}
-                  id={id}
-                  orientation="h"
-                  state={humanTurn && app.settings.showHints ? (legal.has(id) ? 'legal' : 'illegal') : 'idle'}
-                  interactive={humanTurn && !app.settings.showHints}
-                  onTap={() => {
-                    if (!legal.has(id)) { setPlayError('You must follow suit when you can.'); return; }
-                    dispatch({ type: 'human', action: { type: 'play', domino: id } });
-                  }}
-                />
-              ))}
-            </div>
+            <Replaceable name="hand" props={{ game: g, seat: HUMAN_SEAT, hand: humanHand, legal, humanTurn, showHints: app.settings.showHints, onPlay: play }}>
+              <div class="hand" aria-label="Your hand">
+                {humanHand.map((id) => (
+                  <Domino
+                    key={id}
+                    id={id}
+                    orientation="h"
+                    state={humanTurn && app.settings.showHints ? (legal.has(id) ? 'legal' : 'illegal') : 'idle'}
+                    interactive={humanTurn && !app.settings.showHints}
+                    onTap={() => play(id)}
+                  />
+                ))}
+              </div>
+            </Replaceable>
           )}
           {playError && <p class="play-error" role="status">{playError}</p>}
         </div>
+        <Slot name="table-decor" props={{ game: g, seat: HUMAN_SEAT, ui: { menuOpen, historyOpen: histOpen, showingLast, review, scenario,
+          sheetOpen: auctionSheet || endCard || !!question || confirmRestart !== null, proposal: !!app.room?.table?.proposal } }} />
       </div>
 
       {saved && <div class="question-toast" role="status"><span>{saved.text}</span>{saved.id && <button class="text-btn" onClick={() => { onQuestion(saved.id); setSaved(null); }}>Add note</button>}</div>}
@@ -418,27 +429,30 @@ function seatBadges(g: GameState, seat: Seat) {
   );
 }
 
-export function OpponentTop({ g, thinking, note, names = SEAT_NAMES }: { g: GameState; thinking: Seat | null; note?: string | null; names?: readonly string[] }) {
+export function OpponentTop({ g, thinking, note, names = SEAT_NAMES, reveal = false }: { g: GameState; thinking: Seat | null; note?: string | null; names?: readonly string[]; reveal?: boolean }) {
   const seat: Seat = 2;
+  const who = { game: g, viewer: HUMAN_SEAT, seat, name: names[seat] ?? '', relation: 'partner' } as const;
   const hand = g.hands[seat] ?? [];
   const sitsOut = g.sittingOut === seat;
   const active = g.turn === seat;
   return (
     <div class={`seat seat-top${active ? ' active' : ''}${thinking === seat ? ' seat-thinking' : ''}`}>
       <div class="seat-name">
-        {names[seat]} <span class="seat-tag">Your partner</span>{note && <span class="seat-tag seat-note">{note}</span>} {seatBadges(g, seat)} {bidBubble(g, seat)}
+        {names[seat]} <span class="seat-tag seat-tag-partner">Your partner</span>{note && <span class="seat-tag seat-note">{note}</span>} {seatBadges(g, seat)} {bidBubble(g, seat)}
+        <Slot name="seat-label" props={who} />
       </div>
       <div class={`mini-row${sitsOut ? ' sitting' : ''}`}>
         {hand.map((id) => (
-          <Domino key={id} faceDown orientation="v" className="mini-v" />
+          <Domino key={id} id={reveal ? id : undefined} faceDown={!reveal} orientation="v" className="mini-v" />
         ))}
       </div>
-      {sitsOut && <div class="sit-note">sitting this one out</div>}
+      {sitsOut && <div class="sit-note">{modSeatNote(who, 'sitting this one out')}</div>}
     </div>
   );
 }
 
-export function OpponentSide({ g, seat, thinking, note, names = SEAT_NAMES }: { g: GameState; seat: Seat; thinking: Seat | null; note?: string | null; names?: readonly string[] }) {
+export function OpponentSide({ g, seat, thinking, note, names = SEAT_NAMES, reveal = false }: { g: GameState; seat: Seat; thinking: Seat | null; note?: string | null; names?: readonly string[]; reveal?: boolean }) {
+  const who = { game: g, viewer: HUMAN_SEAT, seat, name: names[seat] ?? '', relation: 'opponent' } as const;
   const hand = g.hands[seat] ?? [];
   const sitsOut = g.sittingOut === seat;
   const active = g.turn === seat;
@@ -446,13 +460,14 @@ export function OpponentSide({ g, seat, thinking, note, names = SEAT_NAMES }: { 
     <div class={`seat seat-${POS[seat]}${active ? ' active' : ''}${thinking === seat ? ' seat-thinking' : ''}`}>
       <div class="seat-name">
         {names[seat]}{note && <span class="seat-tag seat-note">{note}</span>} {seatBadges(g, seat)} {bidBubble(g, seat)}
+        <Slot name="seat-label" props={who} />
       </div>
       <div class={`mini-col${sitsOut ? ' sitting' : ''}`}>
         {hand.map((id) => (
-          <Domino key={id} faceDown orientation="h" className="mini-h" />
+          <Domino key={id} id={reveal ? id : undefined} faceDown={!reveal} orientation="h" className="mini-h" />
         ))}
       </div>
-      {sitsOut && <div class="sit-note">sitting out</div>}
+      {sitsOut && <div class="sit-note">{modSeatNote(who, 'sitting out')}</div>}
     </div>
   );
 }

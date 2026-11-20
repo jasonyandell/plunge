@@ -12,7 +12,8 @@ import {
   bidLabel, gameOverCopy, handOverCopy,
 } from './store';
 import { Tally } from './Tally';
-import { BiddingHint } from './BiddingHint';
+import { Slot } from '../kernel/Slot';
+import type { AuctionSlotProps } from '../kernel/mod-api';
 import './sheets.css';
 
 interface SheetProps {
@@ -64,11 +65,15 @@ export function RestartConfirm({ onConfirm, onCancel }: { onConfirm: () => void;
   );
 }
 
+const auction = ({ g, player = 'walt', bookSeat = 0, showHints, sessionId, questionGameId, onQuestion }: AuctionSheetProps): AuctionSlotProps =>
+  ({ game: g, seat: HUMAN_SEAT, player, bookSeat, showHints, sessionId, questionGameId: questionGameId ?? sessionId, onQuestion });
+
 // ---------------------------------------------------------------------------
 // Bidding
 // ---------------------------------------------------------------------------
 
-export function BidSheet({ g, dispatch, sessionId, questionGameId, onQuestion, showHints, player = 'walt', bookSeat = 0 }: AuctionSheetProps) {
+export function BidSheet(props: AuctionSheetProps) {
+  const { g, dispatch } = props;
   const bids = legalBids(g);
   const currentBid = highBid(g.bids);
   const canPass = bids.some((b) => b.kind === 'pass');
@@ -94,7 +99,7 @@ export function BidSheet({ g, dispatch, sessionId, questionGameId, onQuestion, s
     <div class="sheet bid-sheet" role="dialog" aria-label="Your bid">
       <h2 class="sheet-title">Your bid</h2>
       <p class="hint">{isForcedBidTurn(g) ? 'Everyone passed. You must bid at least 30.' : !canPass ? 'Choose your bid.' : currentBid ? `${SEAT_NAMES[currentBid.seat]} bid ${bidLabel(currentBid.bid)}. Raise it or pass.` : 'Bidding starts at 30. Bid or pass.'}</p>
-      {showHints && <BiddingHint player={player} bookSeat={bookSeat} g={g} sessionId={sessionId} questionGameId={questionGameId ?? sessionId} onQuestion={onQuestion} />}
+      <Slot name="bid-sheet" props={auction(props)} />
       {pt !== null && minPt !== null && maxPt !== null && (
         <div class="bid-stepper">
           <button
@@ -176,7 +181,8 @@ function specialHint(b: Bid & { kind: 'marks' }): string {
 // Declaring trump
 // ---------------------------------------------------------------------------
 
-export function DeclareSheet({ g, dispatch, sessionId, questionGameId, onQuestion, showHints, player = 'walt', bookSeat = 0 }: AuctionSheetProps) {
+export function DeclareSheet(props: AuctionSheetProps) {
+  const { g, dispatch } = props;
   const decls = legalDeclarations(g);
   const forPartner =
     g.contract !== null &&
@@ -192,7 +198,7 @@ export function DeclareSheet({ g, dispatch, sessionId, questionGameId, onQuestio
     <div class="sheet declare-sheet" role="dialog" aria-label="Declare trump">
       <h2 class="sheet-title">{title}</h2>
       {forPartner && <p class="hint">Pick from your own hand — no hints across the table.</p>}
-      {showHints && <BiddingHint player={player} bookSeat={bookSeat} g={g} sessionId={sessionId} questionGameId={questionGameId ?? sessionId} onQuestion={onQuestion} />}
+      <Slot name="declare-sheet" props={auction(props)} />
       <div class="decl-grid">
         {decls.map((d) => (
           <button
@@ -272,6 +278,7 @@ export function GameOverSheet({ g, dispatch, onReview, onHistory, practice, onUn
   return (
     <div class="overlay">
       <div class={`card ${won ? 'card-win' : 'card-loss'}`} role="dialog" aria-label="Game over">
+        <Slot name="gameover-header" props={{ game: g, seat: HUMAN_SEAT, won }} />
         <p class="eyebrow">{won ? 'A good game' : 'Until the next hand'}{practice && ' · Practice'}</p>
         <h2 class="card-title">{copy.title}</h2>
         <p class="card-detail">{copy.detail}</p>

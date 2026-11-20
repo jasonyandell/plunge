@@ -17,6 +17,7 @@ import {
 } from './update';
 import { Home, HowTo, About, More } from './Home';
 import { Table } from './Table';
+import { useMods } from '../kernel/mods';
 import { codeFromHash, decodeHand } from './share';
 import { decodeObservation } from './observation-link';
 import { api, isNative, nativeMove, NATIVE_TABLE, type FlagRecord } from '../ai/native';
@@ -34,6 +35,7 @@ import { attachGame, syncQuestions } from '../questions/client';
 import { IdentityChip } from '../account/IdentityChip';
 
 export function App() {
+  useMods(); // Slots read the enabled set without hooks; this re-renders them when it changes.
   const [app, reduce] = useReducer((state: AppState, event: AppEvent) => {
     const next = reducer(state, event);
     // A shared table records its own canonical history (see useRoom).

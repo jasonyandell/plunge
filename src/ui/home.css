@@ -148,6 +148,38 @@
   color: var(--teal-ink); text-decoration: none; cursor: pointer;
 }
 .more-section > .setting-hint { margin: 0 0 6px; }
+/* Mods: grouped rows; the row opens its details, the switch beside it toggles. */
+.mods-search {
+  display: block; width: 100%; min-height: 44px; margin: 6px 0 2px; padding: 10px 12px;
+  border: 1px solid #ae9974; border-radius: 10px; background: #fffdf7; color: var(--brown-9);
+  font: inherit; font-size: 16px;
+}
+.mods-search::placeholder { color: #6b5840; opacity: 1; }
+.mods-search:focus-visible { outline: 2px solid var(--teal-ink); outline-offset: 2px; }
+.mods-link { margin: 4px 0 6px; padding: 2px 12px; border-radius: 10px; background: #286f6514; }
+.mods-link .setting-hint { margin: 8px 0 0; }
+.mods-empty { margin: 12px 0 4px; }
+.mods-group { margin-top: 14px; }
+.mods-group h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--brown-9); }
+.mods-group > .setting-hint { margin: 2px 0 4px; }
+.mods-rows { margin: 0; padding: 0; list-style: none; }
+.mod-row { border-top: 1px solid #8c6d3b1f; }
+.mod-row:first-child { border-top: 0; }
+.mod-row-head { display: flex; align-items: center; gap: 8px; }
+.mod-row-open {
+  flex: 1; min-width: 0; min-height: 44px; padding: 10px 0; border: 0; background: transparent;
+  color: var(--brown-9); font: inherit; text-align: left; cursor: pointer;
+}
+.mod-row-title { display: block; font-size: 14px; font-weight: 650; }
+.mod-row-summary { display: block; margin-top: 2px; font-size: 13px; line-height: 1.45; color: #725a40; }
+.mod-row-open:focus-visible, .mod-switch:focus-visible { outline: 2px solid var(--teal-ink); outline-offset: 2px; }
+.thinking-switch.mod-switch { flex: 0 0 auto; width: auto; justify-content: flex-end; min-width: 52px; }
+.mod-row-note { margin: 0 0 8px; }
+.mod-row-note .text-btn { min-height: 32px; padding: 0 4px; font-size: 13px; }
+.mod-details { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: #8c6d3b14; }
+.mod-details p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--brown-9); }
+.mod-details p + p { margin-top: 6px; }
+.mod-details .setting-hint { color: #725a40; }
 
 @media (max-height: 680px) {
   .home { padding: 14px 12px; }

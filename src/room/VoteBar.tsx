@@ -3,6 +3,7 @@ import { useEffect, useState } from 'preact/hooks';
 import type { Seat } from '../engine';
 import type { Knock, Proposal, RoomSeat, Vote, VoteResult } from './protocol';
 import { neededYes } from '../../worker/room-votes';
+import { Slot } from '../kernel/Slot';
 
 export function describeProposal(p: Proposal): string {
   switch (p.kind) {
@@ -63,14 +64,16 @@ export function VoteBar({ proposal, seat, seats, vote, pending }: {
     : proposal.mode === 'veto' ? `Goes ahead in ${seconds}s unless someone says no`
     : nextHand ? `Waiting for ${more === 1 ? 'one more person' : `${more} more people`} · The result stays until everyone is ready`
     : `Needs ${more === 1 ? 'a yes' : `${more} more yes`} within ${seconds}s`;
+  const extras = { proposal, seat, mine, yes, more };
   return <div class={`vote-bar vote-${proposal.mode}`} role="status" data-proposal={proposal.id} data-kind={proposal.kind}>
-    <div class="vote-text"><strong>{text}</strong><span>{note}{yes > 1 ? ` · ${yes} yes` : ''}</span></div>
+    <div class="vote-text"><Slot name="vote-heading" props={extras} /><strong>{text}</strong><span>{note}{yes > 1 ? ` · ${yes} yes` : ''}</span></div>
     {seat === null ? null : proposal.target === seat ? <span class="vote-you">The table decides</span>
       : mine ? <span class="vote-you">{nextHand && mine === 'yes' ? 'You are ready' : `You said ${mine}`}</span>
       : <div class="vote-buttons">
         <button class="vote-yes" disabled={!canVote} onClick={() => vote('yes')}>{proposal.kind === 'player' && proposal.endsGame ? 'End game & switch' : nextHand ? 'Ready' : proposal.mode === 'veto' ? 'Fine' : 'Yes'}</button>
         <button class="vote-no" disabled={!canVote} onClick={() => vote('no')}>{proposal.mode === 'veto' ? 'Wait, no' : nextHand ? 'Not yet' : 'No'}</button>
       </div>}
+    <Slot name="vote-status" props={extras} />
   </div>;
 }
 /** Whoever is at the door, beside (never behind) the table's vote. The first answer decides. */

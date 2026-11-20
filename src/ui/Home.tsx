@@ -15,6 +15,7 @@ import { tableNote, tableTitle } from '../room/view';
 import type { ListedTable } from '../room/protocol';
 import type { ComponentChildren } from 'preact';
 import { openScreenIdea } from '../ideas/QuickIdea';
+import { ModsSettings } from '../kernel/ModsSettings';
 
 interface HomeProps {
   app: AppState;
@@ -266,6 +267,7 @@ export function More({ app, dispatch, onQuestions, onHistory, onPriorHands }: Mo
             “See how it went” lets you inspect its estimates and share a move.
           </p>
         </section>
+        <ModsSettings />
 
         <section class="more-section" aria-labelledby="more-yours">
           <h2 id="more-yours">Yours</h2>

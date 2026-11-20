@@ -1,0 +1,84 @@
+/* Optional public counter opens above the hand without moving its tiles. */
+.domino-counter {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  margin-inline: auto;
+  color: var(--cream);
+  font-size: 12px;
+}
+.domino-counter > summary {
+  width: fit-content;
+  min-height: 44px;
+  margin-inline: auto;
+  padding: 12px 10px;
+  box-sizing: border-box;
+  cursor: pointer;
+  color: #e8c99b;
+  border-radius: 8px;
+}
+.domino-counter > summary:focus-visible,
+.domino-counter-panel:focus-visible {
+  outline: 2px solid var(--teal-bright);
+  outline-offset: 2px;
+}
+.domino-counter-panel {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  z-index: 19; /* Below bidding and result sheets. */
+  max-height: min(45vh, 280px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px;
+  border: 1px solid #e9c07a50;
+  border-radius: 12px;
+  background: #21180f;
+  box-shadow: 0 6px 20px #140d0766;
+}
+.domino-counter-totals {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.domino-counter-note { margin: 6px 0; color: #e8c99b; font-size: 11px; }
+.domino-counter-suit { margin-top: 10px; border-top: 1px solid #e9c07a25; }
+.domino-counter-suit h3 {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.domino-counter-suit h3 > span:first-child { text-transform: capitalize; }
+.domino-counter-suit h3 > span:last-child { color: #e8c99b; font-weight: 400; }
+.domino-counter-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px 6px;
+  margin: 10px 0 4px;
+  padding: 0;
+  list-style: none;
+}
+.domino-counter-tile { position: relative; }
+.domino-counter-tile .dom { width: 100%; vertical-align: middle; }
+.domino-counter-tile.is-played .dom { opacity: .55; }
+.domino-counter-check {
+  position: absolute;
+  right: -3px;
+  bottom: -4px;
+  padding: 0 3px;
+  border-radius: 5px;
+  color: #d8f3e9;
+  background: #24594e;
+  font-size: 12px;
+  font-weight: 700;
+}
+
